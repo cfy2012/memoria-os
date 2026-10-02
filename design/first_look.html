@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Memoria OS —— First Look 总预览</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231b2029'/%3E%3Crect x='10' y='22' width='44' height='26' rx='4' fill='%23333b4a'/%3E%3Ctext x='32' y='41' font-size='13' text-anchor='middle' fill='%23ffd54a' font-family='sans-serif' font-weight='bold'%3EM%3C/text%3E%3C/svg%3E">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: radial-gradient(1100px 700px at 50% -10%, #232c3a 0%, #141922 45%, #0b0e14 100%);
+    font-family: "Microsoft YaHei", "Segoe UI", sans-serif; color: #e6eaf2;
+    padding: 30px 18px 60px; min-height: 100vh;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  h1 { font-size: 20px; text-align: center; letter-spacing: 2px; color: #f2f5fa; }
+  .sub { font-size: 11px; color: #8b93a5; text-align: center; margin: 6px 0 24px; }
+  .hint { font-size: 10.5px; color: #9aa4b8; text-align: center; line-height: 1.9; margin-bottom: 20px; }
+  .hint b { color: #ffd54a; font-weight: 700; }
+
+  /* ============ 外壳 ============ */
+  .device {
+    position: relative; width: 132mm; margin: 0 auto; padding: 11mm 12mm 14mm;
+    background: linear-gradient(155deg, #3a4250 0%, #232936 38%, #161a23 72%, #10141c 100%);
+    border-radius: 14mm;
+    box-shadow: 0 30px 70px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.10);
+  }
+  .device::before { content:""; position:absolute; left:14mm; right:14mm; top:3mm; height:2.2mm;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.16), transparent); border-radius:2mm; }
+
+  /* 屏幕框 */
+  .screen-frame {
+    position: relative; width: 512px; height: 384px; margin: 4mm auto 0;
+    background: #000; border-radius: 4mm; overflow: hidden;
+    box-shadow: inset 0 0 0 2px #000, inset 0 0 18px rgba(0,0,0,.8);
+  }
+  .screen-frame iframe { width: 320px; height: 240px; border: 0;
+    transform: scale(1.6); transform-origin: 0 0; display: block; }
+  .glass { position: absolute; inset: 0; pointer-events: none; border-radius: 4mm;
+    background: linear-gradient(180deg, rgba(255,255,255,.07), rgba(255,255,255,0) 22%);
+    box-shadow: inset 0 1px 6px rgba(255,255,255,.06); }
+
+  /* 摇杆 */
+  .joy-zone { display: flex; justify-content: center; margin: 6mm 0 4mm; }
+  .joy {
+    position: relative; width: 64px; height: 64px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 28%, #5c6678, #2e3442 58%, #181c26);
+    box-shadow: 0 2px 6px rgba(0,0,0,.5), inset 0 1px 2px rgba(255,255,255,.10);
+    user-select: none;
+  }
+  .joy .d { position: absolute; width: 22px; height: 22px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #8a93a6, #3a4150 70%);
+    border: 1px solid #1a1e28; cursor: pointer; color: #dbe2ee; font-weight: 700;
+    display: flex; align-items: center; justify-content: center; font-size: 13px;
+    transition: transform .06s, background .1s; z-index: 2;
+  }
+  .joy .d:active { transform: scale(.88); background: #ffd54a; color: #3a2c00; }
+  .joy .up    { left: 21px; top: 0; }
+  .joy .down  { left: 21px; bottom: 0; }
+  .joy .left  { left: 0; top: 21px; }
+  .joy .right { right: 0; top: 21px; }
+  .joy .mid {
+    position: absolute; left: 21px; top: 21px; width: 22px; height: 22px; border-radius: 50%;
+    background: radial-gradient(circle at 34% 30%, #f4f7fc, #aab2c0 70%, #7e8798);
+    border: 1px solid #0e1116; cursor: pointer; color: #232936; font-weight: 700;
+    display: flex; align-items: center; justify-content: center; font-size: 10px;
+    box-shadow: inset 0 -1px 2px rgba(30,40,60,.35), 0 1px 2px rgba(0,0,0,.3);
+    transition: transform .06s; z-index: 3;
+  }
+  .joy .mid:active { transform: scale(.85); }
+  .joy-note { text-align: center; font-size: 9px; color: #7d8798; margin-top: 6px; }
+
+  /* ============ 键盘 ============ */
+  .kb { position: relative; width: 100%; margin: 2mm auto 0; user-select: none; }
+  .strip { position: absolute; left: 0; right: 0; height: 3px; border-radius: 2px;
+    background: linear-gradient(90deg, rgba(255,170,40,.25), rgba(255,220,120,.35), rgba(255,170,40,.25));
+    transition: box-shadow .15s, background .15s; }
+  .strip.top { top: -3px; }
+  .strip.bot { bottom: -3px; }
+  .strip.on { background: linear-gradient(90deg, #ffaa28, #ffdc78, #ffaa28);
+    box-shadow: 0 0 8px rgba(255,180,60,.9), 0 0 16px rgba(255,180,60,.4); }
+  .krow { display: flex; gap: 3.2%; margin-bottom: 2.4%; }
+  .key {
+    flex: 1; height: 26px; border-radius: 5px; cursor: pointer;
+    background: linear-gradient(180deg, #ffffff 0%, #e9ecf2 88%, #dde1e9 100%);
+    box-shadow: 0 2px 3px rgba(0,0,0,.25), inset 0 -1px 2px rgba(30,36,50,.10);
+    display: flex; align-items: center; justify-content: center; gap: 2px;
+    font-size: 11px; color: #232936; font-weight: 700; font-family: Consolas, monospace;
+    transition: transform .05s, background .1s;
+  }
+  .key .sym { font-size: 8px; color: #97a0b0; font-weight: 400; }
+  .key.special { background: linear-gradient(180deg, #3d4556 0%, #2a3040 88%);
+    color: #d6dcea; font-size: 10px; }
+  .key.away { background: repeating-linear-gradient(135deg, #eceef2 0 3px, #fafbfc 3px 6px);
+    border: 1px dashed #c9a15e; color: #a97e2c; font-size: 9px; }
+  .key.bl { background: linear-gradient(180deg, #ffe9b8 0%, #f0c255 100%); color: #6b4a08; }
+  .key:active, .key.pressed { transform: scale(.93); filter: brightness(1.15); }
+  .key.shift-on { background: linear-gradient(180deg, #ffe9b8, #f0c255); color: #6b4a08; }
+  .key.ctrl-on { background: linear-gradient(180deg, #8fd6ff, #5ab8f0); color: #083b5e; }
+  .key.wide { flex: 1.45; }
+  .key.nav { background: linear-gradient(180deg, #6b7a94, #46536a); color: #eef2fa; }
+
+  /* 说明面板 */
+  .info { max-width: 620px; margin: 26px auto 0; font-size: 11px; color: #9aa4b8; line-height: 2; }
+  .info b { color: #ffd54a; }
+  .legend { max-width: 620px; margin: 12px auto 0; display: flex; flex-wrap: wrap; gap: 10px 18px;
+    font-size: 10.5px; color: #b8c0d0; justify-content: center; }
+  .legend span::before { content: "■ "; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>MEMORIA OS · FIRST LOOK</h1>
+  <div class="sub">掌机外壳预览 —— 屏幕内运行真实模拟器，摇杆 / 键盘可直接操作</div>
+  <div class="hint">
+    摇杆 <b>↑↓←→</b> 导航，中心 <b>●</b> 确认（长按 = 返回）｜ 键盘 <b>F1~F6 / 数字</b> 触发功能键，
+    <b>Shift</b> 点亮后打符号层，<b>背光</b> 点亮键盘灯带，<b>ON/OFF</b> 模拟关机重启
+  </div>
+
+  <div class="device">
+    <!-- 屏幕：内嵌真实 simulator.html -->
+    <div class="screen-frame">
+      <iframe id="sim" src="../simulator/simulator.html" title="Memoria OS Simulator"></iframe>
+      <div class="glass"></div>
+    </div>
+
+    <!-- 摇杆 -->
+    <div class="joy-zone">
+      <div class="joy">
+        <div class="d up" data-k="ArrowUp">▲</div>
+        <div class="d down" data-k="ArrowDown">▼</div>
+        <div class="d left" data-k="ArrowLeft">◀</div>
+        <div class="d right" data-k="ArrowRight">▶</div>
+        <div class="mid" id="joyMid">●</div>
+      </div>
+    </div>
+    <div class="joy-note">长按 ● 1.2s = 返回上一级（对应真机长按摇杆）</div>
+
+    <!-- 键盘 6×10（点击驱动模拟器） -->
+    <div class="kb" id="kb">
+      <div class="strip top" id="stripTop"></div>
+      <div class="strip bot" id="stripBot"></div>
+      <!-- JS 渲染 -->
+    </div>
+  </div>
+
+  <div class="legend">
+    <span>白键 = 字符</span>
+    <span>深键 = 功能/特殊</span>
+    <span>虚线 = 牵线侧边</span>
+    <span>金色 = 背光 / Shift</span>
+    <span>蓝色 = Ctrl</span>
+  </div>
+
+  <div class="info">
+    操作逻辑与真机一致：菜单用 <b>摇杆/方向键</b> 导航 + <b>Enter</b> 进入，<b>F1~F6</b> 为各页面功能键
+    （菜单 = 模式切换，应用内 = 该应用功能），<b>长按摇杆</b> 返回上一级。<br>
+    需要键盘输入的地方（BASIC 编辑器等）可直接点键盘字母/数字键，<b>Shift 点亮后</b> 输出符号层。
+    背光键控制上下灯带（演示），音量键为预留（硬件牵线侧边）。
+  </div>
+</div>
+
+<script>
+/* ============ 遥控模拟器 ============ */
+const sim = document.getElementById('sim');
+function key(k){ sim.contentWindow.postMessage({ type:'memoria-key', key: k }, '*'); }
+
+/* ============ 摇杆 ============ */
+document.querySelectorAll('.joy .d').forEach(el=>{
+  el.addEventListener('pointerdown', ()=>key(el.dataset.k));
+});
+const joyMid = document.getElementById('joyMid');
+let midTimer = null;
+joyMid.addEventListener('pointerdown', ()=>{
+  midTimer = setTimeout(()=>{ key('Escape'); joyMid.style.background = '#ff8a5b'; }, 1200);
+});
+joyMid.addEventListener('pointerup', ()=>{
+  if (midTimer){ clearTimeout(midTimer); midTimer = null; key('Enter'); }
+  joyMid.style.background = '';
+});
+joyMid.addEventListener('pointerleave', ()=>{
+  if (midTimer){ clearTimeout(midTimer); midTimer = null; }
+  joyMid.style.background = '';
+});
+
+/* ============ 键盘 6×10 ============ */
+/* 每键: [shift层, 主键] 或 特殊键名 */
+const KMAP = [
+  [['ON/OFF','onoff'],['','F1'],['','F2'],['','F3'],['','F4'],['','F5'],['','F6'],['','F7'],['背光','bl'],['⌫','Backspace']],
+  [['!','1'],['@','2'],['#','3'],['$','4'],['%','5'],['^','6'],['&','7'],['*','8'],['(','9'],[')','0']],
+  [['-','q'],['_','w'],['e','E'],['r','R'],['t','T'],['y','Y'],['[','u'],[']','i'],['{','o'],['}','p']],
+  [['=','a'],['+','s'],['d','D'],['f','F'],['g','G'],['h','H'],['j','J'],['k','K'],['"','l'],[':',';']],
+  [['Shift','Shift'],['\\','z'],['|','x'],['c','C'],['v','V'],['b','B'],['/','n'],['?','m'],['<',','],['>','.']],
+  [['Caps','Caps'],['Ctrl','Ctrl'],['Vol−','vol-'],['Vol+','vol+'],['Space','Space'],['←','ArrowLeft'],['→','ArrowRight'],['↓','ArrowDown'],['↑','ArrowUp'],['Enter','Enter']],
+];
+
+let shiftOn = false, capsOn = false, ctrlOn = false, blOn = false;
+const kb = document.getElementById('kb');
+const stripT = document.getElementById('stripTop');
+const stripB = document.getElementById('stripBot');
+
+function emit(v){ key(v); }
+
+function press(key, row, col, el){
+  /* 特殊键 */
+  if (key === 'Shift'){ shiftOn = !shiftOn; el.classList.toggle('shift-on', shiftOn); return; }
+  if (key === 'Caps'){ capsOn = !capsOn; el.classList.toggle('shift-on', capsOn); return; }
+  if (key === 'Ctrl'){ ctrlOn = !ctrlOn; el.classList.toggle('ctrl-on', ctrlOn); return; }
+  if (key === 'bl'){ blOn = !blOn; stripT.classList.toggle('on', blOn); stripB.classList.toggle('on', blOn); return; }
+  if (key === 'onoff'){ sim.src = '../simulator/simulator.html?' + Date.now(); return; }
+  if (key === 'vol-'){ return; }
+  if (key === 'vol+'){ return; }
+
+  /* 特殊键：直接发 */
+  const specials = ['Backspace','Space','ArrowLeft','ArrowRight','ArrowDown','ArrowUp','Enter','Escape'];
+  if (specials.includes(key)){ emit(key); return; }
+  if (key.startsWith('F')){ emit(key); return; }
+
+  /* 字符键：Shift/Caps 层 */
+  const def = KMAP[row][col];
+  const sh = def[0], base = def[1];
+  if (typeof base === 'string' && base.length === 1){
+    if (base >= 'a' && base <= 'z'){
+      /* 字母：大写=shift层字符 */
+      const sym = sh && sh !== base.toUpperCase();
+      if (sym && shiftOn){ emit(sh); }
+      else {
+        let c = base;
+        if ((shiftOn || capsOn) && sh === base.toUpperCase()) c = base.toUpperCase();
+        else if (shiftOn && sym) c = sh;
+        emit(c);
+      }
+    } else {
+      /* 数字/符号主键 */
+      emit(shiftOn ? (sh || base) : base);
+    }
+  } else {
+    emit(base);
+  }
+}
+
+KMAP.forEach((row, r)=>{
+  const div = document.createElement('div');
+  div.className = 'krow';
+  row.forEach((def, c)=>{
+    const k = document.createElement('div');
+    k.className = 'key';
+    const special = (def[0] === '' && def[1] === def[1]) ? null : def[1];
+    if (def[1] === 'Shift' || def[1] === 'Caps' || def[1] === 'Ctrl') k.classList.add('special');
+    if (def[1] === 'bl') k.classList.add('bl');
+    if (def[1] === 'onoff' || def[1] === 'vol-' || def[1] === 'vol+') k.classList.add('away');
+    if (['ArrowLeft','ArrowRight','ArrowDown','ArrowUp','Enter'].includes(def[1])) k.classList.add('special','nav');
+    if (def[1] === 'Space') k.classList.add('wide');
+    if (def[0] && def[0] !== def[1] && def[1].length === 1 && !'QWERTYUIOPASDFGHJKLZXCVBNM'.includes(def[1])){
+      k.innerHTML = '<span class="sym">' + def[0] + '</span>' + def[1];
+    } else if (def[1].length === 1){
+      k.textContent = def[1].toUpperCase ? def[1].toUpperCase() : def[1];
+    } else {
+      k.textContent = def[1];
+    }
+    k.addEventListener('pointerdown', (e)=>{ e.preventDefault(); press(def[1], r, c, k); });
+    div.appendChild(k);
+  });
+  kb.appendChild(div);
+});
+
+/* 让 iframe 先获得焦点（模拟器自带 focus 逻辑） */
+window.addEventListener('load', ()=>{ try{ sim.contentWindow.postMessage({type:'memoria-key', key:'ArrowUp'}, '*'); }catch(e){} });
+</script>
+</body>
+</html>

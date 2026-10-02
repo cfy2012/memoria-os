@@ -1,0 +1,6 @@
+nvs,           data,   nvs,      0x00009000,  0x00006000
+phy_init,      data,   phy,      0x0000F000,  0x00001000
+factory,       app,    factory,  0x00010000,  0x002F0000
+ota_0,         app,    ota_0,    0x00300000,  0x002F0000
+mem_fat,       data,   fat,      0x005F0000,  0x00620000
+mem_priv,      data,   spiffs,   0x00C10000,  0x00300000

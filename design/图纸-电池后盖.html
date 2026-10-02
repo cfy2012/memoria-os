@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Memoria OS 图纸 · 电池与后盖</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231b2029'/%3E%3Ctext x='32' y='44' font-size='30' text-anchor='middle' fill='%23fff' font-family='sans-serif'%3EM%3C/text%3E%3C/svg%3E">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #eef0f4; font-family: "Microsoft YaHei", "Segoe UI", sans-serif; color: #232936; padding: 24px 16px 60px; }
+  .wrap { max-width: 1020px; margin: 0 auto; }
+  .head { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 3px solid #232936; padding-bottom: 10px; margin-bottom: 18px; }
+  .head h1 { font-size: 21px; letter-spacing: 2px; }
+  .head .meta { font-size: 11px; color: #6a7284; text-align: right; line-height: 1.8; }
+  h2 { font-size: 14px; margin: 26px 0 10px; padding-left: 9px; border-left: 4px solid #2e7d32; letter-spacing: 1px; }
+  h2 .en { color: #9aa2b0; font-weight: 400; font-size: 11px; margin-left: 6px; }
+  .note { font-size: 10.5px; color: #6a7284; margin-top: 6px; line-height: 1.7; }
+  .warn { background: #fff3e0 !important; color: #9a5a00; }
+  .ok { background: #e8f7ec !important; color: #2e7d32; }
+  table { width: 100%; border-collapse: collapse; font-size: 11px; background: #fff; margin-top: 8px; }
+  th { background: #232936; color: #fff; padding: 6px 8px; text-align: left; font-weight: 600; }
+  td { padding: 5px 8px; border-bottom: 1px solid #e2e5ec; }
+  tr:nth-child(even) td { background: #f7f8fb; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  @media (max-width: 760px){ .grid2 { grid-template-columns: 1fr; } }
+  svg { width: 100%; height: auto; display: block; background: #fafafa; border: 1px solid #d7dbe3; border-radius: 6px; }
+  .figcap { font-size: 11px; color: #6a7284; margin-top: 4px; }
+  .card { background: #fff; border: 1px solid #d7dbe3; border-radius: 8px; padding: 12px 14px; margin-top: 10px; }
+  .back { display: inline-block; margin-bottom: 12px; padding: 7px 12px; background: #232936; color: #fff; border-radius: 6px; text-decoration: none; font-size: 12px; }
+  .kbd { font-family: Consolas, monospace; font-size: 10px; }
+  .footer { margin-top: 30px; text-align: center; font-size: 10px; color: #9aa2b0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="设计图纸.html">← 返回总览</a>
+  <div class="head">
+    <h1>图纸 C · 电池与后盖</h1>
+    <div class="meta">后壳外 110×160×20 ｜ 壁厚 2.5 ｜ 坐标原点 = 后壳左上角（内面）<br>2026-09-29</div>
+  </div>
+
+  <!-- 后壳内面 -->
+  <h2>1. 后壳内面（电池仓与开窗） <span class="en">BACK COVER INNER</span></h2>
+  <svg viewBox="0 0 440 640">
+    <rect x="20" y="20" width="400" height="600" rx="26" fill="#f6f7f9" stroke="#232936" stroke-width="3"/>
+    <!-- 电池凹槽 62x105: 壳坐标 x10-72, y27-132 -> px 比例 400/110=3.636, 偏移 x=20-10*3.636=-16.4, y=20-27*3.636=-78 -->
+    <g transform="translate(-16.36,-78.18)">
+      <rect x="36.4" y="98.2" width="225.5" height="381.8" rx="10" fill="#ffe9b8" stroke="#b5651d" stroke-width="2.5"/>
+      <text x="149" y="280" fill="#9a5a00" font-size="15" text-anchor="middle" font-weight="700">电池凹槽 62×105×8.5</text>
+      <text x="149" y="304" fill="#9a5a00" font-size="12" text-anchor="middle">3M 双面胶固定软包电池</text>
+      <text x="149" y="324" fill="#9a5a00" font-size="12" text-anchor="middle">引线口：右下角出线到 TP4056</text>
+      <text x="149" y="344" fill="#9a5a00" font-size="11" text-anchor="middle">避开 4 角螺丝柱与卡槽凸起</text>
+    </g>
+    <!-- TF 窗 左缘: 壳 y30-46 -> px y20+30*3.636-? 偏移: y=20+30*3.636=129 -->
+    <rect x="14" y="129" width="36" height="58" rx="3" fill="#fff" stroke="#232936" stroke-width="2"/>
+    <text x="52" y="146" fill="#232936" font-size="11.5">TF 卡插口</text>
+    <text x="52" y="162" fill="#6a7284" font-size="10">左缘 16×13</text>
+    <!-- SD 大卡 右缘: 壳 y57-90 -> px y20+57*3.636=227 -->
+    <rect x="382" y="227" width="26" height="120" rx="3" fill="#fff" stroke="#232936" stroke-width="2"/>
+    <text x="368" y="284" fill="#232936" font-size="11.5" text-anchor="end">SD 大卡插口</text>
+    <text x="368" y="300" fill="#6a7284" font-size="10" text-anchor="end">右缘 27×33</text>
+    <!-- USB-C 底部: 壳 x40-70, y155+ -> px x20+40*3.636=165 -->
+    <rect x="165" y="608" width="109" height="14" rx="3" fill="#fff" stroke="#232936" stroke-width="2"/>
+    <text x="220" y="596" fill="#232936" font-size="11.5" text-anchor="middle">USB-C 充电口（底部 30×10）</text>
+    <!-- 喇叭出声 右上: 中心壳(91,41) -> px (20+91*3.636=351, 20+41*3.636=169) -->
+    <g fill="#232936">
+      <circle cx="339" cy="157" r="4"/><circle cx="363" cy="157" r="4"/>
+      <circle cx="339" cy="177" r="4"/><circle cx="363" cy="177" r="4"/>
+    </g>
+    <text x="351" y="206" fill="#232936" font-size="11" text-anchor="middle">喇叭出声孔</text>
+    <!-- 螺丝柱 4 角 -->
+    <circle cx="36" cy="36" r="5" fill="#9aa2b0"/><circle cx="404" cy="36" r="5" fill="#9aa2b0"/>
+    <circle cx="36" cy="604" r="5" fill="#9aa2b0"/><circle cx="404" cy="604" r="5" fill="#9aa2b0"/>
+    <text x="52" y="32" fill="#6a7284" font-size="11">4 角 M2 螺丝柱（高 14mm）</text>
+  </svg>
+  <div class="figcap">后壳内面：电池凹槽占左中大区域，TF 口左缘、SD 口右缘、USB-C 底部、喇叭出声右上。</div>
+
+  <!-- 开窗明细 -->
+  <h2>2. 后壳开窗明细 <span class="en">CUTOUTS</span></h2>
+  <table>
+    <tr><th>开窗</th><th class="num">尺寸 (mm)</th><th>位置（x, y，后壳左上角原点）</th><th>对应部件</th></tr>
+    <tr><td>TF 卡插口</td><td class="num">16 × 13</td><td>左缘 x 0-2.5，y 30-46</td><td>TF 卡模块（主板左缘）</td></tr>
+    <tr><td>SD 大卡插口</td><td class="num">27 × 33</td><td>右缘 x 107.5，y 57-90</td><td>SD 大卡槽（主板右缘）</td></tr>
+    <tr><td>USB-C 充电口</td><td class="num">30 × 10</td><td>底部 x 40-70，y 155-160</td><td>TP4056 引线（延长到后壳）</td></tr>
+    <tr><td>喇叭出声孔</td><td class="num">2×2 孔阵，孔径 2.5</td><td>右上，中心 (91, 41)</td><td>背面喇叭（直径28）</td></tr>
+    <tr><td>电池凹槽</td><td class="num">62 × 105 × 8.5</td><td>x 10-72，y 27-132</td><td>软包 5000mAh 嵌入</td></tr>
+    <tr><td>侧键孔 ×3</td><td class="num">8 × 22</td><td>左缘 y 62-84 / 92-114 / 122-144</td><td>电源 / 音量- / 音量+</td></tr>
+  </table>
+
+  <!-- 电池 -->
+  <h2>3. 电池安装 <span class="en">BATTERY INSTALL</span></h2>
+  <div class="grid2">
+    <div>
+      <table>
+        <tr><th>项</th><th>内容</th></tr>
+        <tr><td>电芯</td><td>3.7V 软包 5000mAh，62×105×8mm（竖放）</td></tr>
+        <tr><td>固定</td><td>3M 双面胶整面贴后壳凹槽，四周留 0.5mm 防胀</td></tr>
+        <tr><td>引线</td><td>红（正）/ 黑（负）从凹槽右下角引出，沿板边走到正面 TP4056</td></tr>
+        <tr><td>充电</td><td>TP4056 一体板（充放+升压+USB-C），1A 充电约 6 小时充满</td></tr>
+        <tr><td>保护</td><td>软包不能刺穿、不能弯折超过 90 度；先固定再合盖</td></tr>
+        <tr class="ok"><td>薄款方案</td><td>换 6mm 薄电芯（如 62×105×6）→ 整机厚度 20 变 18mm</td></tr>
+      </table>
+    </div>
+    <div>
+      <div style="font-size:12px; font-weight:700; margin-bottom:6px;">厚度方案对比（侧剖）</div>
+      <table>
+        <tr><th>层</th><th class="num">8mm 电池</th><th class="num">6mm 电池</th></tr>
+        <tr><td>前壳</td><td class="num">2.5</td><td class="num">2.5</td></tr>
+        <tr><td>屏幕</td><td class="num">3</td><td class="num">3</td></tr>
+        <tr><td>按键空间</td><td class="num">6</td><td class="num">6</td></tr>
+        <tr><td>洞洞板</td><td class="num">1.6</td><td class="num">1.6</td></tr>
+        <tr><td>电池</td><td class="num">8</td><td class="num">6</td></tr>
+        <tr><td>后壳</td><td class="num">2.5</td><td class="num">2.5</td></tr>
+        <tr class="tot"><td>整机（最厚处）</td><td class="num">20.6 ≈ 20</td><td class="num">18.6 ≈ 18</td></tr>
+      </table>
+      <div class="note">厚度为键盘区最厚处（屏幕区略多约 1.5mm）。掌机手感参考：老 GameBoy 约 25mm 厚，本机 20mm 属正常。</div>
+    </div>
+  </div>
+
+  <!-- 装配 -->
+  <h2>4. 装配步骤（从零到整机） <span class="en">FULL ASSEMBLY</span></h2>
+  <div class="card">
+    <table>
+      <tr><th>步骤</th><th>动作</th><th>要点</th></tr>
+      <tr><td>1</td><td>焊洞洞板（按图纸 B）</td><td>先键盘 60 键 → 大件 → 小件 → 走线</td></tr>
+      <tr><td>2</td><td>屏幕装前壳</td><td>屏幕从壳内卡入开窗，FPC 向下折，焊到主板 FPC 焊盘</td></tr>
+      <tr><td>3</td><td>主板入前壳</td><td>板左上角对壳内 (5,5)，键盘键帽从 60 个键孔穿出</td></tr>
+      <tr><td>4</td><td>侧键接线</td><td>电源 / 音量± 从矩阵对应位置牵长线到左缘侧键</td></tr>
+      <tr><td>5</td><td>电池固定后壳</td><td>软包入凹槽，3M 胶固定，引线走到 TP4056</td></tr>
+      <tr><td>6</td><td>USB-C 延长</td><td>TP4056 的 USB-C 用导线延长到后壳底部开窗（焊个母座）</td></tr>
+      <tr><td>7</td><td>合盖</td><td>前壳对后壳，4 角 M2 螺丝锁紧；检查卡槽 / 侧键 / 摇杆无卡死</td></tr>
+      <tr><td>8</td><td>烧录测试</td><td>idf.py -p COM3 flash monitor：先测 60 键全响应 → 屏幕 → 音频 → WiFi</td></tr>
+    </table>
+  </div>
+
+  <h2>5. 常见坑 <span class="en">PITFALLS</span></h2>
+  <div class="card">
+    <table>
+      <tr><th>坑</th><th>后果</th><th>避免方法</th></tr>
+      <tr><td>按键引脚距和孔距不匹配</td><td>焊不上 / 虚焊</td><td>买前确认轻触按键对角引脚距为 2.54 或 5.08</td></tr>
+      <tr><td>键孔开大了</td><td>键帽晃动、掉键帽</td><td>7×7 键帽配 7.3 孔，公差 0.2</td></tr>
+      <tr><td>电池压住螺丝柱</td><td>螺丝锁不上</td><td>电池 x 10-72 避开 4 角柱位</td></tr>
+      <tr><td>矩阵线接错行列</td><td>按键错位</td><td>按图纸 B 第 4 节逐行逐列测，画网格纸打勾</td></tr>
+      <tr><td>USB-C 方向反</td><td>插不进去</td><td>母座缺口朝前壳方向焊</td></tr>
+    </table>
+  </div>
+  <div class="footer">图纸 C · 电池与后盖 v1.0 ｜ 配套：设计图纸.html（总览）、图纸-前面板.html、图纸-主板洞洞板.html</div>
+</div>
+</body>
+</html>

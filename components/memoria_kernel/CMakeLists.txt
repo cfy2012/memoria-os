@@ -1,0 +1,45 @@
+idf_component_register(
+    SRCS
+        kernel.cpp
+        app_manager.cpp
+        mode_manager.cpp
+        desktop_manager.cpp
+        keyboard_driver.cpp
+        keyboard_input.cpp
+        input_queue.cpp
+        ime.cpp
+        pinyin_dict.cpp
+        backlight.cpp
+        modes/modes_bootstrap.cpp
+        modes/photo_mode.cpp
+        modes/music_mode.cpp
+        modes/video_mode.cpp
+        modes/clock_mode.cpp
+        modes/notes_mode.cpp
+        modes/calc_mode.cpp
+        modes/prgm_mode.cpp
+        modes/store_mode.cpp
+        modes/setup_mode.cpp
+        modes/fmem_mode.cpp
+        modes/sys_mode.cpp
+        third_party/tjpgd/tjpgd.c
+    INCLUDE_DIRS "include" "modes" "third_party/tjpgd"
+    REQUIRES
+        freertos
+        esp_common
+        log
+        esp_timer
+        esp_system
+        heap
+        nvs_flash
+        esp_driver_gpio
+        esp_driver_ledc
+        esp_driver_i2c
+        esp_driver_rmt
+        memoria_drivers
+        memoria_window
+        memoria_fs
+        memoria_package
+        memoria_script
+        memoria_basic
+)

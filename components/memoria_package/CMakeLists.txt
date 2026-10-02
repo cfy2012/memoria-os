@@ -1,0 +1,23 @@
+idf_component_register(
+    SRCS
+        package_manager.cpp
+        firmware_update.cpp
+        ota_updater.cpp
+        update_scheduler.cpp
+        json_fetcher.cpp
+        package_format.cpp
+    INCLUDE_DIRS "include"
+    REQUIRES
+        freertos
+        esp_common
+        log
+        esp_timer
+        nvs_flash
+        esp_partition
+        esp_wifi
+        esp_http_client
+        esp_https_ota
+        bootloader_support
+        memoria_fs
+        memoria_drivers
+)

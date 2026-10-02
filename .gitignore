@@ -1,0 +1,20 @@
+# 构建产物
+build/
+
+# ESP-IDF 生成文件
+sdkconfig
+sdkconfig.old
+
+# 开发辅助脚本 / 临时产物（本地保留，不入库）
+tools/_*
+
+# 截图与临时目录
+_shots/
+
+# Python
+__pycache__/
+*.pyc
+
+# 系统
+Thumbs.db
+Desktop.ini

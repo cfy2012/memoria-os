@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Memoria OS · 外壳尺寸规划 v7</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230e1520'/%3E%3Crect x='10' y='14' width='44' height='36' rx='4' fill='none' stroke='%23e8a33d' stroke-width='4'/%3E%3Ccircle cx='32' cy='32' r='9' fill='%237fd1d9'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#0e1520; --bg2:#121b2a; --line:#232e40; --line2:#1a2333;
+    --txt:#d7dee9; --dim:#8a94a6; --amber:#e8a33d; --cyan:#7fd1d9; --green:#59b97c; --red:#e06c5f;
+    --mono:Consolas,"Cascadia Mono","JetBrains Mono",monospace;
+    --sans:"Microsoft YaHei","PingFang SC","Noto Sans SC",system-ui,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--bg); color:var(--txt); font-family:var(--sans);
+    background-image:
+      repeating-linear-gradient(0deg, transparent 0 39px, rgba(127,209,217,.04) 39px 40px),
+      repeating-linear-gradient(90deg, transparent 0 39px, rgba(127,209,217,.04) 39px 40px);
+    line-height:1.6;
+  }
+  .wrap{max-width:1040px;margin:0 auto;padding:32px 22px 80px}
+  /* ===== header ===== */
+  header{border-bottom:1px solid var(--line);padding-bottom:22px;margin-bottom:28px}
+  .kicker{font-family:var(--mono);font-size:12px;color:var(--cyan);letter-spacing:.14em;text-transform:uppercase}
+  h1{font-size:30px;font-weight:800;margin:8px 0 6px;letter-spacing:.01em}
+  h1 .v{color:var(--amber);font-family:var(--mono);font-size:18px;font-weight:700;vertical-align:middle;margin-left:8px}
+  .sub{color:var(--dim);font-size:13px}
+  .badges{margin-top:12px;display:flex;gap:8px;flex-wrap:wrap}
+  .badge{font-size:12px;padding:3px 10px;border:1px solid var(--line);border-radius:999px;color:var(--dim)}
+  .badge.ok{border-color:rgba(89,185,124,.5);color:var(--green)}
+  .badge.hot{border-color:rgba(232,163,61,.5);color:var(--amber)}
+  /* ===== nav ===== */
+  nav{position:sticky;top:0;z-index:10;background:rgba(14,21,32,.94);backdrop-filter:blur(6px);border-bottom:1px solid var(--line);margin-bottom:30px}
+  nav .inner{max-width:1040px;margin:0 auto;padding:10px 22px;display:flex;gap:4px;flex-wrap:wrap}
+  nav a{color:var(--dim);text-decoration:none;font-size:13px;padding:5px 12px;border-radius:6px;transition:.15s}
+  nav a:hover{color:var(--txt);background:var(--bg2)}
+  nav a.on{color:var(--amber)}
+  /* ===== sections ===== */
+  section{margin-bottom:46px}
+  h2{font-size:19px;font-weight:700;margin-bottom:4px;display:flex;align-items:baseline;gap:10px}
+  h2 .no{font-family:var(--mono);color:var(--amber);font-size:14px}
+  .sec-desc{color:var(--dim);font-size:13px;margin-bottom:16px}
+  /* ===== key numbers ===== */
+  .keys{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:18px 0 6px}
+  .key{border:1px solid var(--line);background:var(--bg2);border-radius:8px;padding:14px 16px}
+  .key .num{font-family:var(--mono);font-size:26px;font-weight:700;color:var(--amber);line-height:1.15}
+  .key .lbl{font-size:12px;color:var(--dim);margin-top:4px}
+  .key .num small{font-size:13px;color:var(--dim);font-weight:400}
+  /* ===== stack section ===== */
+  .stack{display:flex;gap:28px;align-items:flex-end;flex-wrap:wrap}
+  .stack .bars{flex:1 1 300px;min-width:280px}
+  .stack .info{flex:1 1 260px}
+  .lay{display:flex;align-items:center;gap:10px;margin-bottom:2px}
+  .lay .nm{width:84px;text-align:right;font-size:12px;color:var(--dim);flex:none}
+  .lay .bar{height:100%;border-radius:3px;position:relative;display:flex;align-items:center;padding-left:8px;font-family:var(--mono);font-size:11px;color:#0e1520;font-weight:700;white-space:nowrap;overflow:hidden}
+  .lay .gapbar{background:repeating-linear-gradient(45deg,#1c2739 0 4px,#152032 4px 8px);height:100%;border-radius:3px;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:10px;color:var(--dim)}
+  .stack-legend{font-size:12px;color:var(--dim);margin-top:14px;line-height:1.9}
+  .stack-legend b{color:var(--txt);font-family:var(--mono)}
+  .stack-legend .j{color:var(--amber)}
+  /* joystick pass-through */
+  .joy{position:relative;margin:14px 0 0;border:1px dashed rgba(232,163,61,.5);border-radius:8px;padding:12px 14px;background:rgba(232,163,61,.04)}
+  .joy .t{font-size:13px;font-weight:700;color:var(--amber);margin-bottom:6px}
+  .joy p{font-size:12.5px;color:var(--dim);line-height:1.8}
+  .joy b{color:var(--txt)}
+  /* ===== tables ===== */
+  .tbl{width:100%;border-collapse:collapse;table-layout:fixed;font-size:13px;border:1px solid var(--line)}
+  .tbl th{background:var(--bg2);color:var(--cyan);font-weight:600;text-align:left;padding:9px 10px;border:1px solid var(--line);font-size:12px;letter-spacing:.02em}
+  .tbl td{padding:8px 10px;border:1px solid var(--line);vertical-align:top;word-break:break-word}
+  .tbl td.m, .tbl th.m{font-family:var(--mono);font-size:12.5px}
+  .tbl tr:hover td{background:rgba(127,209,217,.03)}
+  .tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:4px;border:1px solid var(--line);color:var(--dim);white-space:nowrap}
+  .tag.ok{color:var(--green);border-color:rgba(89,185,124,.45)}
+  .tag.warn{color:var(--amber);border-color:rgba(232,163,61,.45)}
+  .tag.screen{color:var(--cyan);border-color:rgba(127,209,217,.45)}
+  .tblwrap{overflow-x:auto;border-radius:8px}
+  /* ===== steps ===== */
+  .steps{display:grid;gap:0;margin-top:6px}
+  .step{display:grid;grid-template-columns:44px 1fr;gap:14px;padding:12px 0;border-bottom:1px solid var(--line2)}
+  .step:last-child{border-bottom:none}
+  .step .idx{font-family:var(--mono);font-size:13px;color:var(--amber);font-weight:700;border:1px solid rgba(232,163,61,.4);width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center}
+  .step .bd h4{font-size:14px;font-weight:600;margin-bottom:3px}
+  .step .bd p{font-size:12.5px;color:var(--dim)}
+  .step .bd b{color:var(--txt)}
+  /* ===== todo ===== */
+  .todo{list-style:none}
+  .todo li{padding:9px 0 9px 26px;position:relative;font-size:13px;border-bottom:1px dashed var(--line2);color:var(--dim)}
+  .todo li:before{content:"";position:absolute;left:2px;top:14px;width:12px;height:12px;border:1.5px solid var(--amber);border-radius:3px}
+  .todo li b{color:var(--txt)}
+  .todo li .m{font-family:var(--mono);color:var(--cyan);font-size:12px}
+  footer{border-top:1px solid var(--line);padding-top:18px;font-size:12px;color:var(--dim);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  footer .m{font-family:var(--mono)}
+  /* ===== responsive ===== */
+  @media(max-width:720px){
+    .wrap{padding:22px 14px 60px}
+    h1{font-size:23px}
+    .sub{font-size:13px}
+    .keys{grid-template-columns:repeat(2,1fr)}
+    .key .lbl{font-size:13px}
+    .sec-desc{font-size:14px}
+    .badge{font-size:13px;padding:4px 10px}
+    .lay .nm{width:64px;font-size:12px}
+    .tbl{min-width:640px}
+    .tblwrap{overflow-x:auto}
+    .stack .bars{min-width:100%}
+    nav .inner{gap:6px}
+    nav a{min-height:44px;display:flex;align-items:center;padding:10px 12px;font-size:13px}
+    .joy p b{word-break:break-word}
+    .todo li span{display:block;margin-top:2px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="kicker">Memoria OS · HARDWARE SHELL · SPEC</div>
+  <h1>外壳尺寸规划<span class="v">v7</span></h1>
+  <div class="sub">ESP32-S3 掌机 · 2026-10-01 · 尺寸依据：HARDWARE-DIMENSIONS.md v7 · 引脚依据：components/memoria_drivers/include/drivers_config.hpp</div>
+  <div class="badges">
+    <span class="badge ok">核心板定版</span>
+    <span class="badge ok">摇杆甲案 KY-023</span>
+    <span class="badge hot">整机 ≈ 40.1mm</span>
+    <span class="badge">层间 2mm ×3</span>
+  </div>
+</header>
+
+<nav>
+  <div class="inner">
+    <a href="#keys">关键尺寸</a>
+    <a href="#stack">叠层剖面</a>
+    <a href="#parts">器件清单</a>
+    <a href="#holes">开孔清单</a>
+    <a href="#pins">GPIO / I2C</a>
+    <a href="#steps">装配顺序</a>
+    <a href="#todo">待实测</a>
+  </div>
+</nav>
+
+<section id="keys">
+  <h2><span class="no">01</span>关键尺寸</h2>
+  <div class="sec-desc">整机由 5 个实体层 + 3 条 2mm 悬空间隙叠成，屏幕面 → 背面。</div>
+  <div class="keys">
+    <div class="key"><div class="num">40.1<small>mm</small></div><div class="lbl">整机厚度（设计值，38~42 区间）</div></div>
+    <div class="key"><div class="num">2<small>mm</small> ×3</div><div class="lbl">层间固定间隙（硬规则）</div></div>
+    <div class="key"><div class="num">7.5<small>mm</small></div><div class="lbl">摇杆杆帽露出量</div></div>
+    <div class="key"><div class="num">≥100 × 150<small>mm</small></div><div class="lbl">内腔净空（主板放置区）</div></div>
+  </div>
+</section>
+
+<!-- ===== 02 叠层剖面 ===== -->
+<section id="stack">
+  <h2><span class="no">02</span>叠层剖面</h2>
+  <div class="sec-desc">每层高度 = 本层最高件（含板厚）；凸起元件收纳在本层内，不得侵占 2mm 间隙。实体隔板若加，每层 +1.6。</div>
+  <div class="stack">
+    <div class="bars" style="margin-top:26px">
+      <div class="lay"><div class="nm">前面板</div><div class="bar" style="height:9px;background:#3a4a63">2.5</div></div>
+      <div class="lay"><div class="gapbar" style="height:7px">2</div></div>
+      <div class="lay"><div class="nm">屏幕层</div><div class="bar" style="height:29px;background:#4fa8b8">8</div></div>
+      <div class="lay"><div class="gapbar" style="height:7px">2</div></div>
+      <div class="lay"><div class="nm">主板层</div><div class="bar" style="height:42px;background:#e8a33d">11.6</div></div>
+      <div class="lay"><div class="gapbar" style="height:7px">2</div></div>
+      <div class="lay"><div class="nm">底仓</div><div class="bar" style="height:36px;background:#59b97c">10</div></div>
+      <div class="lay"><div class="gapbar" style="height:7px">2</div></div>
+      <div class="lay"><div class="nm">底壳</div><div class="bar" style="height:9px;background:#3a4a63">2</div></div>
+      <div class="stack-legend">
+        <b>合计 ≈ 40.1mm</b>（38~42 区间）<br>
+        <b class="j">■ 主板层 11.6</b> = 洞洞板 1.6 + <b>摇杆机构 10</b>（最高件）；核心板 5 / MCP23017 2.4 / TF 3 / TP4056 4 / 功放 5 / 灯带 2.5 全部收纳<br>
+        <b class="j">■ 底仓 10</b> = 喇叭 8 + 腔体 2；锂电 5 平放<br>
+        <b class="j">■ 屏幕层 8</b> = ILI9488 含排针（上限，实测可压到 6~7）
+      </div>
+    </div>
+    <div class="info">
+      <div class="joy">
+        <div class="t">摇杆杆帽穿透（甲案 KY-023）</div>
+        <p>摇杆 PCB 面 → 前面板外表面 = 机构 10 + 间隙 2 + 屏幕层 8 + 间隙 2 + 面板 2.5 = <b>24.5mm 壳内贯通</b>。<br>
+        杆帽总高 32mm（自 PCB 面）→ 从前面板孔 <b>Ø14~16</b> 露出 <b class="j">7.5mm</b> 作握持头。<br>
+        屏幕 PCB 56×91 仅占屏幕层部分，摇杆走 PCB <b>侧边通道</b>，不与屏体干涉；贯通路径上不得有金属屏蔽件。</p>
+      </div>
+      <div class="joy" style="border-color:rgba(127,209,217,.4);background:rgba(127,209,217,.04)">
+        <div class="t" style="color:var(--cyan)">ESP32 形态：核心板定版</div>
+        <p>S3-Zero 类核心板 <b>18×27×4.5~5</b>，插针/排母装配，免自焊 RF，自带屏蔽罩天线免净空区。<br>
+        主板层独立小舱按 <b>20×30</b> 预留。<b>模组直焊方案已弃用</b>（需自焊 RF + 天线端 5mm 禁金属）。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 03 器件清单 ===== -->
+<section id="parts">
+  <h2><span class="no">03</span>器件尺寸清单</h2>
+  <div class="sec-desc">典型值为市售模块通用规格，<b>定稿前以卡尺实测为准</b>（见 §07）。</div>
+  <div class="tblwrap">
+  <table class="tbl">
+    <colgroup><col style="width:20%"><col style="width:15%"><col style="width:13%"><col style="width:12%"><col style="width:14%"><col style="width:26%"></colgroup>
+    <thead><tr><th>器件</th><th>平面占位</th><th>高度</th><th>所在层</th><th>安装</th><th>外壳相关</th></tr></thead>
+    <tbody>
+      <tr><td>ESP32-S3 核心板（S3-Zero 类）<span class="tag ok">定版</span></td><td class="m">18 × 27</td><td class="m">4.5~5</td><td>主板层</td><td>插针/排母</td><td>小舱 20×30；免自焊 RF</td></tr>
+      <tr><td>ILI9488 3.5″ 屏模块</td><td class="m">PCB 56 × 91</td><td class="m">6~8 含排针</td><td>屏幕层</td><td>排针插主板</td><td>视窗 70.8×48.5；屏幕窗 ≥71×49；<b>务必实测</b></td></tr>
+      <tr><td>2× MCP23017（键盘扩展）<span class="tag ok">最终定版</span></td><td class="m">10.5 × 7.6 ×2</td><td class="m">2.4</td><td>主板层</td><td>贴片/模块</td><td>I2C 1/6，0x20/0x21，无 INT</td></tr>
+      <tr><td>轻触开关 6×6 矮款 ×60</td><td class="m">6 × 6</td><td class="m">2.5</td><td>主板层</td><td>直插</td><td>键中心距 10（≥9）；键孔 4.5×4.5</td></tr>
+      <tr><td>KY-023 摇杆<span class="tag warn">高度约束</span></td><td class="m">PCB 26 × 34</td><td class="m">板件 ~10<br>总高 ~32</td><td>主板层</td><td>直插</td><td>杆帽穿顶露出 7.5mm；面板孔 Ø14~16</td></tr>
+      <tr><td>MAX98357A 功放</td><td class="m">15.5 × 13</td><td class="m">4~5</td><td>主板层</td><td>模块</td><td>就近焊喇叭侧，引线短</td></tr>
+      <tr><td>喇叭 3W 4Ω</td><td class="m">23×35 或 20×30</td><td class="m">5~10 +腔 2~3</td><td>底仓</td><td>粘/螺丝</td><td>透音孔开在喇叭正对面</td></tr>
+      <tr><td>TF 卡座（焊接式）</td><td class="m">15 × 16</td><td class="m">2~3</td><td>主板层</td><td>焊接</td><td>卡外露 ≥4mm；侧缝 ≥13×2；<b>可拆卸拔卡</b></td></tr>
+      <tr><td>SD 大卡槽（预留选项）</td><td class="m">30 × 29</td><td class="m">3.5</td><td>主板层</td><td>—</td><td>侧缝 25×2.5；插卡行程 5mm；<b>是否预留待定</b></td></tr>
+      <tr><td>TP4056 USB-C 充电模块</td><td class="m">26.5 × 17.5</td><td class="m">3~4</td><td>主板层</td><td>模块</td><td>USB-C 凸出板边 1.5~2；侧孔 10×4</td></tr>
+      <tr><td>锂电聚合物 503450 级</td><td class="m">50 × 34</td><td class="m">5</td><td>底仓</td><td>松配</td><td>每边预留 1mm；仓按实物复核</td></tr>
+      <tr><td>WS2812 灯带 ×2</td><td class="m">宽 10</td><td class="m">2.5</td><td>主板层边缘</td><td>粘</td><td>每条 6 珠 ≈55mm；走线槽</td></tr>
+      <tr><td>电源拨动开关 SS12D00</td><td class="m">19 × 10</td><td class="m">7 含柄</td><td>侧壁</td><td>—</td><td>侧壁开槽 19×10；柄行程 4</td></tr>
+      <tr><td>主板洞洞板</td><td class="m">100 × 150</td><td class="m">板厚 1.6</td><td>主板层</td><td>—</td><td>元件层净高 ≤2</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- ===== 04 开孔清单 ===== -->
+<section id="holes">
+  <h2><span class="no">04</span>前面板 / 侧壁开孔</h2>
+  <div class="sec-desc">全部开孔在壳体建模时按本表预留。</div>
+  <div class="tblwrap">
+  <table class="tbl">
+    <colgroup><col style="width:20%"><col style="width:18%"><col style="width:20%"><col style="width:42%"></colgroup>
+    <thead><tr><th>孔位</th><th>尺寸</th><th>位置</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>屏幕窗</td><td class="m">≥71 × 49</td><td>前面板</td><td>3.5″ ILI9488 480×320；实测视窗 +0.5</td></tr>
+      <tr><td>摇杆孔</td><td class="m">Ø14~16</td><td>前面板</td><td>KY-023 杆帽穿顶贯通，露出 7.5mm</td></tr>
+      <tr><td>麦克风孔</td><td class="m">Ø1 × 2~3</td><td>前面板边缘</td><td>INMP441 拾音（预留 GPIO45）</td></tr>
+      <tr><td>侧键孔</td><td class="m">~20 × 3</td><td>侧壁</td><td>音量 / 电源</td></tr>
+      <tr><td>USB-C</td><td class="m">10 × 4</td><td>侧壁</td><td>TP4056 充电口凸出 1.5~2</td></tr>
+      <tr><td>TF 卡</td><td class="m">≥13 × 2</td><td>侧壁</td><td>卡外露 ≥4mm，<b>可拆卸拔卡</b>（字库/音频换卡）</td></tr>
+      <tr><td>SD 大卡槽（若预留）</td><td class="m">25 × 2.5</td><td>侧壁</td><td>插卡行程 5mm；待确认</td></tr>
+      <tr><td>电源开关槽</td><td class="m">19 × 10</td><td>侧壁</td><td>柄行程 4mm</td></tr>
+      <tr><td>烧录口 / 排针孔</td><td class="m">待定</td><td>侧壁或底壳</td><td>UART 唯一烧录通道（43/44），<b>必须预留</b></td></tr>
+      <tr><td>键盘键孔</td><td class="m">4.5 × 4.5 ×60</td><td>前面板键盘区</td><td>6×10 布局，键中心距 10</td></tr>
+      <tr><td>喇叭透音孔</td><td class="m">按喇叭面</td><td>底壳/侧壁</td><td>开在喇叭正对面</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- ===== 05 GPIO / I2C ===== -->
+<section id="pins">
+  <h2><span class="no">05</span>GPIO / I2C 参考（迁移后）</h2>
+  <div class="sec-desc">引脚唯一来源：components/memoria_drivers/include/drivers_config.hpp。</div>
+  <div class="tblwrap">
+  <table class="tbl">
+    <colgroup><col style="width:28%"><col style="width:30%"><col style="width:42%"></colgroup>
+    <thead><tr><th>功能</th><th>GPIO</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>摇杆 X / Y</td><td class="m">7（ADC1_CH6）/ 5（ADC1_CH4）</td><td>迁移后；旧 36/37 被 PSRAM 占</td></tr>
+      <tr><td>摇杆 BTN</td><td class="m">38</td><td>不动</td></tr>
+      <tr><td>电池 ADC</td><td class="m">4（ADC1_CH3）</td><td>迁移后；旧 39 无 ADC</td></tr>
+      <tr><td>TF 卡 CS</td><td class="m">17</td><td>迁移后；旧 5</td></tr>
+      <tr><td>I2S BCLK / WS / DOUT</td><td class="m">18 / 21 / 15</td><td>迁移后；旧 4/3/2</td></tr>
+      <tr><td>SPI SCLK / MOSI / MISO</td><td class="m">12 / 11 / 13</td><td>不动</td></tr>
+      <tr><td>屏幕 CS / DC / RST / BLK</td><td class="m">10 / 9 / 8 / 14</td><td>不动</td></tr>
+      <tr><td>键盘灯带</td><td class="m">46（RMT）</td><td>不动</td></tr>
+      <tr><td>麦克风（预留）</td><td class="m">45 + 16/47（或 48）</td><td>INMP441；strapping 谨慎</td></tr>
+      <tr><td>USB D- / D+</td><td class="m">19 / 20</td><td>OTG 占用 → UART 为唯一烧录通道</td></tr>
+      <tr><td>UART0 TX / RX</td><td class="m">43 / 44</td><td>控制台 / 烧录</td></tr>
+      <tr><td>自由脚</td><td class="m">16 / 47 / 48 + 40 / 41 / 42</td><td>可用 GPIO</td></tr>
+      <tr><td>永久不可用</td><td class="m">26~32（Flash）、33~37（PSRAM）</td><td>物理接不出</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="joy" style="margin-top:14px;border-color:rgba(89,185,124,.4);background:rgba(89,185,124,.04)">
+    <div class="t" style="color:var(--green)">I2C 总线（I2C_NUM_0 @ GPIO1/6，400kHz）</div>
+    <p><b>0x20 / 0x21</b> = MCP23017 ×2（行+列C0-C3 / 列C4-C9）<b>最终定版</b>；<br><b>0x18 / 0x68 / 0x6B</b> 预留段（新器件接线前请核对 I2C 地址占用）。</p>
+  </div>
+</section>
+
+<!-- ===== 06 装配顺序 ===== -->
+<section id="steps">
+  <h2><span class="no">06</span>装配顺序（底 → 顶）</h2>
+  <div class="sec-desc">5 步合壳，每层间留 2mm 悬空（支柱/卡扣），需要实体隔板时每层 +1.6。</div>
+  <div class="steps">
+    <div class="step"><div class="idx">1</div><div class="bd"><h4>底壳 + 底仓</h4><p>锂电 503450 平放（每边 1mm 松配）、喇叭 3W 定位，<b>透音孔对正</b>。</p></div></div>
+    <div class="step"><div class="idx">2</div><div class="bd"><h4>主板层</h4><p>洞洞板 100×150 固定；核心板插排母（小舱 20×30）；摇杆 KY-023 直插；MCP23017×2、TF 座、TP4056、MAX98357A、灯带走线槽。</p></div></div>
+    <div class="step"><div class="idx">3</div><div class="bd"><h4>屏幕层</h4><p>ILI9488 排针朝下插入主板对应排母，<b>屏幕窗对位</b>；摇杆杆帽走 PCB 侧边通道。</p></div></div>
+    <div class="step"><div class="idx">4</div><div class="bd"><h4>前面板</h4><p>60 键孔对位；<b>摇杆杆帽从 Ø14~16 孔穿出，露出 7.5mm</b>；屏幕窗合位。</p></div></div>
+    <div class="step"><div class="idx">5</div><div class="bd"><h4>合盖 + 侧壁件</h4><p>USB-C（10×4）、TF（≥13×2 外露 4mm）、电源开关槽、烧录口对孔；开机自检。</p></div></div>
+  </div>
+</section>
+
+<!-- ===== 07 待实测 ===== -->
+<section id="todo">
+  <h2><span class="no">07</span>待卡尺实测（定稿前必测）</h2>
+  <div class="sec-desc">以下 4 项是市售典型值，实际偏差会直接改变整机厚度或露出量。</div>
+  <ul class="todo">
+    <li><b>ILI9488 模块含排针实际高度</b> — 6~8mm，直接影响整机厚度 ±2mm <span class="m">（对应屏幕层 8）</span></li>
+    <li><b>喇叭实际厚度 + 腔体余量</b> — 5~10 + 2~3 <span class="m">（对应底仓 10）</span></li>
+    <li><b>KY-023 杆帽立起实际总高</b> — 32±，偏差影响露出量 7.5± <span class="m">（对应摇杆穿顶）</span></li>
+    <li><b>电池实际厚度</b> — 503450 级典型 5，仓按实物复核 <span class="m">（对应底仓）</span></li>
+  </ul>
+</section>
+
+<footer>
+  <div>数据源：HARDWARE-DIMENSIONS.md v7 · components/memoria_drivers/include/drivers_config.hpp</div>
+  <div class="m">Memoria OS · shell-design v7 · 2026-10-01</div>
+</footer>
+
+</div>
+</body>
+</html>

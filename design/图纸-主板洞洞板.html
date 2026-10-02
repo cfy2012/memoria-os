@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Memoria OS 图纸 · 主板洞洞板</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231b2029'/%3E%3Ctext x='32' y='44' font-size='30' text-anchor='middle' fill='%23fff' font-family='sans-serif'%3EM%3C/text%3E%3C/svg%3E">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #eef0f4; font-family: "Microsoft YaHei", "Segoe UI", sans-serif; color: #232936; padding: 24px 16px 60px; }
+  .wrap { max-width: 1020px; margin: 0 auto; }
+  .head { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 3px solid #232936; padding-bottom: 10px; margin-bottom: 18px; }
+  .head h1 { font-size: 21px; letter-spacing: 2px; }
+  .head .meta { font-size: 11px; color: #6a7284; text-align: right; line-height: 1.8; }
+  h2 { font-size: 14px; margin: 26px 0 10px; padding-left: 9px; border-left: 4px solid #2e7d32; letter-spacing: 1px; }
+  h2 .en { color: #9aa2b0; font-weight: 400; font-size: 11px; margin-left: 6px; }
+  .note { font-size: 10.5px; color: #6a7284; margin-top: 6px; line-height: 1.7; }
+  .warn { background: #fff3e0 !important; color: #9a5a00; }
+  .ok { background: #e8f7ec !important; color: #2e7d32; }
+  table { width: 100%; border-collapse: collapse; font-size: 11px; background: #fff; margin-top: 8px; }
+  th { background: #232936; color: #fff; padding: 6px 8px; text-align: left; font-weight: 600; }
+  td { padding: 5px 8px; border-bottom: 1px solid #e2e5ec; }
+  tr:nth-child(even) td { background: #f7f8fb; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  @media (max-width: 760px){ .grid2 { grid-template-columns: 1fr; } }
+  svg { width: 100%; height: auto; display: block; background: #fafafa; border: 1px solid #d7dbe3; border-radius: 6px; }
+  .figcap { font-size: 11px; color: #6a7284; margin-top: 4px; }
+  .card { background: #fff; border: 1px solid #d7dbe3; border-radius: 8px; padding: 12px 14px; margin-top: 10px; }
+  .back { display: inline-block; margin-bottom: 12px; padding: 7px 12px; background: #232936; color: #fff; border-radius: 6px; text-decoration: none; font-size: 12px; }
+  .kbd { font-family: Consolas, monospace; font-size: 10px; }
+  .footer { margin-top: 30px; text-align: center; font-size: 10px; color: #9aa2b0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="设计图纸.html">← 返回总览</a>
+  <div class="head">
+    <h1>图纸 B · 主板洞洞板</h1>
+    <div class="meta">洞洞板 100×150（10×15 cm）｜ 孔距 2.54 ｜ 原点 = 板左上角<br>装壳后板左上角落在外壳内部 (5, 5)</div>
+  </div>
+
+  <!-- 正面 -->
+  <h2>1. 正面布局 <span class="en">TOP VIEW</span></h2>
+  <svg viewBox="0 0 360 560">
+    <!-- 洞洞板 100x150 -> 320x480 -->
+    <rect x="20" y="20" width="320" height="480" rx="6" fill="#fffaf0" stroke="#232936" stroke-width="2.5"/>
+    <text x="30" y="40" fill="#8a92a2" font-size="11">洞洞板 100 × 150 · 孔距 2.54</text>
+    <!-- 键盘矩阵区 97x57: x1.5-98.5, y85-142 -> px*3.2: x4.8-315.2, y272-454 -->
+    <rect x="24.8" y="292" width="310.4" height="182.4" rx="4" fill="#fff" stroke="#8a92a2" stroke-width="2" stroke-dasharray="6 4"/>
+    <text x="180" y="284" fill="#8a92a2" font-size="11.5" text-anchor="middle">键盘矩阵 97×57（6 行 × 10 列）</text>
+    <!-- 60 键中心: x=5+10c, y=88.5+10r -> px x=16+32c, y=283+32r -->
+    <g fill="#e9edf4" stroke="#b9bec9" stroke-width="0.8">
+      <g transform="translate(16,283)">
+        <rect x="0" y="0" width="22.4" height="22.4" rx="2"/><rect x="32" y="0" width="22.4" height="22.4" rx="2"/><rect x="64" y="0" width="22.4" height="22.4" rx="2"/><rect x="96" y="0" width="22.4" height="22.4" rx="2"/><rect x="128" y="0" width="22.4" height="22.4" rx="2"/><rect x="160" y="0" width="22.4" height="22.4" rx="2"/><rect x="192" y="0" width="22.4" height="22.4" rx="2"/><rect x="224" y="0" width="22.4" height="22.4" rx="2"/><rect x="256" y="0" width="22.4" height="22.4" rx="2"/><rect x="288" y="0" width="22.4" height="22.4" rx="2"/>
+        <rect x="0" y="32" width="22.4" height="22.4" rx="2"/><rect x="32" y="32" width="22.4" height="22.4" rx="2"/><rect x="64" y="32" width="22.4" height="22.4" rx="2"/><rect x="96" y="32" width="22.4" height="22.4" rx="2"/><rect x="128" y="32" width="22.4" height="22.4" rx="2"/><rect x="160" y="32" width="22.4" height="22.4" rx="2"/><rect x="192" y="32" width="22.4" height="22.4" rx="2"/><rect x="224" y="32" width="22.4" height="22.4" rx="2"/><rect x="256" y="32" width="22.4" height="22.4" rx="2"/><rect x="288" y="32" width="22.4" height="22.4" rx="2"/>
+        <rect x="0" y="64" width="22.4" height="22.4" rx="2"/><rect x="32" y="64" width="22.4" height="22.4" rx="2"/><rect x="64" y="64" width="22.4" height="22.4" rx="2"/><rect x="96" y="64" width="22.4" height="22.4" rx="2"/><rect x="128" y="64" width="22.4" height="22.4" rx="2"/><rect x="160" y="64" width="22.4" height="22.4" rx="2"/><rect x="192" y="64" width="22.4" height="22.4" rx="2"/><rect x="224" y="64" width="22.4" height="22.4" rx="2"/><rect x="256" y="64" width="22.4" height="22.4" rx="2"/><rect x="288" y="64" width="22.4" height="22.4" rx="2"/>
+        <rect x="0" y="96" width="22.4" height="22.4" rx="2"/><rect x="32" y="96" width="22.4" height="22.4" rx="2"/><rect x="64" y="96" width="22.4" height="22.4" rx="2"/><rect x="96" y="96" width="22.4" height="22.4" rx="2"/><rect x="128" y="96" width="22.4" height="22.4" rx="2"/><rect x="160" y="96" width="22.4" height="22.4" rx="2"/><rect x="192" y="96" width="22.4" height="22.4" rx="2"/><rect x="224" y="96" width="22.4" height="22.4" rx="2"/><rect x="256" y="96" width="22.4" height="22.4" rx="2"/><rect x="288" y="96" width="22.4" height="22.4" rx="2"/>
+        <rect x="0" y="128" width="22.4" height="22.4" rx="2"/><rect x="32" y="128" width="22.4" height="22.4" rx="2"/><rect x="64" y="128" width="22.4" height="22.4" rx="2"/><rect x="96" y="128" width="22.4" height="22.4" rx="2"/><rect x="128" y="128" width="22.4" height="22.4" rx="2"/><rect x="160" y="128" width="22.4" height="22.4" rx="2"/><rect x="192" y="128" width="22.4" height="22.4" rx="2"/><rect x="224" y="128" width="22.4" height="22.4" rx="2"/><rect x="256" y="128" width="22.4" height="22.4" rx="2"/><rect x="288" y="128" width="22.4" height="22.4" rx="2"/>
+        <rect x="0" y="160" width="22.4" height="22.4" rx="2"/><rect x="32" y="160" width="22.4" height="22.4" rx="2"/><rect x="64" y="160" width="22.4" height="22.4" rx="2"/><rect x="96" y="160" width="22.4" height="22.4" rx="2"/><rect x="128" y="160" width="22.4" height="22.4" rx="2"/><rect x="160" y="160" width="22.4" height="22.4" rx="2"/><rect x="192" y="160" width="22.4" height="22.4" rx="2"/><rect x="224" y="160" width="22.4" height="22.4" rx="2"/><rect x="256" y="160" width="22.4" height="22.4" rx="2"/><rect x="288" y="160" width="22.4" height="22.4" rx="2"/>
+      </g>
+    </g>
+    <!-- ESP32 45x28: x52-97, y4-32 -> px x166-310, y13-102 -->
+    <rect x="186" y="33" width="144" height="90" rx="5" fill="#dff0e3" stroke="#2e7d32" stroke-width="2"/>
+    <text x="258" y="72" fill="#2e7d32" font-size="12.5" text-anchor="middle" font-weight="700">ESP32-S3 N16R8</text>
+    <text x="258" y="90" fill="#4c8a52" font-size="10.5" text-anchor="middle">45×28 · 排针朝下</text>
+    <!-- 摇杆 20x20: x5-25, y4-24 -> px x16-80, y13-77 -->
+    <circle cx="48" cy="45" r="32" fill="#dce3ee" stroke="#3d4453" stroke-width="2"/>
+    <text x="48" y="40" fill="#232936" font-size="11" text-anchor="middle">摇杆</text>
+    <text x="48" y="55" fill="#6a7284" font-size="9.5" text-anchor="middle">KY-023 20×20</text>
+    <!-- MAX98357 16x12: x55-71, y36-48 -> px x176-227, y115-154 -->
+    <rect x="196" y="135" width="51" height="39" rx="3" fill="#fde8d7" stroke="#b5651d" stroke-width="1.8"/>
+    <text x="222" y="157" fill="#9a5a00" font-size="10" text-anchor="middle">功放</text>
+    <!-- INMP441 12x14: x76-88, y35-49 -> px x243-282, y112-157 -->
+    <rect x="263" y="132" width="39" height="45" rx="3" fill="#e3e9f7" stroke="#3f51b5" stroke-width="1.8"/>
+    <text x="282" y="157" fill="#3f51b5" font-size="10" text-anchor="middle">麦克</text>
+    <!-- TF 卡 15x13: x5-20, y28-41 -> px x16-64, y90-131 -->
+    <rect x="36" y="110" width="48" height="41" rx="3" fill="#f0ead6" stroke="#8a92a2" stroke-width="1.8"/>
+    <text x="60" y="132" fill="#232936" font-size="9.5" text-anchor="middle">TF卡</text>
+    <text x="18" y="170" fill="#8a92a2" font-size="9" text-anchor="middle" transform="rotate(-90 18 170)">卡口朝左缘</text>
+    <!-- TP4056 26x17: x5-31, y55-72 -> px x16-99, y176-230 -->
+    <rect x="36" y="196" width="83" height="54" rx="3" fill="#e8f7ec" stroke="#2e7d32" stroke-width="1.8"/>
+    <text x="78" y="218" fill="#2e7d32" font-size="10" text-anchor="middle">TP4056 充电板</text>
+    <text x="78" y="232" fill="#4c8a52" font-size="9" text-anchor="middle">USB-C 引线到后壳底部</text>
+    <!-- SD 大卡槽 27x33: x70-97, y52-85 -> px x224-310, y166-272 -->
+    <rect x="244" y="186" width="86" height="106" rx="3" fill="#f3e2f5" stroke="#7b3fa0" stroke-width="1.8"/>
+    <text x="287" y="228" fill="#7b3fa0" font-size="10" text-anchor="middle">SD 大卡槽</text>
+    <text x="287" y="242" fill="#9b6ab8" font-size="9" text-anchor="middle">卡口朝右缘</text>
+    <!-- FPC 焊盘 x40-56, y36-44 -> px x128-179, y115-141 -->
+    <rect x="148" y="135" width="51" height="26" rx="3" fill="#fff" stroke="#1a6fc4" stroke-width="1.8" stroke-dasharray="4 3"/>
+    <text x="174" y="151" fill="#1a6fc4" font-size="9.5" text-anchor="middle">屏幕 FPC 焊盘</text>
+    <!-- 右侧按键灯带位置 -->
+    <rect x="320" y="330" width="0" height="0" fill="none"/>
+  </svg>
+  <div class="figcap">正面：右上 ESP32，左上摇杆，键盘在下半区；TF 卡口朝左缘、SD 大卡口朝右缘、TP4056 在下左（USB-C 引线到后壳底部）。</div>
+
+  <!-- 背面 -->
+  <h2>2. 背面布局（电池与喇叭） <span class="en">BOTTOM VIEW</span></h2>
+  <svg viewBox="0 0 360 560">
+    <rect x="20" y="20" width="320" height="480" rx="6" fill="#f3f5f8" stroke="#232936" stroke-width="2.5"/>
+    <text x="30" y="40" fill="#8a92a2" font-size="11">洞洞板背面 · 只有电池和喇叭，无走线</text>
+    <!-- 电池 62x105: x5-67, y22-127 -> px x16-214, y70-406 -->
+    <rect x="36" y="90" width="198" height="336" rx="10" fill="#ffe9b8" stroke="#b5651d" stroke-width="2.5"/>
+    <text x="135" y="240" fill="#9a5a00" font-size="14" text-anchor="middle" font-weight="700">软包电池 62×105×8</text>
+    <text x="135" y="262" fill="#9a5a00" font-size="11" text-anchor="middle">5000mAh · 3M 双面胶整面固定</text>
+    <text x="135" y="280" fill="#9a5a00" font-size="11" text-anchor="middle">引线红+/黑- 走板边到 TP4056</text>
+    <!-- 喇叭 φ28: x72-100, y22-50 -> 中心 px (275,115) -->
+    <circle cx="275" cy="115" r="45" fill="#e3e9f7" stroke="#3f51b5" stroke-width="2"/>
+    <circle cx="275" cy="115" r="13" fill="#3f51b5"/>
+    <text x="275" y="182" fill="#3f51b5" font-size="10.5" text-anchor="middle">喇叭 直径28</text>
+    <text x="275" y="197" fill="#3f51b5" font-size="9.5" text-anchor="middle">出声孔在后壳右上</text>
+    <!-- 标注 -->
+    <line x1="16" y1="70" x2="16" y2="426" stroke="#1a6fc4" stroke-width="1.5"/>
+    <text x="6" y="260" fill="#1a6fc4" font-size="11" transform="rotate(-90 6 260)" text-anchor="middle">电池 105（长边）</text>
+    <line x1="36" y1="486" x2="234" y2="486" stroke="#1a6fc4" stroke-width="1.5"/>
+    <text x="135" y="500" fill="#1a6fc4" font-size="11" text-anchor="middle">电池 62（宽）</text>
+  </svg>
+  <div class="figcap">背面：电池竖放占左侧大部分，喇叭在右上。电池引线从板边缘绕到正面 TP4056。</div>
+
+  <!-- 模块坐标表 -->
+  <h2>3. 模块坐标明细 <span class="en">MODULE COORDS</span></h2>
+  <table>
+    <tr><th>模块</th><th>尺寸 (mm)</th><th>位置 x</th><th>位置 y</th><th>说明</th></tr>
+    <tr><td>ESP32-S3 N16R8</td><td class="num">45 × 28</td><td class="num">52-97</td><td class="num">4-32</td><td>核心板，排针朝下插洞洞板</td></tr>
+    <tr><td>摇杆 KY-023</td><td class="num">20 × 20</td><td class="num">5-25</td><td class="num">4-24</td><td>手柄穿前壳孔（直径20）</td></tr>
+    <tr><td>功放 MAX98357</td><td class="num">16 × 12</td><td class="num">55-71</td><td class="num">36-48</td><td>I2S 输出，接喇叭</td></tr>
+    <tr><td>麦克 INMP441</td><td class="num">12 × 14</td><td class="num">76-88</td><td class="num">35-49</td><td>I2S 输入，拾音孔朝前</td></tr>
+    <tr><td>TF 卡模块</td><td class="num">15 × 13</td><td class="num">5-20</td><td class="num">28-41</td><td>卡口朝左缘出壳</td></tr>
+    <tr><td>TP4056 充电板</td><td class="num">26 × 17</td><td class="num">5-31</td><td class="num">55-72</td><td>USB-C 引线到后壳底部</td></tr>
+    <tr><td>SD 大卡槽</td><td class="num">27 × 33</td><td class="num">70-97</td><td class="num">52-85</td><td>卡口朝右缘出壳</td></tr>
+    <tr><td>屏幕 FPC 焊盘</td><td class="num">16 × 8</td><td class="num">40-56</td><td class="num">36-44</td><td>前壳屏幕排线下折到此处</td></tr>
+    <tr><td>键盘矩阵</td><td class="num">97 × 57</td><td class="num">1.5-98.5</td><td class="num">85-142</td><td>60 键，中心距 10</td></tr>
+  </table>
+  <div class="note">坐标原点 = 洞洞板左上角。装壳后板左上角落在壳内 (5,5)，与前面板开孔完全对齐。</div>
+
+  <!-- 矩阵接线 -->
+  <h2>4. 键盘矩阵接线 <span class="en">MATRIX WIRING</span></h2>
+  <div class="grid2">
+    <div>
+      <table>
+        <tr><th>行（共 6 根）</th><th>GPIO</th><th>对应键位行</th></tr>
+        <tr><td>R0</td><td class="kbd">1</td><td class="kbd">ON/OFF F1..F7 背光 ⌫</td></tr>
+        <tr><td>R1</td><td class="kbd">6</td><td class="kbd">!1 @2 #3 $4 %5 ^6 &amp;7 *8 (9 )0</td></tr>
+        <tr><td>R2</td><td class="kbd">7</td><td class="kbd">-Q _W E R T Y [U ]I {O }P</td></tr>
+        <tr><td>R3</td><td class="kbd">15</td><td class="kbd">=A +S D F G H J K "L :;</td></tr>
+        <tr><td>R4</td><td class="kbd">16</td><td class="kbd">Shift \Z |X C V B /N ?M &lt;, &gt;.</td></tr>
+        <tr><td>R5</td><td class="kbd">17</td><td class="kbd">Caps Ctrl Vol- Vol+ Space ← → ↓ ↑ Enter</td></tr>
+      </table>
+      <div class="note">行线：从键盘区左侧向上走到 ESP32 下方焊盘。逐行拉低扫描。</div>
+    </div>
+    <div>
+      <table>
+        <tr><th>列（共 10 根）</th><th>GPIO</th><th>接线位置</th></tr>
+        <tr><td>C0</td><td class="kbd">18</td><td>第 1 列（最左）</td></tr>
+        <tr><td>C1</td><td class="kbd">21</td><td>第 2 列</td></tr>
+        <tr><td>C2</td><td class="kbd">35</td><td>第 3 列</td></tr>
+        <tr><td>C3</td><td class="kbd">40</td><td>第 4 列</td></tr>
+        <tr><td>C4</td><td class="kbd">41</td><td>第 5 列</td></tr>
+        <tr><td>C5</td><td class="kbd">42</td><td>第 6 列</td></tr>
+        <tr><td>C6</td><td class="kbd">43</td><td>第 7 列</td></tr>
+        <tr><td>C7</td><td class="kbd">44</td><td>第 8 列</td></tr>
+        <tr><td>C8</td><td class="kbd">47</td><td>第 9 列</td></tr>
+        <tr><td>C9</td><td class="kbd">48</td><td>第 10 列（最右）</td></tr>
+      </table>
+      <div class="note">列线：每列 6 个按键共用一条竖线，列线从键盘区右侧向上走到 ESP32 下方。</div>
+    </div>
+  </div>
+  <div class="card">
+    <table>
+      <tr><th>接线规则</th><th>做法</th></tr>
+      <tr><td>单个按键</td><td>一脚接所在行线，一脚接所在列线（矩阵接法，60 键只需 16 根线）</td></tr>
+      <tr><td>行线 / 列线</td><td>用 2.54 孔位插排或漆包线，在洞洞板背面走线；先焊按键再走线</td></tr>
+      <tr><td>按键引脚距</td><td>轻触按键四脚对角距 2.54 或 5.08，确认和洞洞板孔距对上再买</td></tr>
+      <tr><td>灯带</td><td>上下两条灯带：信号接 GPIO46（经三极管/场管驱动），供电 5V，负极共地</td></tr>
+      <tr><td>麦克风 SD</td><td>INMP441 数据脚建议接 GPIO45（预留，需固件 I2S 输入通道使能）</td></tr>
+    </table>
+  </div>
+
+  <!-- 焊接顺序 -->
+  <h2>5. 焊接顺序建议 <span class="en">SOLDERING ORDER</span></h2>
+  <div class="card">
+    <table>
+      <tr><th>步骤</th><th>焊什么</th><th>原因</th></tr>
+      <tr><td>1</td><td>60 个轻触按键（先定位键盘区）</td><td>面积最大，先固定好后面好布局</td></tr>
+      <tr><td>2</td><td>ESP32 排针 + 摇杆</td><td>两个大件，定位后走线参考</td></tr>
+      <tr><td>3</td><td>TF 卡模块 / SD 大卡槽 / TP4056</td><td>边缘件，卡口朝外</td></tr>
+      <tr><td>4</td><td>功放 / 麦克</td><td>小模块，就近 ESP32</td></tr>
+      <tr><td>5</td><td>矩阵走线（16 根）</td><td>全部焊完再走线，一次成型</td></tr>
+      <tr><td>6</td><td>屏幕 FPC 焊盘 + 排线</td><td>最后接，避免折坏</td></tr>
+      <tr><td>7</td><td>上电自检</td><td>idf.py -p COM3 flash monitor，逐个按键测试</td></tr>
+    </table>
+  </div>
+  <div class="footer">图纸 B · 主板洞洞板 v1.0 ｜ 配套：设计图纸.html（总览）、图纸-前面板.html、图纸-电池后盖.html</div>
+</div>
+</body>
+</html>
