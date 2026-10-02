@@ -262,7 +262,7 @@ void Ili9341::flush() {
 
     _set_window(0, 0, SCREEN_W - 1, SCREEN_H - 1);
 
-    constexpr uint32_t CHUNK = 4096;
+    constexpr uint32_t CHUNK = 8192;  /* 对齐 max_transfer_sz，减半分块事务开销 */
     uint32_t total = SCREEN_W * SCREEN_H * sizeof(Color);
     uint32_t offset = 0;
     gpio_set_level((gpio_num_t)LCD_DC_GPIO, 1);
