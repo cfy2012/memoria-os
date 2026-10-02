@@ -44,9 +44,9 @@ esp_err_t SpiBus::init() {
         return ret;
     }
 
-    /* ILI9341: 26MHz，正 CS */
+    /* LCD: 80MHz 独立时钟（SD 共总线但每设备时钟独立，SD 仍 20MHz），正 CS */
     spi_device_interface_config_t lcd_cfg{};
-    lcd_cfg.clock_speed_hz = SPI_BUS_FREQ_HZ;
+    lcd_cfg.clock_speed_hz = LCD_SPI_FREQ_HZ;
     lcd_cfg.mode           = 0;
     lcd_cfg.spics_io_num   = LCD_CS_GPIO;
     lcd_cfg.queue_size     = 2;
@@ -70,7 +70,7 @@ esp_err_t SpiBus::init() {
     if (!_mutex) return ESP_ERR_NO_MEM;
 
     _inited = true;
-    ESP_LOGI(TAG, "SPI2 OK. LCD=26MHz SD=20MHz. Mutex ready.");
+    ESP_LOGI(TAG, "SPI2 OK. LCD=%dHz SD=20MHz. Mutex ready.", LCD_SPI_FREQ_HZ);
     return ESP_OK;
 }
 
