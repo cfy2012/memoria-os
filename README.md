@@ -1,4 +1,4 @@
-# Memoria OS
+﻿# Memoria OS
 
 **Memoria OS** 是一款基于 ESP32-S3（N16R8：16 MB Flash + 8 MB Octal PSRAM）自主设计的掌机操作系统。系统内核、窗口系统、文件系统、脚本引擎、BASIC 解释器与包管理均为从零自研，不依赖 Linux、LVGL 或任何现成 UI 框架。项目以开源复古计算与嵌入式系统学习为定位，面向希望理解完整嵌入式系统栈的开发者。
 
@@ -47,7 +47,7 @@ idf.py build
 idf.py -p COMx flash monitor
 ```
 
-构建基线保持全绿，编译选项启用 `-Werror`，当前零警告。固件二进制大小为 `0x1DC570`（1,951,088 字节，约 1.9 MB）。固件自研源码共 100 个文件（50 个 .cpp 实现文件，其余为 .h/.hpp 头文件；不含 `third_party/` 下的第三方解码库）。
+构建基线保持全绿，编译选项启用 `-Werror`，当前零警告。固件二进制大小为 `0x1DCE00`（1,953,280 字节，约 1.9 MB）。固件自研源码共 100 个文件（50 个 .cpp 实现文件，其余为 .h/.hpp 头文件；不含 `third_party/` 下的第三方解码库）。
 
 **分区表**（`partitions.csv`）：
 
