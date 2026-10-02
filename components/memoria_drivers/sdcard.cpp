@@ -75,5 +75,21 @@ bool SdCard::present() {
     return false;
 }
 
+void SdCard::poll() {
+    if (_mounted) {
+        /* 已挂载：探测卡是否仍存在（拔出则卸载 VFS，避免读写悬空错误） */
+        if (!present()) {
+            ESP_LOGW(TAG, "card removed, unmounting");
+            deinit();
+        }
+    } else {
+        /* 未挂载：直接尝试挂载（成功即卡已插入/恢复） */
+        esp_err_t ret = init();
+        if (ret == ESP_OK) {
+            ESP_LOGI(TAG, "card inserted, re-mounted at %s", _mount_point.c_str());
+        }
+    }
+}
+
 } // namespace drivers
 } // namespace memoria
