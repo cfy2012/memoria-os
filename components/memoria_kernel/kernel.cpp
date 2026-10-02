@@ -249,6 +249,7 @@ esp_err_t Kernel::init() {
 /* ---------- 主循环：渲染 + 状态栏刷新 ---------- */
 void Kernel::main_loop() {
     auto* wm = window::WindowManager::instance();
+    uint32_t tick = 0;
 
     while (true) {
         /* EventBus 泵：joystick/电池任务只入队，导航与系统事件在此统一分发 */
@@ -258,6 +259,11 @@ void Kernel::main_loop() {
         input::InputEvent kev;
         while (input::input_queue_receive(&kev, 0)) {
             modes::ModeManager::instance()->dispatch_key(kev.key, kev.pressed);
+        }
+
+        /* SD 热插拔轮询（约每 1s 一次：20ms × 50） */
+        if (++tick % 50 == 0) {
+            drivers::SdCard::instance()->poll();
         }
 
         /* 渲染所有窗口 + 状态栏每 1s 刷新 */
