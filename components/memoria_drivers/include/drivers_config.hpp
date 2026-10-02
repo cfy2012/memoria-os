@@ -48,6 +48,8 @@ static constexpr int SPI_SCLK_GPIO = 12;
 static constexpr int SPI_MOSI_GPIO = 11;
 static constexpr int SPI_MISO_GPIO = 13; /* 屏幕/SD 都是半双工，不需要 MISO 时悬空也安全 */
 static constexpr int SPI_BUS_FREQ_HZ = 26000000;  /* 26MHz，SD 卡 SPI 上限 25MHz，总线保持保守 */
+static constexpr int LCD_SPI_FREQ_HZ = 80000000;  /* LCD 独立 80MHz：SPI 每设备时钟独立生效，SD 仍 20MHz 不受影响。
+                                                     全屏 307200B 传输 94→31ms（≈32fps）。真机花屏则降至 40/60MHz */
 
 /* ============================================================
  *  ILI9341 屏幕（仅一块，共用 SPI）
