@@ -65,9 +65,10 @@ def main():
     make_msp("audio-test", 1, payload, msp_path)
 
     # manifest 示例：GLM §1.1 核心集 + type:"media" + schema:1
+    # name 带扩展名（audio-test.wav）：media 落盘名=name，MUSIC 枚举只认 .wav/.mp3/.m4a，无扩展名会被安装分支拒绝
     # url 为占位：上架时替换为实际部署源地址（jsdelivr 镜像：https://cdn.jsdelivr.net/gh/cfy2012/memoria-ota@main/...）
     manifest = [{
-        "name": "audio-test",
+        "name": "audio-test.wav",
         "version": 1,
         "size": len(payload),
         "crc": zlib.crc32(payload) & 0xFFFFFFFF,
