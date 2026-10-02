@@ -23,6 +23,7 @@ public:
     esp_err_t init();
     esp_err_t deinit();
     bool      present();
+    void      poll();   /* 热插拔轮询：拔卡自动卸载，插卡自动重挂（由内核主循环周期调用） */
 
     const std::string& mount_point() const { return _mount_point; }
     bool is_mounted() const { return _mounted; }
