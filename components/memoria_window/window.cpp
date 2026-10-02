@@ -123,16 +123,6 @@ StatusBar::StatusBar() {
     set_rect(_rect);
 }
 
-void StatusBar::update(uint8_t battery_pct, bool battery_low,
-                       bool wifi_connected, bool ble_connected,
-                       const struct memoria::drivers::RtcTime& now) {
-    (void)battery_pct; (void)battery_low; (void)wifi_connected; (void)ble_connected;
-    /* 时间槽位缓存（render 现读 RTC，此槽位保留备用） */
-    static char s_time[8] = "00:00";
-    snprintf(s_time, sizeof(s_time), "%02u:%02u", now.hour, now.minute);
-    (void)s_time;  /* suppress warning */
-}
-
 void StatusBar::on_render() {
     auto* ui = UIRenderer::instance();
     ui->fill_rect(_rect, COLOR_BLACK);
@@ -140,8 +130,6 @@ void StatusBar::on_render() {
 
     /* 时间（右对齐） */
     char time_str[8];
-    static bool s_init = false;
-    static char s_cache[8] = "00:00";
     /* 这里简单从 RTC 直接读，不缓存 */
     auto t = drivers::RtcClock::instance()->now();
     snprintf(time_str, sizeof(time_str), "%02u:%02u", t.hour, t.minute);
@@ -166,7 +154,6 @@ void StatusBar::on_render() {
     bool low = drivers::BatteryAdc::instance()->is_crit();
     char bat[8]; snprintf(bat, sizeof(bat), "%u%%", pct);
     ui->draw_text(50, 2, bat, low ? COLOR_RED : COLOR_LIGHT_GRAY);
-    (void)s_init; (void)s_cache;
 }
 
 /* ============================================================
@@ -300,22 +287,15 @@ void UIRenderer::fill_rect(const Rect& r, Color c) {
 }
 
 void UIRenderer::draw_rect(const Rect& r, Color c, uint16_t thickness) {
-    (void)thickness;
-    auto* lcd = drivers::Ili9341::instance();
-    lcd->draw_hline(r.x, r.x + r.w - 1, r.y, c);
-    lcd->draw_hline(r.x, r.x + r.w - 1, r.y + r.h - 1, c);
-    lcd->draw_vline(r.x, r.y, r.y + r.h - 1, c);
-    lcd->draw_vline(r.x + r.w - 1, r.y, r.y + r.h - 1, c);
-}
-
-void UIRenderer::fill_rounded_rect(const Rect& r, uint16_t radius, Color c) {
-    (void)radius;  /* 简化：画普通填充矩形，后续加圆角裁剪 */
-    fill_rect(r, c);
-}
-
-void UIRenderer::fill_hgradient(const Rect& r, Color c1, Color c2) {
-    (void)c1; (void)c2;
-    fill_rect(r, c1);  /* 简化 */
+    if (thickness == 0) thickness = 1;
+    if (thickness >= r.w || thickness >= r.h) { fill_rect(r, c); return; }
+    const int16_t t = static_cast<int16_t>(thickness);
+    const int16_t h2 = static_cast<int16_t>(r.h - 2 * t);
+    /* 四条粗边：上下横带 + 左右竖带（t=1 时与逐线绘制等价） */
+    fill_rect({r.x, r.y, r.w, t}, c);
+    fill_rect({r.x, static_cast<int16_t>(r.y + r.h - t), r.w, t}, c);
+    fill_rect({r.x, static_cast<int16_t>(r.y + t), t, h2}, c);
+    fill_rect({static_cast<int16_t>(r.x + r.w - t), static_cast<int16_t>(r.y + t), t, h2}, c);
 }
 
 void UIRenderer::draw_cursor(const Rect& r, Color c, uint16_t thickness) {
