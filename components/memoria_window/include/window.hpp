@@ -165,9 +165,6 @@ public:
     StatusBar();
 
     void on_render() override;
-    void update(uint8_t battery_pct, bool battery_low,
-                bool wifi_connected, bool ble_connected,
-                const drivers::RtcTime& now);
 };
 
 /* ============================================================
@@ -183,8 +180,6 @@ public:
     /* 图元（ILI9341 驱动层已有，但 renderer 做封装） */
     void fill_rect(const Rect& r, Color c);
     void draw_rect(const Rect& r, Color c, uint16_t thickness = 1);
-    void fill_rounded_rect(const Rect& r, uint16_t radius, Color c);
-    void fill_hgradient(const Rect& r, Color c1, Color c2);
 
     /* 光标（聚焦框：1~2px 厚度） */
     void draw_cursor(const Rect& r, Color c, uint16_t thickness = 2);
