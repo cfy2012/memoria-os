@@ -20,6 +20,7 @@
  */
 
 #include "package_manager.hpp"
+#include "package_format.hpp"
 #include "json_fetcher.hpp"
 #include "private_fs.hpp"
 #include "wifi_manager.hpp"
@@ -54,7 +55,7 @@ static const char* KEY_MIRROR = "mirror";
 static const char* KEY_AUTO   = "auto_upd";
 static const char* KEY_HOUR   = "auto_hour";
 static const char* KEY_MIN    = "auto_min";
-static const char* DEFAULT_MIRROR = "https://raw.githubusercontent.com/memoria-os/packages/main/manifest.json";
+static const char* DEFAULT_MIRROR = "https://cdn.jsdelivr.net/gh/cfy2012/memoria-ota@main/manifest.json";
 
 /* 计算 CRC32（复用 private_fs 里已有的查表实现） */
 extern uint32_t crc32_compute(const uint8_t* data, size_t len);
@@ -169,7 +170,9 @@ static void _log(const char* fmt, ...) {
 
 /* ============================================================
  *  Manifest 解析（极简 JSON 数组，手写 parser，不依赖 cJSON）
- *  格式：[{"name":"demo.msp","version":"1.2.0","size":1234,"crc":0xABCDEF12}, ...]
+ *  格式：[{"name":"demo.msp","version":"1.2.0","size":1234,"crc":0xABCDEF12,"url":"..."}, ...]
+ *  Schema 定稿：核心集 {name,version,size,crc,url}；可选 {type,schema}（type 缺省 "app"，
+ *  "media" 为音频/视频资源包）。解析器只读取已知字段，未知字段一律忽略——协议向后兼容。
  * ============================================================ */
 struct ManifestEntry {
     std::string name;
@@ -178,6 +181,7 @@ struct ManifestEntry {
     uint32_t    crc;
     bool        has_crc = false;   /* manifest 缺少 crc 字段时跳过该校验，而非整体拒绝安装 */
     std::string url;
+    std::string type = "app";      /* 缺省 app；media 为音频/视频资源包（解包落盘 /mem_fat/audio） */
 };
 
 static std::vector<ManifestEntry> parse_manifest(const std::string& json) {
@@ -217,10 +221,25 @@ static std::vector<ManifestEntry> parse_manifest(const std::string& json) {
             out_v = (uint32_t)strtoul(json.substr(sp, ep - sp).c_str(), nullptr, 0);
             return true;
         };
+        /* 数字版兜底：version 允许 "1.2.0" 或 1 两种写法（协议向后兼容） */
+        auto pick_num_str = [&](const char* key) -> std::string {
+            std::string pat = std::string("\"") + key + "\"";
+            size_t kp = json.find(pat, ob);
+            if (kp == std::string::npos || kp > json.find('}', ob)) return "";
+            size_t sp = kp + pat.size();
+            while (sp < json.size() && (json[sp] == ' ' || json[sp] == '\t' || json[sp] == ':')) sp++;
+            size_t ep = sp;
+            while (ep < json.size() && std::isdigit((unsigned char)json[ep])) ep++;
+            if (ep == sp) return "";
+            return json.substr(sp, ep - sp);
+        };
 
         e.name    = pick_str("name");
         e.version = pick_str("version");
+        if (e.version.empty()) e.version = pick_num_str("version");
         e.url     = pick_str("url");
+        e.type    = pick_str("type");
+        if (e.type.empty()) e.type = "app";
         pick_u32("size", e.size);
         e.has_crc = pick_u32("crc", e.crc);
 
@@ -295,6 +314,44 @@ bool check_updates(int* out_added, int* out_removed) {
                 _log("  %s 已存在（裸脚本无版本头），跳过", e.name.c_str());
                 continue;
             }
+        }
+
+        /* media 资源包（type:"media"）：下载 .msp → 解包 payload → 落盘 /mem_fat/audio/<name>
+           供 MUSIC 模式枚举播放；name 必须带音频扩展名（.wav/.mp3/.m4a） */
+        if (e.type == "media") {
+            if (e.name.size() < 5) {
+                _log("  %s media 包名过短（缺扩展名），拒绝", e.name.c_str()); continue;
+            }
+            std::string ext = e.name.substr(e.name.size() - 4);
+            if (ext != ".wav" && ext != ".mp3" && ext != ".m4a") {
+                _log("  %s media 扩展名不支持：%s", e.name.c_str(), ext.c_str()); continue;
+            }
+            struct stat st;
+            if (stat(("/mem_fat/audio/" + e.name).c_str(), &st) == 0) {
+                _log("  %s media 已安装，跳过", e.name.c_str()); continue;
+            }
+            if (e.url.empty()) { _log("  %s media 无 url，跳过", e.name.c_str()); continue; }
+            std::string pkg = json_fetcher::fetch(e.url);
+            if (pkg.empty()) { _log("  %s media 下载失败", e.name.c_str()); continue; }
+            std::string tmp = "/mem_fat/scripts/_tmp_media.msp";
+            {
+                std::ofstream fp(tmp, std::ios::binary);
+                if (fp) fp.write(pkg.data(), pkg.size());
+            }
+            std::string iname; uint32_t iver = 0; std::vector<uint8_t> payload;
+            if (!verify_package(tmp, &iname, &iver, &payload)) {
+                _log("  %s media 包格式校验失败（MSPACK/CRC），丢弃", e.name.c_str());
+                std::remove(tmp.c_str()); continue;
+            }
+            if (e.has_crc && crc32_compute(payload.data(), payload.size()) != e.crc) {
+                _log("  %s media crc mismatch（manifest 与包内不符），丢弃", e.name.c_str());
+                std::remove(tmp.c_str()); continue;
+            }
+            std::string path = "/mem_fat/audio/" + e.name;
+            std::ofstream fp(path, std::ios::binary);
+            if (fp) { fp.write((const char*)payload.data(), payload.size()); fp.close(); added++; }
+            std::remove(tmp.c_str());
+            continue;
         }
 
         /* 下载并（有 crc 时）校验，写入 mem_fat */
