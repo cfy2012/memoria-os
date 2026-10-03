@@ -1,0 +1,371 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Memoria OS · 电路接线图</title><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%230d1117'/%3E%3Cpath d='M5 12h14M12 5v14' stroke='%2358a6ff' stroke-width='2.5'/%3E%3Ccircle cx='12' cy='12' r='2.2' fill='%233fb950'/%3E%3C/svg%3E"><style>
+  :root{--bg:#0d1117;--panel:#161b22;--line:#30363d;--txt:#c9d1d9;--dim:#8b949e;--red:#f85149;--orange:#d29922;--blue:#58a6ff;--green:#3fb950;--purple:#bc8cff;--yellow:#e3b341}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--txt);font-family:"Cascadia Code",Consolas,"Microsoft YaHei",monospace;padding:20px;line-height:1.55}
+  h1{font-size:22px;margin-bottom:4px}
+  .sub{color:var(--dim);font-size:13px}
+  .meta{color:var(--dim);font-size:12px;margin:8px 0 16px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+  .tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+  .tab{background:var(--panel);border:1px solid var(--line);color:var(--dim);border-radius:8px;padding:6px 14px;font-size:13px;cursor:pointer;font-family:inherit}
+  .tab.on{border-color:var(--blue);color:var(--blue)}
+  section{display:none}
+  section.on{display:block}
+  h2{font-size:16px;margin:18px 0 10px;color:var(--blue);border-left:3px solid var(--blue);padding-left:8px}
+  table{width:100%;border-collapse:collapse;table-layout:fixed;margin:8px 0 16px}
+  th,td{border:1px solid var(--line);padding:6px 8px;font-size:12.5px;text-align:left;vertical-align:top;word-break:break-all}
+  th{background:var(--panel);color:var(--dim);font-weight:normal}
+  tr:nth-child(even) td{background:rgba(255,255,255,.02)}
+  .g{color:var(--green)} .r{color:var(--red)} .o{color:var(--orange)} .b{color:var(--blue)} .p{color:var(--purple)} .d{color:var(--dim)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:12px}
+  .card h3{font-size:14px;margin-bottom:8px}
+  .card h3 .tag{font-size:11px;color:var(--dim);font-weight:normal;margin-left:6px}
+  .warn{background:rgba(248,81,73,.08);border:1px solid rgba(248,81,73,.4);border-radius:8px;padding:10px 12px;font-size:12.5px;margin:10px 0}
+  .note{background:rgba(88,166,255,.07);border:1px solid rgba(88,166,255,.35);border-radius:8px;padding:10px 12px;font-size:12.5px;margin:10px 0}
+  .ok{background:rgba(63,185,80,.08);border:1px solid rgba(63,185,80,.35);border-radius:8px;padding:10px 12px;font-size:12.5px;margin:10px 0}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:760px){.grid2{grid-template-columns:1fr}}
+  .small{font-size:11.5px;color:var(--dim)}
+  .num{font-family:"Cascadia Code",Consolas,monospace}
+  ol,ul{margin:6px 0 12px 22px;font-size:13px}
+  li{margin-bottom:4px}
+  svg{max-width:100%;height:auto}
+  .center{text-align:center}
+</style></head><body>
+
+<h1>Memoria OS · 电路接线图</h1>
+<div class="sub">电气连接全景 · 照此焊接，无需读代码</div>
+<div class="meta">引脚唯一来源：<span class="num">components/memoria_drivers/include/drivers_config.hpp</span>；分配依据：GPIO-ALLOC.md；焊接施工：WIRING.md。<br>
+坐标体系与「洞洞板布局与外壳尺寸.html」同源：面板坐标 X 0~107 / Y 0~157（原点=外壳正面左上角），洞洞板坐标 = 面板坐标 − 3.5。本图各模块均标注落孔位置，边焊边对位。</div>
+
+<div class="tabs" id="tabs">
+  <span class="tab on" data-t="0">① GPIO 全景</span>
+  <span class="tab" data-t="1">② 分模块接线</span>
+  <span class="tab" data-t="2">③ 电源树</span>
+  <span class="tab" data-t="3">④ 落孔对照</span>
+  <span class="tab" data-t="4">⑤ 自检·坑位</span>
+</div>
+
+<!-- ===== ① GPIO 全景 ===== -->
+<section id="s0" class="on">
+  <h2>① ESP32-S3 核心板引脚使用总表（按 GPIO 序）</h2>
+  <table>
+    <colgroup><col style="width:9%"><col style="width:17%"><col style="width:10%"><col style="width:26%"><col style="width:38%"></colgroup>
+    <thead><tr><th>GPIO</th><th>用途</th><th>方向</th><th>接往</th><th>备注</th></tr></thead>
+    <tbody>
+      <tr><td class="num">1</td><td>I2C SDA（键盘扩展器）</td><td>双向</td><td>MCP #1/#2 SDA 并联</td><td>软件内部上拉；线长 &gt;10cm 加 4.7K 上拉</td></tr>
+      <tr><td class="num">4</td><td>电池电压采样 ADC1_CH3</td><td>输入</td><td>分压节点（R1 100K / R2 100K）</td><td>节点并 100nF 到 GND，无电容读数偏低</td></tr>
+      <tr><td class="num">5</td><td>摇杆 Y 轴 ADC1_CH4</td><td>输入</td><td>KY-023 VRy</td><td>勿接 5V，超 ADC 量程</td></tr>
+      <tr><td class="num">6</td><td>I2C SCL</td><td>输出</td><td>MCP #1/#2 SCL 并联</td><td>—</td></tr>
+      <tr><td class="num">7</td><td>摇杆 X 轴 ADC1_CH6</td><td>输入</td><td>KY-023 VRx</td><td>—</td></tr>
+      <tr><td class="num">8</td><td>屏幕复位</td><td>输出</td><td>LCD RST</td><td>—</td></tr>
+      <tr><td class="num">9</td><td>屏幕数据/命令</td><td>输出</td><td>LCD DC</td><td>—</td></tr>
+      <tr><td class="num">10</td><td>屏幕 SPI 片选</td><td>输出</td><td>LCD CS</td><td class="g">与 TF CS=17 独立，标准多从机</td></tr>
+      <tr><td class="num">11</td><td>SPI MOSI</td><td>输出</td><td>LCD SDI + TF MOSI</td><td>共总线</td></tr>
+      <tr><td class="num">12</td><td>SPI SCLK</td><td>输出</td><td>LCD SCK + TF SCK</td><td>共总线；LCD 80MHz / TF 20MHz 独立时钟</td></tr>
+      <tr><td class="num">13</td><td>SPI MISO</td><td>输入</td><td>LCD SDO + TF MISO</td><td>共总线</td></tr>
+      <tr><td class="num">14</td><td>屏幕背光 PWM</td><td>输出</td><td>LCD LED 脚</td><td>—</td></tr>
+      <tr><td class="num">15</td><td>I2S 数据输出</td><td>输出</td><td>MAX98357A DIN</td><td>—</td></tr>
+      <tr><td class="num">16</td><td>I2S 数据输入</td><td>输入</td><td>INMP441 SD</td><td class="g">麦克风现役数据脚（2026-10-01 定版）</td></tr>
+      <tr><td class="num">17</td><td>TF 卡片选</td><td>输出</td><td>TF CS</td><td>20MHz</td></tr>
+      <tr><td class="num">18</td><td>I2S 位时钟</td><td>输出</td><td>MAX98357A BCLK + INMP441 SCK</td><td class="b">功放/麦克复用（分时全双工）</td></tr>
+      <tr><td class="num">21</td><td>I2S 字选通</td><td>输出</td><td>MAX98357A LRC + INMP441 WS</td><td class="b">同上复用</td></tr>
+      <tr><td class="num">38</td><td>摇杆按下</td><td>输入上拉</td><td>KY-023 SW</td><td>—</td></tr>
+      <tr><td class="num">46</td><td>键盘灯带数据</td><td>输出</td><td>WS2812 DIN（串 330Ω）</td><td>strapping 脚，DIN 不含上拉即可</td></tr>
+      <tr><td class="num">19/20</td><td>USB D−/D+</td><td>—</td><td>核心板 USB-C 直插</td><td class="r">这两脚不接任何外设</td></tr>
+      <tr><td class="num">43/44</td><td>UART0 TX/RX</td><td>—</td><td>烧录/控制台</td><td class="r">唯一烧录通道，外壳必须预留口</td></tr>
+      <tr><td class="num">33~37</td><td>Octal PSRAM 内部占用</td><td>—</td><td>—</td><td class="r">绝对不接任何外设，接了会崩</td></tr>
+      <tr><td class="num">0/3/45/46</td><td>Strapping</td><td>—</td><td>—</td><td class="o">开机采样，勿接上拉器件</td></tr>
+      <tr><td class="num">39/40/41/42/47/48</td><td>自由脚</td><td>—</td><td>—</td><td>备用；下版 PCB SD 拆 SPI3 预案用 41/42/47/48</td></tr>
+    </tbody>
+  </table>
+  <div class="note">已用 20 个 GPIO。屏幕与 TF 共用 SPI2 总线但独立 CS/独立时钟（#14 复核闭环）；I2S 输出（功放）与输入（麦克）复用 BCLK/WS，麦克备用独立时钟 SCK=47/WS=48 仅真机复用失败时启用。</div>
+</section>
+
+<!-- ===== ② 分模块接线 ===== -->
+<section id="s1">
+  <h2>② 分模块接线（按焊接顺序）</h2>
+
+  <div class="card">
+    <h3>2.1 电源链 <span class="tag">先焊</span></h3>
+    <table>
+      <colgroup><col style="width:46%"><col style="width:54%"></colgroup>
+      <tbody>
+        <tr><th>电池红 → TP4056 B+</th><td>503450 级 3.7V 锂电</td></tr>
+        <tr><th>电池黑 → TP4056 B−</th><td>—</td></tr>
+        <tr><th>TP4056 OUT+ → 拨动开关 → 核心板 5V/3V3</th><td>SS12D00 柄从侧壁伸出；3.3V 由核心板 LDO 降压</td></tr>
+        <tr><th>TP4056 OUT− → 核心板 GND</th><td class="g">共地点（单星汇聚）</td></tr>
+        <tr><th>电池+ → R1 100K → 采样节点 → R2 100K → GND；节点 → GPIO4</th><td>节点并 100nF 到 GND</td></tr>
+        <tr><th>TP4056 自带 USB-C 从外壳侧壁开孔伸出</th><td>充电口（10×4 孔）</td></tr>
+      </tbody>
+    </table>
+    <div class="small">所有模块 VCC 一律 3.3V（除 TP4056 本体）；全机 GND 单星汇聚一点，避免地环路。</div>
+  </div>
+
+  <div class="card">
+    <h3>2.2 屏幕 ILI9488 3.5″ SPI <span class="tag">落孔：洞洞板 (75,49.5) 附近 → 面板屏窗 X 18~89 / Y 8~57</span></h3>
+    <table>
+      <colgroup><col style="width:20%"><col style="width:22%"><col style="width:12%"><col style="width:46%"></colgroup>
+      <thead><tr><th>模块脚</th><th>接</th><th>方向</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>VCC / GND</td><td>3.3V / GND</td><td>—</td><td>—</td></tr>
+        <tr><td>CS</td><td class="num">GPIO10</td><td>出</td><td>独立片选</td></tr>
+        <tr><td>RESET</td><td class="num">GPIO8</td><td>出</td><td>—</td></tr>
+        <tr><td>DC</td><td class="num">GPIO9</td><td>出</td><td>—</td></tr>
+        <tr><td>SDI(MOSI)</td><td class="num">GPIO11</td><td>出</td><td>与 TF 共线</td></tr>
+        <tr><td>SCK</td><td class="num">GPIO12</td><td>出</td><td>与 TF 共线，80MHz</td></tr>
+        <tr><td>SDO(MISO)</td><td class="num">GPIO13</td><td>入</td><td>与 TF 共线</td></tr>
+        <tr><td>LED(背光)</td><td class="num">GPIO14</td><td>出</td><td>PWM 调光</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>2.3 TF 卡模块 <span class="tag">内置底部 · 落孔：洞洞板 (75,49.5) · 卡朝板右缘 → 壳右壁 TF 缝</span></h3>
+    <table>
+      <colgroup><col style="width:20%"><col style="width:22%"><col style="width:12%"><col style="width:46%"></colgroup>
+      <thead><tr><th>模块脚</th><th>接</th><th>方向</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>VCC / GND</td><td>3.3V / GND</td><td>—</td><td>模块带 5V 稳压的可接 5V</td></tr>
+        <tr><td>CS</td><td class="num">GPIO17</td><td>出</td><td>20MHz，独立片选</td></tr>
+        <tr><td>SCK / MOSI / MISO</td><td class="num">12 / 11 / 13</td><td>—</td><td>与屏同总线</td></tr>
+      </tbody>
+    </table>
+    <div class="small">卡先拷 <span class="num">sdcard/</span> 全部内容到根目录（FAT32）。</div>
+  </div>
+
+  <div class="card">
+    <h3>2.4 摇杆 KY-023 <span class="tag">杆帽穿顶 · 落孔：洞洞板 (14,72.4) · 面板摇杆孔 Ø16 (16.5,77)</span></h3>
+    <table>
+      <colgroup><col style="width:20%"><col style="width:22%"><col style="width:12%"><col style="width:46%"></colgroup>
+      <thead><tr><th>模块脚</th><th>接</th><th>方向</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>VCC / GND</td><td class="r">3.3V</td><td>—</td><td>勿接 5V，超 ADC 量程中位漂移</td></tr>
+        <tr><td>VRx</td><td class="num">GPIO7</td><td>入</td><td>X 轴；反了互换 VRx/VRy 线</td></tr>
+        <tr><td>VRy</td><td class="num">GPIO5</td><td>入</td><td>Y 轴</td></tr>
+        <tr><td>SW</td><td class="num">GPIO38</td><td>入上拉</td><td>按下键</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>2.5 I2S 功放 MAX98357A + 喇叭 <span class="tag">落孔：洞洞板 (93,70) · 贴板右缘</span></h3>
+    <table>
+      <colgroup><col style="width:20%"><col style="width:22%"><col style="width:12%"><col style="width:46%"></colgroup>
+      <thead><tr><th>模块脚</th><th>接</th><th>方向</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>VIN / GND</td><td>3.3V / GND</td><td>—</td><td>—</td></tr>
+        <tr><td>BCLK</td><td class="num">GPIO18</td><td>出</td><td class="b">与 INMP441 SCK 复用</td></tr>
+        <tr><td>LRC(WS)</td><td class="num">GPIO21</td><td>出</td><td class="b">与 INMP441 WS 复用</td></tr>
+        <tr><td>DIN</td><td class="num">GPIO15</td><td>出</td><td>—</td></tr>
+        <tr><td>GAIN</td><td>悬空</td><td>—</td><td>9dB 默认；嫌声小接 GND（12dB）</td></tr>
+        <tr><td>SD</td><td>默认上拉</td><td>—</td><td>输出左右混合；焊完无声则 SD 串 100K 接 3.3V 强制开声</td></tr>
+        <tr><td>喇叭 4Ω 3W</td><td>模块 +/− 输出</td><td>—</td><td>透音孔开在喇叭正对面（底壳 Ø2×6~9）</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>2.6 麦克风 INMP441（WIRING 补全）<span class="tag">落孔：洞洞板 (39,65) · 拾音面朝上对准面板 Ø1.5×3</span></h3>
+    <table>
+      <colgroup><col style="width:20%"><col style="width:22%"><col style="width:12%"><col style="width:46%"></colgroup>
+      <thead><tr><th>模块脚</th><th>接</th><th>方向</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>VDD / GND</td><td>3.3V / GND</td><td>—</td><td>—</td></tr>
+        <tr><td>SD</td><td class="num">GPIO16</td><td>入</td><td class="g">I2S 数据输入（现役，drivers_config.hpp）</td></tr>
+        <tr><td>SCK</td><td class="num">GPIO18</td><td>入</td><td class="b">与功放 BCLK 复用（分时全双工）；备用独立时钟 SCK=47</td></tr>
+        <tr><td>WS</td><td class="num">GPIO21</td><td>入</td><td class="b">与功放 LRC 复用；备用 WS=48</td></tr>
+        <tr><td>L/R</td><td>GND</td><td>—</td><td>左声道（与固件 i2s slot 配置对应；真机验证后覆盖）</td></tr>
+      </tbody>
+    </table>
+    <div class="note">录音链路：INMP441 → I2S RX（GPIO16）；播放链路：I2S TX（GPIO15）→ MAX98357A。BCLK/WS 输出共享给两个设备，分时切换。</div>
+  </div>
+
+  <div class="card">
+    <h3>2.7 键盘扫描器 2× MCP23017 <span class="tag">落孔：建议 C0~C8 / R10~R13（键盘区左下空白）</span></h3>
+    <div class="grid2">
+      <table>
+        <colgroup><col style="width:30%"><col style="width:34%"><col style="width:36%"></colgroup>
+        <thead><tr><th>MCP #1（0x20）</th><th>接</th><th>备注</th></tr></thead>
+        <tbody>
+          <tr><td>VCC / GND</td><td>3.3V / GND</td><td>—</td></tr>
+          <tr><td>SDA / SCL</td><td class="num">GPIO1 / 6</td><td>—</td></tr>
+          <tr><td>A0 A1 A2</td><td class="r">全接 GND</td><td>地址 0x20</td></tr>
+          <tr><td>RESET</td><td>3.3V</td><td>—</td></tr>
+          <tr><td>GPA0~GPA5</td><td>键盘行 R0~R5</td><td>—</td></tr>
+          <tr><td>GPB0~GPB3</td><td>键盘列 C0~C3</td><td>—</td></tr>
+        </tbody>
+      </table>
+      <table>
+        <colgroup><col style="width:30%"><col style="width:34%"><col style="width:36%"></colgroup>
+        <thead><tr><th>MCP #2（0x21）</th><th>接</th><th>备注</th></tr></thead>
+        <tbody>
+          <tr><td>VCC / GND</td><td>3.3V / GND</td><td>—</td></tr>
+          <tr><td>SDA / SCL</td><td class="num">GPIO1 / 6</td><td>与 #1 并联同线</td></tr>
+          <tr><td>A0</td><td class="r">接 3.3V</td><td>地址 0x21；忘接则与 #1 同址全乱</td></tr>
+          <tr><td>A1 A2</td><td>GND</td><td>—</td></tr>
+          <tr><td>RESET</td><td>3.3V</td><td>—</td></tr>
+          <tr><td>GPA0~GPA5</td><td>键盘列 C4~C9</td><td>GPB4~7 悬空</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="small">I2C 400kHz，软件内部上拉；线长超 10cm 在 SDA/SCL 各加 4.7K 上拉到 3.3V。无 INT 引脚，20ms 轮询。</div>
+  </div>
+
+  <div class="card">
+    <h3>2.8 键盘矩阵 6×10（60 键）</h3>
+    <table>
+      <colgroup><col style="width:46%"><col style="width:54%"></colgroup>
+      <tbody>
+        <tr><th>每行</th><td>该行 10 颗键的<b>左脚并联</b>一条线 → 对应行线 R0~R5</td></tr>
+        <tr><th>每列</th><td>该列 6 颗键的<b>右脚并联</b>一条线 → 对应列线 C0~C9</td></tr>
+        <tr><th>行线去向</th><td>R0=R1行 … R5=R6行 → MCP#1 GPA0~5</td></tr>
+        <tr><th>列线去向</th><td>C0~C3 → MCP#1 GPB0~3；C4~C9 → MCP#2 GPA0~5</td></tr>
+        <tr><th>二极管 A 案（不焊）</th><td>60 键直连。单/双键正常，三键成矩形时偶发错字，焊工量最小</td></tr>
+        <tr><th>二极管 B 案（推荐）</th><td>每键串 1N4148：<b>键右脚 → 二极管阳极，阴极 → 列线</b>（电流 列→行 导通），彻底防幽灵键</td></tr>
+      </tbody>
+    </table>
+    <div class="small">两案固件通用，先焊 A 案可开机，后续可补。</div>
+  </div>
+
+  <div class="card">
+    <h3>2.9 键盘灯带 WS2812 ×2（12 珠）<span class="tag">软板贴前板内面，不焊洞洞板</span></h3>
+    <table>
+      <colgroup><col style="width:46%"><col style="width:54%"></colgroup>
+      <tbody>
+        <tr><th>GPIO46 → 330Ω → 灯带① DIN</th><td>灯带① DOUT → 灯带② DIN（串联）</td></tr>
+        <tr><th>VCC / GND</th><td>3.3V / 共地</td></tr>
+        <tr><th>贴位</th><td>键盘上缘（面板 Y 88~98）+ 键盘下缘（面板 Y 149~157），各 6 珠</td></tr>
+      </tbody>
+    </table>
+    <div class="warn">灯带方向：DIN 箭头朝进数据侧；接反整条不亮。</div>
+  </div>
+
+  <div class="card">
+    <h3>2.10 ESP32 大核心板 45×28 <span class="tag">独立小舱 · 面板 X 52~99 / Y 60~90（开舱 47×30 + 盖子）</span></h3>
+    <table>
+      <colgroup><col style="width:46%"><col style="width:54%"></colgroup>
+      <tbody>
+        <tr><th>装配</th><td>顶壳开舱 + 可开合小盖子 + <b>排线连接洞洞板</b>；以后换 ESP32 免拆主板</td></tr>
+        <tr><th>排线内容</th><td>按 ① GPIO 全景表全部外设网络（SPI/I2C/I2S/ADC/灯带 + 3.3V/GND）经排针引出</td></tr>
+        <tr><th>天线禁区</th><td class="r">核心板天线端 5mm 内禁金属、禁铺铜、禁走线</td></tr>
+        <tr><th>烧录</th><td>UART0（43/44）为唯一烧录通道，外壳必须预留口；USB 口仅供电/调试</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ===== ③ 电源树 ===== -->
+<section id="s2">
+  <h2>③ 电源树</h2>
+  <svg viewBox="0 0 860 300" xmlns="http://www.w3.org/2000/svg" font-family="Cascadia Code, Consolas, Microsoft YaHei, monospace" font-size="12">
+    <defs>
+      <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#58a6ff"/></marker>
+    </defs>
+    <rect x="20" y="40" width="120" height="60" rx="8" fill="#161b22" stroke="#30363d"/>
+    <text x="80" y="65" text-anchor="middle" fill="#c9d1d9">锂电池 503450</text>
+    <text x="80" y="82" text-anchor="middle" fill="#8b949e">3.7V · 50×34×5</text>
+    <rect x="210" y="40" width="150" height="60" rx="8" fill="#161b22" stroke="#30363d"/>
+    <text x="285" y="60" text-anchor="middle" fill="#c9d1d9">TP4056 充电模块</text>
+    <text x="285" y="76" text-anchor="middle" fill="#8b949e">B+ / B− 接电池</text>
+    <text x="285" y="92" text-anchor="middle" fill="#8b949e">自带 USB-C 充电口</text>
+    <rect x="430" y="40" width="110" height="60" rx="8" fill="#161b22" stroke="#d29922"/>
+    <text x="485" y="65" text-anchor="middle" fill="#c9d1d9">SS12D00</text>
+    <text x="485" y="82" text-anchor="middle" fill="#d29922">拨动开关</text>
+    <rect x="600" y="20" width="160" height="60" rx="8" fill="#161b22" stroke="#3fb950"/>
+    <text x="680" y="45" text-anchor="middle" fill="#c9d1d9">ESP32 核心板</text>
+    <text x="680" y="62" text-anchor="middle" fill="#8b949e">5V 输入 → LDO 3.3V</text>
+    <rect x="600" y="120" width="160" height="60" rx="8" fill="#161b22" stroke="#58a6ff"/>
+    <text x="680" y="145" text-anchor="middle" fill="#c9d1d9">3.3V 域</text>
+    <text x="680" y="162" text-anchor="middle" fill="#8b949e">屏/卡/摇杆/功放/麦/键盘</text>
+    <path d="M140,70 H210" stroke="#58a6ff" stroke-width="2" marker-end="url(#ar)" fill="none"/>
+    <text x="175" y="60" text-anchor="middle" fill="#58a6ff">B+/B−</text>
+    <path d="M360,70 H430" stroke="#d29922" stroke-width="2" marker-end="url(#ar)" fill="none"/>
+    <text x="395" y="60" text-anchor="middle" fill="#d29922">OUT+</text>
+    <path d="M540,70 H600" stroke="#3fb950" stroke-width="2" marker-end="url(#ar)" fill="none"/>
+    <text x="570" y="60" text-anchor="middle" fill="#3fb950">开关后 5V</text>
+    <path d="M680,80 V120" stroke="#58a6ff" stroke-width="2" marker-end="url(#ar)" fill="none"/>
+    <text x="692" y="105" text-anchor="middle" fill="#58a6ff">LDO</text>
+    <rect x="210" y="200" width="450" height="70" rx="8" fill="#161b22" stroke="#30363d"/>
+    <text x="435" y="228" text-anchor="middle" fill="#c9d1d9">GND 单星汇聚点（共地点）</text>
+    <text x="435" y="248" text-anchor="middle" fill="#8b949e">电池负极 / TP4056 OUT− / 核心板 GND / 所有模块 GND → 一点，避免地环路</text>
+    <path d="M285,100 V170 H435 V200" stroke="#30363d" stroke-width="2" fill="none"/>
+    <path d="M680,150 V200" stroke="#30363d" stroke-width="2" fill="none"/>
+    <path d="M680,80 V150" stroke="#8b949e" stroke-width="1.5" stroke-dasharray="4 3" fill="none"/>
+    <text x="60" y="140" fill="#8b949e">电池电压采样：电池+ → R1 100K → 节点 → R2 100K → GND；节点 → GPIO4（并 100nF）</text>
+    <text x="60" y="162" fill="#8b949e">充电指示：TP4056 红灯亮 = 充电回路 OK</text>
+  </svg>
+  <div class="note">电源路径：电池 → TP4056（充电管理）→ OUT+ → 拨动开关 → 核心板 5V → LDO 3.3V → 全机模块。所有模块 VCC 一律 3.3V，除 TP4056 本体。</div>
+</section>
+
+<!-- ===== ④ 落孔对照 ===== -->
+<section id="s3">
+  <h2>④ 模块落孔对照（与洞洞板布局图同源，v9 对账统一）</h2>
+  <table>
+    <colgroup><col style="width:16%"><col style="width:22%"><col style="width:20%"><col style="width:42%"></colgroup>
+    <thead><tr><th>元件</th><th>落孔区域（洞洞板坐标 mm）</th><th>中心（mm）</th><th>与接线对应</th></tr></thead>
+    <tbody>
+      <tr><td>键盘 60 键</td><td>X 5~95，Y 88~148</td><td>键中心 (5+10n, 93+10m)</td><td>矩阵 6×10 → 2× MCP23017（2.7/2.8）</td></tr>
+      <tr><td>摇杆 KY-023</td><td>X 0~26，Y 56.5~90.5</td><td>(14, 72.4)</td><td>VRx=7 / VRy=5 / SW=38（2.4）</td></tr>
+      <tr><td>麦克 INMP441</td><td>X 33~49，Y 56.5~72.5</td><td>(39, 65)</td><td>SD=16 / SCK=18 / WS=21（2.6）</td></tr>
+      <tr><td>功放 MAX98357A</td><td>X 86.5~99.5，Y 62~77.5</td><td>(93, 70)</td><td>DIN=15 / BCLK=18 / LRC=21（2.5）</td></tr>
+      <tr><td>TF 卡座</td><td>X 67~82，Y 42~58</td><td>(75, 49.5)</td><td>CS=17 / SCK=12 / MOSI=11 / MISO=13（2.3）</td></tr>
+      <tr><td>SD 大卡槽</td><td>X 65~95，Y 12~41</td><td>(80, 27)</td><td>外置扩展（下版 PCB 预案 SPI3：SCLK=41/MOSI=42/MISO=47/CS=48）</td></tr>
+      <tr><td>TP4056</td><td>X 12~38.5，Y 16~33.5</td><td>(27, 22)</td><td>电源链（2.1）</td></tr>
+      <tr><td>电源开关 SS12D00</td><td>X 5~24，Y 38~48</td><td>(14, 42)</td><td>电源链（2.1）</td></tr>
+      <tr><td>2× MCP23017</td><td>C0~C8 / R10~R13 附近</td><td>—</td><td>I2C 1/6，0x20/0x21（2.7）</td></tr>
+      <tr><td>WS2812 灯带 ×2</td><td>不焊洞洞板（软板贴前板内面）</td><td>—</td><td>GPIO46 → 330Ω → DIN（2.9）</td></tr>
+      <tr><td>ESP32 大核心板</td><td>不占洞洞板（独立小舱）</td><td>面板舱口 (75.5, 75)</td><td>排线 → 全部外设网络（2.10）</td></tr>
+      <tr><td>电池 503450</td><td>不占洞洞板（底仓平放）</td><td>—</td><td>电源链（2.1）</td></tr>
+    </tbody>
+  </table>
+  <div class="small">面板坐标 = 洞洞板坐标 + 3.5。洞洞板孔 n 中心 = 1.27 + n×2.54；孔号 = round((坐标 − 1.27) / 2.54)。详细网格图见「洞洞板布局与外壳尺寸.html」。</div>
+</section>
+
+<!-- ===== ⑤ 自检·坑位 ===== -->
+<section id="s4">
+  <h2>⑤ 焊完上电自检</h2>
+  <table>
+    <colgroup><col style="width:7%"><col style="width:36%"><col style="width:57%"></colgroup>
+    <thead><tr><th>步</th><th>动作</th><th>预期</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>拨开关前插 USB（充电线）</td><td>TP4056 红灯亮 = 充电回路 OK</td></tr>
+      <tr><td>2</td><td>拨开关上电</td><td>屏背光亮、桌面/启动画面出现，不无限重启</td></tr>
+      <tr><td>3</td><td>看桌面右上角电池图标</td><td>百分比 ≈ 实测电压（永远 0% = ADC 接线错）</td></tr>
+      <tr><td>4</td><td>拨摇杆</td><td>焦点在桌面格子间移动（X/Y 反了互换 VRx/VRy 线）</td></tr>
+      <tr><td>5</td><td>按任意键</td><td>终端输入字符；F1~F7 进对应模式</td></tr>
+      <tr><td>6</td><td>按 ON 旁「灯带」键</td><td>键盘灯带亮/切换档位（全黑 = 查 330Ω 与 DIN 方向）</td></tr>
+      <tr><td>7</td><td>进 MUSIC 播 sample/ 下 mp3</td><td>出声 = I2S 链 OK</td></tr>
+      <tr><td>8</td><td>进 REC 录音再播放</td><td>回放有录音 = INMP441 链 OK（真机验证点）</td></tr>
+      <tr><td>9</td><td>拔 TF 再插回</td><td>热插拔日志 card removed/inserted + 挂载恢复（#30 验证点）</td></tr>
+    </tbody>
+  </table>
+
+  <h2>⑥ 已知坑位</h2>
+  <ul>
+    <li><b class="r">GPIO33~37 绝对不接东西</b>（Octal PSRAM 内部占用，接了会崩）。</li>
+    <li>摇杆 VCC 必须 3.3V：5V 供电时 ADC 超量程，中位值漂移。</li>
+    <li>MCP #2 的 A0 忘接 3.3V → 两颗芯片同地址 0x20，键盘列 C4~C9 全乱。</li>
+    <li>二极管方向焊反（B 案）→ 该键永远无反应。</li>
+    <li>灯带方向：DIN 箭头朝进数据侧；接反整条不亮。</li>
+    <li class="b">麦克风数据脚是 GPIO16（不是 45）：45 为 strapping 脚，勿接上拉器件。</li>
+    <li>核心板天线端 5mm 内禁金属/禁铺铜/禁走线。</li>
+  </ul>
+
+  <div class="ok">接线口径与 GPIO-ALLOC.md / WIRING.md / drivers_config.hpp 一致；尺寸与「洞洞板布局与外壳尺寸.html」v9 对账统一（2026-10-02 豆包-1 × 豆包-2）。</div>
+</section>
+
+<script>
+(function(){
+  var tabs = document.getElementById('tabs').children;
+  var secs = [document.getElementById('s0'),document.getElementById('s1'),document.getElementById('s2'),document.getElementById('s3'),document.getElementById('s4')];
+  for(var i=0;i<tabs.length;i++){
+    (function(idx){
+      tabs[idx].addEventListener('click',function(){
+        for(var j=0;j<tabs.length;j++){ tabs[j].className='tab'; secs[j].className=''; }
+        tabs[idx].className='tab on'; secs[idx].className='on';
+      });
+    })(i);
+  }
+})();
+</script>
+</body></html>
