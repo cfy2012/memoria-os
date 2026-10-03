@@ -8,6 +8,20 @@ Memoria OS 在单颗 ESP32-S3 上实现了一台完整的手持计算设备：�
 
 系统不使用外部操作系统，所有任务调度建立在 FreeRTOS 原语之上，所有界面绘制由自研窗口栈完成。
 
+## 应用开发（软件的本质）
+
+Memoria OS 上的"软件"本质是 **BASIC 源码**。`.msp` 安装包只是信封——50 字节头（魔数、包名、版本、CRC32）加上 BASIC 源码正文；应用商店分发的是包，设备上解释执行的是源码：
+
+```
+BASIC 源码（.bas 文本）
+  → 打包为 .msp 安装包
+  → 上架 manifest.json（软件源清单）
+  → STORE 商店安装到 /mem_fat/scripts/
+  → PRGM 模式解释运行
+```
+
+完整语法、屏幕绘图与硬件扩展 API（WiFi / GPIO / 串口 / 蓝牙）见 **`docs/BASIC-LANGUAGE.md`**（Memoria BASIC 语言手册）。
+
 ## 功能特性
 
 - **内置模式**：PHOTO、MUSIC、VIDEO、CLOCK、NOTES、CALC、PRGM、STORE、SETUP、FMEM、SYS 共十一种，通过 F1~F6 功能键与摇杆导航切换。
