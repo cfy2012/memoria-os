@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Memoria OS · 洞洞板布局与外壳尺寸 v8</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231a1d23'/%3E%3Ccircle cx='20' cy='20' r='5' fill='%23c9ced6'/%3E%3Ccircle cx='32' cy='20' r='5' fill='%23c9ced6'/%3E%3Ccircle cx='44' cy='20' r='5' fill='%23c9ced6'/%3E%3Ccircle cx='20' cy='32' r='5' fill='%232f6fed'/%3E%3Ccircle cx='44' cy='32' r='5' fill='%23c9ced6'/%3E%3Ccircle cx='20' cy='44' r='5' fill='%23c9ced6'/%3E%3Ccircle cx='32' cy='44' r='5' fill='%23c9ced6'/%3E%3Ccircle cx='44' cy='44' r='5' fill='%23c9ced6'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#f5f6f8; --card:#ffffff; --ink:#1a1d23; --sub:#5a6270; --line:#d9dde3;
+    --grid:#c9ced6; --kbd:#2f6fed; --kbdw:#ffffff;
+    --joy:#e8590c; --mic:#0ca678; --amp:#7048e8; --tf:#e64980; --sd:#f59f00;
+    --tpi:#1c7ed6; --sw:#2f9e44; --led:#f76707; --esp:#7950f2; --scr:#212529;
+    --warn:#e03131;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif; background:var(--bg); color:var(--ink); line-height:1.55;}
+  .wrap{max-width:1180px; margin:0 auto; padding:18px 16px 60px;}
+  header.top{border-bottom:3px solid var(--ink); padding-bottom:12px; margin-bottom:18px;}
+  header.top h1{font-size:24px; letter-spacing:.5px;}
+  header.top .meta{font-size:12px; color:var(--sub); margin-top:4px;}
+  .v8badge{display:inline-block; background:var(--ink); color:#fff; font-size:11px; padding:1px 8px; border-radius:3px; margin-left:6px; vertical-align:middle;}
+  section{background:var(--card); border:1px solid var(--line); border-radius:8px; padding:16px 18px; margin-bottom:16px;}
+  section h2{font-size:17px; border-left:4px solid var(--ink); padding-left:8px; margin-bottom:10px;}
+  section h3{font-size:14px; margin:12px 0 6px; color:var(--ink);}
+  .note{font-size:12px; color:var(--sub); margin:6px 0;}
+  .warn{font-size:12px; color:var(--warn); font-weight:600;}
+  table{width:100%; border-collapse:collapse; font-size:12.5px; margin-top:6px; table-layout:fixed;}
+  th,td{border:1px solid var(--line); padding:4px 7px; text-align:left; vertical-align:top; word-break:break-all;}
+  th{background:#f0f2f5; font-weight:600; white-space:nowrap;}
+  td.num,th.num{text-align:right; font-variant-numeric:tabular-nums;}
+  .lead{font-size:13px; background:#f0f4ff; border:1px solid #c9d8ff; border-radius:6px; padding:10px 12px; margin-bottom:12px;}
+  .lead b{color:#1a3fb8;}
+  svg{display:block; max-width:100%; height:auto; border:1px solid var(--line); border-radius:6px; background:#fcfcfd;}
+  .figcap{font-size:11.5px; color:var(--sub); margin-top:4px;}
+  .legend{display:flex; flex-wrap:wrap; gap:10px 18px; font-size:12px; margin:8px 0;}
+  .lg{display:inline-flex; align-items:center; gap:5px;}
+  .lg i{width:12px; height:12px; display:inline-block; border-radius:2px; border:1px solid rgba(0,0,0,.25);}
+  .cols2{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
+  @media(max-width:760px){ .cols2{grid-template-columns:1fr;} }
+  .tag{display:inline-block; font-size:11px; padding:0 6px; border-radius:3px; color:#fff; margin-right:4px;}
+  .t-kbd{background:var(--kbd);} .t-joy{background:var(--joy);} .t-mic{background:var(--mic);}
+  .t-amp{background:var(--amp);} .t-tf{background:var(--tf);} .t-sd{background:var(--sd);}
+  .t-tpi{background:var(--tpi);} .t-sw{background:var(--sw);} .t-led{background:var(--led);} .t-esp{background:var(--esp);}
+  .zebra tbody tr:nth-child(even){background:#f8f9fb;}
+  .mono{font-family:Consolas,"Courier New",monospace;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <h1>Memoria OS · 洞洞板布局与外壳尺寸 <span class="v8badge">v8 定版 2026-10-02</span></h1>
+  <div class="meta">基准：标准洞洞板 100×150（2.54mm 孔距 · 39×59 孔） · 整机 107×157×40 · KY-023 摇杆穿顶 · ESP32 大核心板 45×28 独立小舱</div>
+</header>
+
+<div class="lead">
+  <b>照这张图建模，不用再猜。</b> 所有坐标以 <b>外壳正面左上角为原点 (0,0)</b>，单位 mm；洞洞板居中于内腔（板左/上缘距壳外壁 3.5）。三处旧图纸冲突已统一：摇杆孔 <b>Ø16 定版</b>（旧 Ø20 作废）、键孔 <b>7.4×7.4</b>（旧 4.5 与 7×7 键帽矛盾）、外壳外尺寸 <b>107×157×40</b>（旧 110×160×20 作废）。
+</div>
+
+<!-- ===== ① 外壳三视图 ===== -->
+<section>
+  <h2>① 外壳三视图（外 107 × 157 × 40）</h2>
+  <div class="note">壁厚：面板 2.5 / 底壳 2 / 侧壁 2.5。内腔 102×152。洞洞板 100×150 居中，单边 1mm 装配松量。</div>
+  <svg viewBox="0 0 1120 500" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="ar" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#5a6270"/></marker>
+    </defs>
+    <!-- 正面 -->
+    <g transform="translate(10,20)">
+      <rect x="0" y="0" width="214" height="314" fill="#fff" stroke="#1a1d23" stroke-width="2"/>
+      <rect x="5" y="5" width="204" height="304" fill="none" stroke="#8a92a2" stroke-width="1" stroke-dasharray="5 4"/>
+      <text x="107" y="330" text-anchor="middle" font-size="13" font-weight="700">正面</text>
+      <!-- 屏幕窗 -->
+      <rect x="26" y="16" width="142" height="98" fill="#e9ecf2" stroke="#212529" stroke-width="1.5"/>
+      <text x="97" y="70" text-anchor="middle" font-size="12" fill="#495057">屏幕窗 71×49</text>
+      <!-- ESP32 舱 -->
+      <rect x="104" y="120" width="94" height="60" fill="#e5dbff" stroke="#7950f2" stroke-width="1.5"/>
+      <text x="151" y="145" text-anchor="middle" font-size="11" fill="#5f3dc4">ESP32 舱 47×30</text>
+      <text x="151" y="160" text-anchor="middle" font-size="10" fill="#5f3dc4">(盖可开合)</text>
+      <!-- 摇杆孔 -->
+      <circle cx="33" cy="158" r="16" fill="#ffe8d9" stroke="#e8590c" stroke-width="1.5"/>
+      <text x="33" y="196" text-anchor="middle" font-size="11" fill="#d9480f">摇杆孔 Ø16</text>
+      <!-- 麦克孔 -->
+      <circle cx="74" cy="130" r="1.5" fill="#0ca678"/>
+      <circle cx="79" cy="130" r="1.5" fill="#0ca678"/>
+      <circle cx="84" cy="130" r="1.5" fill="#0ca678"/>
+      <text x="79" y="148" text-anchor="middle" font-size="10" fill="#0b7285">麦克 Ø1.5×3</text>
+      <!-- 键盘区 60 孔 -->
+      <g fill="#dbe4ff" stroke="#2f6fed" stroke-width="0.8">
+        <!-- 用 JS 画 -->
+      </g>
+      <text x="107" y="262" text-anchor="middle" font-size="11" fill="#1a3fb8">键盘区 60 孔（键帽孔 7.4×7.4）</text>
+      <!-- 尺寸标注 -->
+      <line x1="0" y1="340" x2="214" y2="340" stroke="#5a6270" marker-end="url(#ar)"/>
+      <line x1="0" y1="340" x2="0" y2="335" stroke="#5a6270"/>
+      <line x1="214" y1="340" x2="214" y2="335" stroke="#5a6270"/>
+      <text x="107" y="356" text-anchor="middle" font-size="12" fill="#5a6270">107</text>
+      <line x1="232" y1="0" x2="232" y2="314" stroke="#5a6270" marker-end="url(#ar)"/>
+      <line x1="227" y1="0" x2="232" y2="0" stroke="#5a6270"/>
+      <line x1="227" y1="314" x2="232" y2="314" stroke="#5a6270"/>
+      <text x="240" y="160" font-size="12" fill="#5a6270" transform="rotate(90 240 160)">157</text>
+    </g>
+    <!-- 侧面（右视，厚度方向） -->
+    <g transform="translate(280,20)">
+      <rect x="0" y="0" width="160" height="80" fill="#fff" stroke="#1a1d23" stroke-width="2"/>
+      <g stroke="#8a92a2" stroke-width="0.8" fill="none">
+        <line x1="5" y1="0" x2="5" y2="80"/><line x1="155" y1="0" x2="155" y2="80"/>
+        <line x1="0" y1="5" x2="160" y2="5"/><line x1="0" y1="75" x2="160" y2="75"/>
+      </g>
+      <text x="80" y="98" text-anchor="middle" font-size="13" font-weight="700">侧面（右视）</text>
+      <text x="8" y="46" font-size="10" fill="#adb5bd">整机厚 40.1≈40</text>
+      <!-- 层线 -->
+      <g stroke="#adb5bd" stroke-dasharray="3 3">
+        <line x1="5" y1="20" x2="155" y2="20"/>
+        <line x1="5" y1="40" x2="155" y2="40"/>
+        <line x1="5" y1="60" x2="155" y2="60"/>
+      </g>
+      <text x="112" y="14" font-size="10" fill="#5a6270">前板2.5</text>
+      <text x="112" y="34" font-size="10" fill="#5a6270">屏层8</text>
+      <text x="112" y="54" font-size="10" fill="#5a6270">主板11.6</text>
+      <text x="112" y="74" font-size="10" fill="#5a6270">底仓10</text>
+      <line x1="0" y1="92" x2="160" y2="92" stroke="#5a6270" marker-end="url(#ar)"/>
+      <line x1="0" y1="92" x2="0" y2="87" stroke="#5a6270"/>
+      <line x1="160" y1="92" x2="160" y2="87" stroke="#5a6270"/>
+      <text x="80" y="122" text-anchor="middle" font-size="12" fill="#5a6270">40.1 ≈ 40</text>
+    </g>
+    <!-- 俯视 -->
+    <g transform="translate(280,150)">
+      <rect x="0" y="0" width="214" height="300" fill="#fff" stroke="#1a1d23" stroke-width="2"/>
+      <rect x="5" y="5" width="204" height="290" fill="none" stroke="#8a92a2" stroke-width="1" stroke-dasharray="5 4"/>
+      <rect x="7" y="7" width="200" height="286" fill="#f1f3f5" stroke="#adb5bd" stroke-width="0.8"/>
+      <text x="107" y="316" text-anchor="middle" font-size="13" font-weight="700">俯视（内腔 102×152，洞洞板 100×150 居中）</text>
+      <rect x="11" y="11" width="196" height="282" fill="#e9ecef" stroke="#212529" stroke-width="1.2"/>
+      <text x="109" y="160" text-anchor="middle" font-size="12" fill="#495057">洞洞板 100×150</text>
+      <line x1="0" y1="322" x2="214" y2="322" stroke="#5a6270" marker-end="url(#ar)"/>
+      <line x1="0" y1="322" x2="0" y2="317" stroke="#5a6270"/>
+      <line x1="214" y1="322" x2="214" y2="317" stroke="#5a6270"/>
+      <text x="107" y="338" text-anchor="middle" font-size="12" fill="#5a6270">107（内腔 102）</text>
+    </g>
+  </svg>
+  <div class="figcap">单位 mm。正面 SVG 键盘 60 孔由 JS 按 10×10 网格补全（见下方②图精确坐标）。</div>
+</section>
+
+<!-- ===== ② 洞洞板孔位网格图 ===== -->
+<section>
+  <h2>② 洞洞板孔位网格图（100×150 · 2.54 孔距 · 39×59 孔）</h2>
+  <div class="note">坐标系：洞洞板左上角为原点。孔 n 中心 = 1.27 + n×2.54。元件色块 = 建议落孔区域，均可微调。<b>放大看：点图可拖拽/滚轮缩放。</b></div>
+  <div class="legend">
+    <span class="lg"><i style="background:var(--kbd)"></i>键盘 60 键</span>
+    <span class="lg"><i style="background:var(--joy)"></i>摇杆 KY-023</span>
+    <span class="lg"><i style="background:var(--mic)"></i>麦克 INMP441</span>
+    <span class="lg"><i style="background:var(--amp)"></i>功放 MAX98357A</span>
+    <span class="lg"><i style="background:var(--tf)"></i>TF 卡座</span>
+    <span class="lg"><i style="background:var(--sd)"></i>SD 大卡槽</span>
+    <span class="lg"><i style="background:var(--tpi)"></i>TP4056</span>
+    <span class="lg"><i style="background:var(--sw)"></i>电源开关</span>
+    <span class="lg"><i style="background:var(--led)"></i>灯带（贴壳壁）</span>
+    <span class="lg"><i style="background:var(--esp)"></i>ESP32 舱（不占板）</span>
+  </div>
+  <svg id="gridSvg" viewBox="0 0 760 880" xmlns="http://www.w3.org/2000/svg" style="background:#fff;">
+  </svg>
+  <div class="figcap">网格 1:1 比例绘制：每孔一格（2.54mm）。刻度每 10 孔一格（25.4mm）。</div>
+</section>
+
+<!-- ===== ③ 叠层爆炸图 ===== -->
+<section>
+  <h2>③ 叠层爆炸图（屏幕面 → 背面，总厚 40.1）</h2>
+  <div class="note">硬规则：层间固定 2mm 悬空间距；每层高度 = 本层最高件；凸起元件不得侵占间隙。</div>
+  <svg viewBox="0 0 900 470" xmlns="http://www.w3.org/2000/svg">
+    <!-- 前板 -->
+    <g transform="translate(40,10)">
+      <rect x="0" y="0" width="820" height="26" fill="#e9ecef" stroke="#212529" stroke-width="1.5"/>
+      <text x="410" y="17" text-anchor="middle" font-size="12">前面板 2.5（开 60 键孔 + 屏幕窗 + 摇杆 Ø16 + 麦克孔）</text>
+    </g>
+    <g transform="translate(40,42)"><rect x="0" y="0" width="820" height="12" fill="#f1f3f5" stroke="#adb5bd" stroke-dasharray="4 3"/><text x="790" y="10" text-anchor="middle" font-size="10" fill="#5a6270">间隙 2</text></g>
+    <g transform="translate(40,60)">
+      <rect x="0" y="0" width="820" height="40" fill="#dee2e6" stroke="#212529" stroke-width="1.5"/>
+      <rect x="360" y="4" width="100" height="32" fill="#adb5bd" stroke="#495057"/>
+      <text x="410" y="24" text-anchor="middle" font-size="10" fill="#fff">ILI9488 56×91</text>
+      <text x="410" y="52" text-anchor="middle" font-size="12">屏幕层 8（含排针，实测 6~8 取上限）</text>
+    </g>
+    <g transform="translate(40,108)"><rect x="0" y="0" width="820" height="12" fill="#f1f3f5" stroke="#adb5bd" stroke-dasharray="4 3"/><text x="790" y="10" text-anchor="middle" font-size="10" fill="#5a6270">间隙 2</text></g>
+    <g transform="translate(40,126)">
+      <rect x="0" y="0" width="820" height="58" fill="#e7f5ff" stroke="#212529" stroke-width="1.5"/>
+      <rect x="60" y="8" width="420" height="42" fill="#a5d8ff" stroke="#1c7ed6"/>
+      <text x="270" y="33" text-anchor="middle" font-size="11" fill="#0b5394">洞洞板 1.6 + 键盘 60 键 + 摇杆机构 10（最高件）</text>
+      <text x="270" y="70" text-anchor="middle" font-size="12">主板层 11.6（洞洞板 100×150 + 全部元件收纳）</text>
+    </g>
+    <g transform="translate(40,192)"><rect x="0" y="0" width="820" height="12" fill="#f1f3f5" stroke="#adb5bd" stroke-dasharray="4 3"/><text x="790" y="10" text-anchor="middle" font-size="10" fill="#5a6270">间隙 2</text></g>
+    <g transform="translate(40,210)">
+      <rect x="0" y="0" width="820" height="50" fill="#fff3bf" stroke="#212529" stroke-width="1.5"/>
+      <rect x="60" y="6" width="120" height="38" fill="#ffd43b" stroke="#e67700"/>
+      <text x="120" y="30" text-anchor="middle" font-size="10" fill="#5f3dc4">喇叭 23×35</text>
+      <rect x="300" y="12" width="150" height="26" fill="#ffec99" stroke="#e67700"/>
+      <text x="375" y="29" text-anchor="middle" font-size="10" fill="#5f3dc4">锂电 503450 50×34</text>
+      <text x="410" y="62" text-anchor="middle" font-size="12">底仓 10（喇叭 8+腔 2 为最高件；锂电 5 平放）</text>
+    </g>
+    <g transform="translate(40,268)"><rect x="0" y="0" width="820" height="12" fill="#f1f3f5" stroke="#adb5bd" stroke-dasharray="4 3"/><text x="790" y="10" text-anchor="middle" font-size="10" fill="#5a6270">底壳 2</text></g>
+    <!-- 摇杆贯通示意 -->
+    <g transform="translate(720,10)">
+      <rect x="0" y="0" width="60" height="150" fill="none" stroke="#e8590c" stroke-width="2" stroke-dasharray="6 4"/>
+      <line x1="0" y1="30" x2="60" y2="30" stroke="#e8590c" stroke-width="1.5"/>
+      <text x="30" y="8" text-anchor="middle" font-size="11" fill="#d9480f">摇杆贯通通道</text>
+      <text x="30" y="30" text-anchor="middle" font-size="10" fill="#d9480f">杆帽穿出 7.5</text>
+      <text x="30" y="150" text-anchor="middle" font-size="10" fill="#d9480f">Ø16 孔</text>
+    </g>
+  </svg>
+  <div class="figcap">整机厚度 2.5+2+8+2+11.6+2+10+2 = 40.1mm；屏幕实测 6~7 → 38.1~39.1；喇叭实测 12 → 42.1。设计值 40。</div>
+</section>
+
+<!-- ===== ④ 开孔坐标总表 ===== -->
+<section>
+  <h2>④ 开孔坐标总表（外壳正面/侧壁，原点 = 正面左上角）</h2>
+  <div class="note">面板坐标系：X 向右 0~107，Y 向下 0~157。洞洞板坐标 = 面板坐标 − 3.5。</div>
+  <table class="zebra">
+    <colgroup><col style="width:16%"><col style="width:10%"><col style="width:26%"><col style="width:22%"><col style="width:26%"></colgroup>
+    <thead><tr><th>孔位</th><th>尺寸</th><th>位置（面板坐标）</th><th>数量</th><th>建模要点</th></tr></thead>
+    <tbody>
+      <tr><td>屏幕窗</td><td>71 × 49</td><td>X 18~89，Y 8~57（中心 53.5, 32.5）</td><td>1</td><td>屏窗按实测视窗+0.5；屏幕 PCB 56×91 贴窗内面，左右各留 10mm 余量</td></tr>
+      <tr><td>ESP32 舱口</td><td>47 × 30</td><td>X 52~99，Y 60~90（中心 75.5, 75）</td><td>1</td><td>顶壳打透 + 盖子；舱下主板层镂空，ESP32 板放舱内，排线连洞洞板；天线端 5mm 禁金属</td></tr>
+      <tr><td>摇杆孔</td><td>Ø16</td><td>中心 (16.5, 77)</td><td>1</td><td>杆帽 Ø12 穿出；壳内贯通通道 Ø16 直通主板层摇杆</td></tr>
+      <tr><td>麦克风孔</td><td>Ø1.5</td><td>X 36.5~52.5，Y 60~76 区域</td><td>3</td><td>INMP441 上方，错开排布，防尘可选贴网</td></tr>
+      <tr><td>键盘键帽孔</td><td>7.4 × 7.4</td><td>中心 (8.5+10n, 96.5+10m)，n=0..9，m=0..5</td><td>60</td><td>首键中心 (8.5, 96.5)，末键中心 (98.5, 146.5)；键帽 7×7 内嵌，行程 0.25</td></tr>
+      <tr><td>USB-C 孔（左壁）</td><td>10 × 4</td><td>左壁，Y 19.5~37</td><td>1</td><td>TP4056 USB-C 口凸出板边 1.5~2</td></tr>
+      <tr><td>电源开关槽（左壁）</td><td>19 × 10</td><td>左壁，Y 41.5~51.5</td><td>1</td><td>SS12D00 柄行程 4</td></tr>
+      <tr><td>SD 大卡槽缝（右壁）</td><td>25 × 2.5</td><td>右壁，Y 15.5~44.5</td><td>1</td><td>插卡行程 5，卡外露</td></tr>
+      <tr><td>TF 卡缝（右壁）</td><td>13 × 2</td><td>右壁，Y 45.5~61.5</td><td>1</td><td>卡外露 ≥4，可拆卸</td></tr>
+      <tr><td>侧键孔（右壁）</td><td>20 × 3</td><td>右壁，Y 70~90</td><td>2</td><td>音量+/−、ON/OFF 牵长线到矩阵焊点</td></tr>
+      <tr><td>烧录口（UART 43/44）</td><td>待定</td><td>右壁下缘或底壳</td><td>1</td><td>UART 为唯一烧录通道，必须预留</td></tr>
+      <tr><td>喇叭透音孔（底壳）</td><td>Ø2</td><td>底壳，对应喇叭位（主板层下方）</td><td>6~9</td><td>喇叭正对面开孔，错排</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ===== ⑤ 按键规格 ===== -->
+<section>
+  <h2>⑤ 按键规格（60 键）</h2>
+  <div class="cols2">
+    <table>
+      <colgroup><col style="width:44%"><col style="width:56%"></colgroup>
+      <tbody>
+        <tr><th>键帽外尺寸</th><td>7 × 7</td></tr>
+        <tr><th>面板键孔</th><td>7.4 × 7.4（+0.4 松量）</td></tr>
+        <tr><th>键中心距</th><td>10 × 10（行距、列距相同）</td></tr>
+        <tr><th>按键行程</th><td>0.25（轻触键自带）</td></tr>
+        <tr><th>键帽形式</th><td>内嵌式：顶面凹 2mm 指窝；不按时与面板齐平；底部比面板内面低 1mm 接触轻触键</td></tr>
+        <tr><th>轻触键</th><td>6×6×2.5 矮款 ×60</td></tr>
+        <tr><th>轻触键脚距</th><td>~4.45（同侧两脚）</td></tr>
+      </tbody>
+    </table>
+    <table>
+      <colgroup><col style="width:44%"><col style="width:56%"></colgroup>
+      <tbody>
+        <tr><th>焊洞洞板方法</th><td>同侧两脚插<b>相邻孔</b>（2.54 间距），外脚微弯固定——洞洞板常规操作，不需精确对孔</td></tr>
+        <tr><th>键位布局</th><td>6×10：R1 功能键行 / R2 数字行 / R3~R5 字母行 / R6 控制行（与固件 keymap 一致）</td></tr>
+        <tr><th>键盘区占板</th><td>X 5~95，Y 88~148（洞洞板坐标）</td></tr>
+        <tr><th>键中心孔号</th><td>n 列孔号 ≈ round((8.5+10n−1.27)/2.54)，m 行孔号 ≈ round((96.5+10m−1.27)/2.54)</td></tr>
+        <tr><th>灯带</th><td>WS2812 ×2 贴前板内面：键盘上缘（面板 Y 88~98）与键盘下缘（面板 Y 149~157）</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ===== ⑥ 洞洞板落孔对照 ===== -->
+<section>
+  <h2>⑥ 洞洞板元件落孔对照表（孔号区域）</h2>
+  <div class="note">孔号 = 第几列/第几行（0 起）。孔 n 中心 = 1.27 + n×2.54 mm。换算：孔号 = round((坐标mm − 1.27) / 2.54)。</div>
+  <table class="zebra">
+    <colgroup><col style="width:15%"><col style="width:15%"><col style="width:18%"><col style="width:20%"><col style="width:32%"></colgroup>
+    <thead><tr><th>元件</th><th>落孔框（mm，洞洞板坐标）</th><th>孔号区域（列×行）</th><th>中心孔号</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>键盘 60 键</td><td>X 5~95，Y 88~148</td><td>C1~C36，R34~R57</td><td>—</td><td>键中心 (5+10n, 93+10m) 对应孔号 (round((5+10n−1.27)/2.54), round((93+10m−1.27)/2.54))；键 1 中心孔 ≈ (C1, R36)</td></tr>
+      <tr><td>摇杆 KY-023</td><td>X 0~26，Y 56.5~90.5</td><td>C0~C9，R21~R35</td><td>(5, 28)</td><td>PCB 26×34 竖放；5 针 2.54 直插；上方 Ø16 贯通</td></tr>
+      <tr><td>麦克 INMP441</td><td>X 33~49，Y 56.5~72.5</td><td>C12~C18，R21~R28</td><td>(15, 25)</td><td>拾音面朝上，对准面板 Ø1.5×3</td></tr>
+      <tr><td>功放 MAX98357A</td><td>X 86.5~99.5，Y 62~77.5</td><td>C33~C38，R23~R30</td><td>(36, 27)</td><td>13×15.5 竖放贴板右缘；喇叭引线朝底仓</td></tr>
+      <tr><td>TF 卡座</td><td>X 67~82，Y 42~58</td><td>C25~C31，R16~R22</td><td>(29, 19)</td><td>卡插入方向朝板右缘 → 壳右壁 TF 缝</td></tr>
+      <tr><td>SD 大卡槽</td><td>X 65~95，Y 12~41</td><td>C24~C36，R4~R15</td><td>(31, 10)</td><td>30×29；卡朝板右缘 → 壳右壁 SD 缝</td></tr>
+      <tr><td>TP4056</td><td>X 12~38.5，Y 16~33.5</td><td>C4~C14，R5~R12</td><td>(10, 8)</td><td>USB-C 朝板左缘 → 壳左壁孔</td></tr>
+      <tr><td>电源开关 SS12D00</td><td>X 5~24，Y 38~48</td><td>C1~C8，R14~R18</td><td>(5, 16)</td><td>拨杆朝板左缘 → 壳左壁槽</td></tr>
+      <tr><td>ESP32 大核心板</td><td>不占洞洞板</td><td>—</td><td>—</td><td>独立小舱（面板 X 52~99, Y 60~90）+ 盖子 + 排线连接</td></tr>
+      <tr><td>2× MCP23017</td><td>键盘区左下空白/键盘右侧走线区</td><td>建议 C0~C8，R10~R13 附近</td><td>—</td><td>SOP-28 转 DIP 转接板（2.54）或飞线；本表预留左缘中部空区</td></tr>
+      <tr><td>电池 503450</td><td>不占洞洞板</td><td>—</td><td>—</td><td>底仓平放，仓按实物复核（50×34×5）</td></tr>
+    </tbody>
+  </table>
+  <div class="warn">上灯带/下灯带贴前板内面，不焊洞洞板（软板），见⑤表。</div>
+</section>
+
+<!-- ===== ⑦ 待实测项 ===== -->
+<section>
+  <h2>⑦ 必须卡尺实测的 4 项（定稿前）</h2>
+  <table class="zebra">
+    <colgroup><col style="width:22%"><col style="width:30%"><col style="width:48%"></colgroup>
+    <thead><tr><th>项</th><th>典型值</th><th>影响</th></tr></thead>
+    <tbody>
+      <tr><td>ILI9488 含排针高度</td><td>6~8</td><td>整机厚度 ±2mm（38~42）</td></tr>
+      <tr><td>喇叭厚度 + 腔体</td><td>5~10 + 2~3</td><td>底仓高度，影响整机厚度</td></tr>
+      <tr><td>KY-023 杆帽立起总高</td><td>~32</td><td>露出量 7.5±，影响摇杆孔位置手感</td></tr>
+      <tr><td>电池厚度</td><td>5（503450 级）</td><td>底仓按实物复核，厚了顶主板</td></tr>
+    </tbody>
+  </table>
+</section>
+
+</div>
+
+<script>
+(function(){
+  /* ===== 洞洞板网格图 ===== */
+  var svg = document.getElementById('gridSvg');
+  var NS = 'http://www.w3.org/2000/svg';
+  var COLS=39, ROWS=59, PITCH=2.54, HOLE=0.5, ORIGIN_X=30, ORIGIN_Y=30, SCALE=7;
+  function el(tag, attrs){ var e=document.createElementNS(NS,tag); for(var k in attrs){ e.setAttribute(k, attrs[k]); } return e; }
+  function px(mm){ return mm*SCALE; }
+  var holes = el('g',{id:'holes'});
+  // 孔
+  for(var c=0;c<COLS;c++){ for(var r=0;r<ROWS;r++){
+    var cx = ORIGIN_X + px(c*PITCH), cy = ORIGIN_Y + px(r*PITCH);
+    var h = el('circle',{cx:cx, cy:cy, r:HOLE*SCALE*0.42, fill:'#c9ced6'});
+    holes.appendChild(h);
+  }}
+  svg.appendChild(holes);
+  // 刻度（每10孔）
+  var scaleG = el('g',{});
+  for(var c=0;c<=COLS;c+=10){ var x=ORIGIN_X+px(c*PITCH); var l=el('line',{x1:x,y1:ORIGIN_Y,x2:x,y2:ORIGIN_Y+px(ROWS*PITCH),stroke:'#adb5bd','stroke-width':0.5,'stroke-dasharray':'4 3'}); scaleG.appendChild(l);
+    var t=el('text',{x:x,y:ORIGIN_Y-6,'font-size':9,fill:'#8a92a2','text-anchor':'middle'}); t.textContent=(c*2.54).toFixed(1); scaleG.appendChild(t);}
+  for(var r=0;r<=ROWS;r+=10){ var y=ORIGIN_Y+px(r*PITCH); var l=el('line',{x1:ORIGIN_X,y1:y,x2:ORIGIN_X+px(COLS*PITCH),y2:y,stroke:'#adb5bd','stroke-width':0.5,'stroke-dasharray':'4 3'}); scaleG.appendChild(l);
+    var t=el('text',{x:ORIGIN_X-6,y:y+3,'font-size':9,fill:'#8a92a2','text-anchor':'end'}); t.textContent=(r*2.54).toFixed(1); scaleG.appendChild(t);}
+  svg.appendChild(scaleG);
+  // 元件区域
+  function zone(x,y,w,h,fill,label,lx,ly){
+    var g=el('g',{});
+    var rect=el('rect',{x:ORIGIN_X+px(x),y:ORIGIN_Y+px(y),width:px(w),height:px(h),fill:fill,'fill-opacity':0.32,stroke:fill,'stroke-width':1.2,'stroke-dasharray':'5 3'});
+    g.appendChild(rect);
+    var t=el('text',{x:ORIGIN_X+px(lx),y:ORIGIN_Y+px(ly),'font-size':10,fill:fill,'font-weight':700}); t.textContent=label; g.appendChild(t);
+    return g;
+  }
+  // 键盘区（60 键帽占位 7×7）
+  var kbd=el('g',{});
+  for(var m=0;m<6;m++){ for(var n=0;n<10;n++){
+    var kx=5+n*10, ky=93+m*10;
+    var r=el('rect',{x:ORIGIN_X+px(kx-3.5),y:ORIGIN_Y+px(ky-3.5),width:px(7),height:px(7),fill:'#2f6fed','fill-opacity':0.5,stroke:'#2f6fed','stroke-width':0.8});
+    kbd.appendChild(r);
+    var c=el('circle',{cx:ORIGIN_X+px(kx),cy:ORIGIN_Y+px(ky),r:1.4,fill:'#fff'});
+    kbd.appendChild(c);
+  }}
+  svg.appendChild(kbd);
+  svg.appendChild(zone(0,56.5,26,34,'#e8590c','摇杆 KY-023',27,58));
+  svg.appendChild(zone(33,56.5,16,16,'#0ca678','麦克',24,60));
+  svg.appendChild(zone(86.5,62,13,15.5,'#7048e8','功放',84,60));
+  svg.appendChild(zone(67,42,15,16,'#e64980','TF 座',63,44));
+  svg.appendChild(zone(65,12,30,29,'#f59f00','SD 槽',63,15));
+  svg.appendChild(zone(12,16,26.5,17.5,'#1c7ed6','TP4056',10,19));
+  svg.appendChild(zone(5,38,19,10,'#2f9e44','开关',3,40));
+  svg.appendChild(zone(52,60,47,30,'#7950f2','ESP32 舱口',51,62));
+  /* 灯带：贴前板内面/底壳内壁，不占洞洞板（v9 对账口径） */
+  var ledT=el('text',{x:ORIGIN_X+px(50),y:ORIGIN_Y+px(86),'font-size':9,fill:'#f76707','text-anchor':'middle','font-weight':700}); ledT.textContent='上灯带（贴前板内面，不占板）'; svg.appendChild(ledT);
+  var ledB=el('text',{x:ORIGIN_X+px(50),y:ORIGIN_Y+px(151),'font-size':9,fill:'#f76707','text-anchor':'middle','font-weight':700}); ledB.textContent='下灯带（贴底壳内壁，不占板）'; svg.appendChild(ledB);
+  // 边框与标题
+  var box=el('rect',{x:ORIGIN_X-4,y:ORIGIN_Y-4,width:px(COLS*PITCH)+8,height:px(ROWS*PITCH)+8,fill:'none',stroke:'#1a1d23','stroke-width':2});
+  svg.appendChild(box);
+  var cap=el('text',{x:ORIGIN_X,y:ORIGIN_Y+px(ROWS*PITCH)+26,'font-size':12,'font-weight':700,fill:'#1a1d23'}); cap.textContent='洞洞板 100×150（39×59 孔）— 深色圆点=孔（2.54 网格），彩色框=元件落孔区，白色圆点=60 键中心';
+  svg.appendChild(cap);
+  svg.setAttribute('viewBox','0 0 760 1160');
+  /* 缩放 + 拖拽 */
+  var vb={x:0,y:0,w:760,h:1160}, dragging=null;
+  function applyVB(){ svg.setAttribute('viewBox',[vb.x,vb.y,vb.w,vb.h].join(' ')); }
+  svg.addEventListener('wheel',function(e){
+    e.preventDefault();
+    var r=svg.getBoundingClientRect();
+    var mx=(e.clientX-r.left)/r.width*vb.w+vb.x;
+    var my=(e.clientY-r.top)/r.height*vb.h+vb.y;
+    var k=e.deltaY<0?0.82:1.22;
+    var nw=Math.min(2600,Math.max(300,vb.w*k));
+    var nh=nw*vb.h/vb.w;
+    vb.x=mx-(mx-vb.x)*(nw/vb.w);
+    vb.y=my-(my-vb.y)*(nh/vb.h);
+    vb.w=nw; vb.h=nh;
+    applyVB();
+  },{passive:false});
+  svg.addEventListener('mousedown',function(e){ dragging={x:e.clientX,y:e.clientY}; svg.style.cursor='grabbing'; });
+  window.addEventListener('mousemove',function(e){
+    if(!dragging) return;
+    var r=svg.getBoundingClientRect();
+    vb.x-=(e.clientX-dragging.x)/r.width*vb.w;
+    vb.y-=(e.clientY-dragging.y)/r.height*vb.h;
+    dragging={x:e.clientX,y:e.clientY};
+    applyVB();
+  });
+  window.addEventListener('mouseup',function(){ dragging=null; svg.style.cursor='grab'; });
+  svg.style.cursor='grab';
+})();
+</script>
+</body>
+</html>
