@@ -43,6 +43,7 @@
   <span class="tab" data-t="2">③ 电源树</span>
   <span class="tab" data-t="3">④ 落孔对照</span>
   <span class="tab" data-t="4">⑤ 自检·坑位</span>
+  <span class="tab" data-t="5">⑥ KiCAD 原理图速查</span>
 </div>
 
 <!-- ===== ① GPIO 全景 ===== -->
@@ -354,10 +355,40 @@
   <div class="ok">接线口径与 GPIO-ALLOC.md / WIRING.md / drivers_config.hpp 一致；尺寸与「洞洞板布局与外壳尺寸.html」v9 对账统一（2026-10-02 豆包-1 × 豆包-2）。</div>
 </section>
 
+<!-- ===== ⑥ KiCAD 原理图速查 ===== -->
+<section id="s5">
+  <h2>⑥ KiCAD 原理图速查（画原理图时按此搜元件）</h2>
+  <div class="note">用法：KiCad 原理图编辑器按 <span class="num">E</span>（放置符号）→ 搜索框输入「搜索关键词」列的文字 → 选中符号 → 放置后给符号赋「封装」列的封装。本机所有外设均为<b>模块</b>（带排针），推荐「模块黑盒画法」：用排针 Connector 符号引出网络标签，模块型号写进备注——最快且和实物一一对应；「芯片画法」列出的官方符号留给以后做 PCB 版用。</div>
+  <div style="overflow-x:auto">
+  <table>
+    <colgroup><col style="width:11%"><col style="width:15%"><col style="width:24%"><col style="width:27%"><col style="width:23%"></colgroup>
+    <thead><tr><th>元件</th><th>KiCAD 搜索关键词</th><th>符号库 · 符号名</th><th>封装（Footprint）</th><th>画法 / 备注</th></tr></thead>
+    <tbody>
+      <tr><td>ESP32-S3 核心板（带底板排针）</td><td class="num">ESP32-S3</td><td><span class="p">Espressif</span> · ESP32-S3-WROOM-1-N16R8</td><td><span class="num">RF_Module:ESP32-S3-WROOM-1</span></td><td>用模组符号 + 排针引出全部外设网络；USB(19/20) 不接外设，烧录走 UART0(43/44)</td></tr>
+      <tr><td>ILI9488 3.5″ 屏幕模块</td><td class="num">LCD / Graphic_Display / PinHeader_2x08</td><td>无官方符号 → <span class="b">Connector</span> · PinHeader_2x08（模块当黑盒）</td><td><span class="num">Connector_PinHeader:PinHeader_2x08_P2.54mm_Vertical</span></td><td>8 脚模块排针（VCC/GND/CS/RST/DC/MOSI/SCK/MISO + LED 背光，按实物脚序）；网络标签照 ②2.2 节</td></tr>
+      <tr><td>TF 卡座（microSD，内置）</td><td class="num">microSD</td><td><span class="b">Connector</span> · microSD_HC</td><td><span class="num">Connector_Card:microSD_HC_Molex_104031-0810</span>（按实际卡座换）</td><td>SPI2 总线 + CS=17 独立；卡检测脚 CD 悬空或接 GPIO 备用</td></tr>
+      <tr><td>SD 大卡座（外置扩展）</td><td class="num">SD_Card</td><td><span class="b">Connector</span> · SD_Card</td><td><span class="num">Connector_Card:SD_Card_…</span>（按实际座子自建）</td><td>本版不焊（预案 SPI3：SCLK=41/MOSI=42/MISO=47/CS=48）；原理图可先放符号+隐藏电源</td></tr>
+      <tr><td>摇杆 KY-023</td><td class="num">Joystick</td><td><span class="b">Switch</span> · Joystick（X/Y/SW 一体）</td><td>自定义（模块 26×34，5 脚排针）</td><td>搜不到 Joystick 就用 2× <span class="p">Device</span>·R_Potentiometer + Switch·SW_Push 组合；VCC 接 3.3V 勿接 5V</td></tr>
+      <tr><td>功放 MAX98357A + 喇叭</td><td class="num">MAX98357</td><td><span class="p">Amplifier_Audio</span> · MAX98357A</td><td>模块画法：<span class="num">PinHeader_1x05_P2.54mm</span>；裸片：Package_WLP（WLP-9）</td><td>模块 5 脚：VIN/GND/BCLK/LRC/DIN；GAIN 悬空 9dB；喇叭 <span class="b">Device</span>·Speaker（4Ω 3W）</td></tr>
+      <tr><td>麦克风 INMP441</td><td class="num">INMP441</td><td><span class="p">Sensor_Microphone</span> · INMP441</td><td>模块画法：<span class="num">PinHeader_1x06_P2.54mm</span>；裸片：Package_LGA（LGA-5 3×4mm）</td><td>SD=16 / SCK=18 / WS=21；L/R 脚接 GND（左声道）；模块 6 脚按实物（VDD/GND/LR/SD/WS/SCK）</td></tr>
+      <tr><td>键盘扩展器 2× MCP23017</td><td class="num">MCP23017</td><td><span class="p">Interface_Expansion</span> · MCP23017</td><td><span class="num">Package_SO:SOIC-28W_7.5x17.9mm_P1.27mm</span></td><td>I2C 1/6；#1 A0A1A2=GND(0x20)，#2 A0=3.3V(0x21)；RESET 上拉 3.3V；SDA/SCL 各加 4.7K 上拉</td></tr>
+      <tr><td>键盘 60 键（轻触）</td><td class="num">SW_Push</td><td><span class="b">Switch</span> · SW_Push_1P1T_NO</td><td><span class="num">Button_Switch_SMD:SW_Push_1P1T_NO_6x6mm</span></td><td>6×6 轻触；B 案每键串 1N4148（<span class="p">Device</span>·D，封装 D_SOD-123）：键右脚→阳极，阴极→列线</td></tr>
+      <tr><td>键盘灯带 WS2812 ×2</td><td class="num">WS2812B</td><td><span class="p">LED</span> · WS2812B</td><td><span class="num">LED_SMD:LED_WS2812B_PLCC4_5x5mm</span></td><td>GPIO46 → 330Ω → DIN；两段串联；软板不焊洞洞板</td></tr>
+      <tr><td>充电 TP4056 模块 + 锂电</td><td class="num">TP4056</td><td><span class="p">Battery_Management</span> · TP4056</td><td>模块画法：<span class="num">PinHeader_1x06_P2.54mm</span>；裸片：Package_SO（SOP-8）</td><td>B+/B− 接电池；OUT+ → 开关 → 核心板 5V；锂电用 <span class="p">Battery</span>·Battery_Cell（503450，自定义封装）</td></tr>
+      <tr><td>电源开关 SS12D00</td><td class="num">SW_SPDT</td><td><span class="b">Switch</span> · SW_SPDT</td><td>自定义（直插拨动开关）</td><td>单刀双掷；中间脚接 OUT+，两端接 核心板 5V / 空</td></tr>
+      <tr><td>电池采样分压</td><td class="num">R_0805 / C_0603</td><td><span class="p">Device</span> · R（100K）×2 + C（100nF）</td><td><span class="num">Resistor_SMD:R_0805</span> / <span class="num">Capacitor_SMD:C_0603</span></td><td>电池+ → R1 100K → 节点 → R2 100K → GND；节点并 100nF → GPIO4</td></tr>
+      <tr><td>USB-C（核心板 / TP4056 自带）</td><td class="num">USB_C</td><td><span class="b">Connector</span> · USB_C_Receptacle_USB2.0</td><td><span class="num">Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12</span></td><td>核心板 USB 仅供电/调试；TP4056 自带充电口从外壳侧壁伸出，不重复画</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="warn">符号库名为 KiCad 官方库（KiCad 8/9 稳定版默认安装）。若你的版本搜不到（老库名不同），按关键词搜到<b>同名芯片</b>即可；封装以<b>你手上的实物模块/数据手册</b>为准，官方封装名不对时选最接近的或自建。</div>
+  <div class="small">原理图网络标签建议照 ① GPIO 全景表的「用途」列命名（如 <span class="num">SPI2_SCLK / SPI2_MOSI / SPI2_MISO / LCD_CS / TF_CS / I2S_BCLK / I2S_WS / I2S_DIN / I2S_SD / JOY_X / JOY_Y / JOY_SW / BAT_ADC / LED_DIN / I2C_SDA / I2C_SCL</span>），与固件 drivers_config.hpp 对齐。</div>
+</section>
+
 <script>
 (function(){
   var tabs = document.getElementById('tabs').children;
-  var secs = [document.getElementById('s0'),document.getElementById('s1'),document.getElementById('s2'),document.getElementById('s3'),document.getElementById('s4')];
+  var secs = [document.getElementById('s0'),document.getElementById('s1'),document.getElementById('s2'),document.getElementById('s3'),document.getElementById('s4'),document.getElementById('s5')];
   for(var i=0;i<tabs.length;i++){
     (function(idx){
       tabs[idx].addEventListener('click',function(){
