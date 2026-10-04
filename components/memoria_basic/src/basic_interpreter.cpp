@@ -52,6 +52,34 @@ static std::string lower_str(const std::string& s) {
     return r;
 }
 
+/* ============================================================
+ *  UTF-8 工具（中文内嵌字符串，BASIC-LANGUAGE.md v1.4 §4.4）
+ *  纯 ASCII 时字符=字节，行为与旧版完全一致
+ * ============================================================ */
+static size_t utf8_charlen(const std::string& s) {
+    size_t n = 0;
+    for (size_t i = 0; i < s.size(); i++)
+        if (((uint8_t)s[i] & 0xC0) != 0x80) n++;   /* 只数首字节 */
+    return n;
+}
+
+/* 按字符边界切取 [start, start+count)，绝不切断汉字 */
+static std::string utf8_char_slice(const std::string& s, size_t start, size_t count) {
+    std::string out;
+    size_t ci = 0;
+    for (size_t i = 0; i < s.size() && ci < start + count;) {
+        const uint8_t b = (uint8_t)s[i];
+        size_t l = 1;
+        if      (b >= 0xF0) l = 4;
+        else if (b >= 0xE0) l = 3;
+        else if (b >= 0xC0) l = 2;
+        if (ci >= start) out.append(s, i, l);
+        i += l;
+        ci++;
+    }
+    return out;
+}
+
 static bool is_numeric_str(const std::string& s) {
     std::string t = trim_str(s);
     if (t.empty()) return false;
@@ -114,9 +142,11 @@ static std::vector<std::string> split_statements(const std::string& text) {
     return out;
 }
 
-/* 逗号分隔参数解析：引号内逗号不分割；字符串字面量保留原样，数值走 eval */
+/* 逗号分隔参数解析：引号内逗号不分割；字符串字面量保留原样，数值走 eval
+ *  str_eval 非空：串变量（$ 结尾）/ 含引号串表达式 → is_string 参数 */
 std::vector<BasicArg> parse_args(const std::string& args_text,
-                                 const std::function<double(const std::string&)>& eval) {
+                                 const std::function<double(const std::string&)>& eval,
+                                 const std::function<std::string(const std::string&)>& str_eval) {
     std::vector<BasicArg> out;
     std::string cur;
     bool in_str = false;
@@ -137,7 +167,13 @@ std::vector<BasicArg> parse_args(const std::string& args_text,
                 a.num = eval(t);   /* 带引号但后面还有内容：整体求值作为回退 */
             }
         } else {
-            a.num = eval(t);
+            /* 串变量（$ 结尾）/ 含引号串表达式：走字符串求值 */
+            if (str_eval && !t.empty() && (t.back() == '$' || t.find('"') != std::string::npos)) {
+                a.is_string = true;
+                a.str = str_eval(t);
+            } else {
+                a.num = eval(t);
+            }
         }
         out.push_back(a);
     };
@@ -148,6 +184,57 @@ std::vector<BasicArg> parse_args(const std::string& args_text,
         else cur += c;
     }
     flush();
+    return out;
+}
+
+/* 数值 → 文本（PRINT 与 STR$ 共用：整数不带小数点，其余 %.4g） */
+static std::string num_to_string(double v) {
+    char buf[32];
+    if (v == static_cast<double>(static_cast<int>(v))) std::snprintf(buf, sizeof(buf), "%d", (int)v);
+    else std::snprintf(buf, sizeof(buf), "%.4g", v);
+    return std::string(buf);
+}
+
+/* 串表达式判定：字面量 / $ 结尾变量 / $ 结尾函数（STR$ LEFT$ 等） */
+static bool is_string_expr(const std::string& t) {
+    std::string s = trim_str(t);
+    if (s.empty()) return false;
+    if (s[0] == '"') return true;
+    if (s.back() == '$') return true;
+    size_t op = s.find('(');
+    if (op != std::string::npos && op > 0 && s[op - 1] == '$') return true;
+    return false;
+}
+
+/* 引号外找比较符（两字符 >= <= <> 优先）；找不到返回 false */
+static bool find_cmp_op(const std::string& c, size_t& pos, std::string& op) {
+    bool in_str = false;
+    for (size_t i = 0; i < c.size(); i++) {
+        char ch = c[i];
+        if (ch == '"') { in_str = !in_str; continue; }
+        if (in_str) continue;
+        if (ch == '>' || ch == '<' || ch == '=') {
+            if (i + 1 < c.size() && c[i + 1] == '=' && ch != '=') { op = std::string(1, ch) + "="; pos = i; return true; }
+            if (ch == '<' && i + 1 < c.size() && c[i + 1] == '>') { op = "<>"; pos = i; return true; }
+            op = std::string(1, ch); pos = i; return true;
+        }
+    }
+    return false;
+}
+
+/* 引号外按逗号切参数（$ 函数参数拆分用） */
+static std::vector<std::string> split_top_commas(const std::string& s) {
+    std::vector<std::string> out;
+    std::string cur;
+    bool in_str = false;
+    for (size_t i = 0; i < s.size(); i++) {
+        char c = s[i];
+        if (c == '"') in_str = !in_str;
+        if (c == ',' && !in_str) { out.push_back(trim_str(cur)); cur.clear(); }
+        else cur += c;
+    }
+    std::string t = trim_str(cur);
+    if (!t.empty() || !out.empty()) out.push_back(t);
     return out;
 }
 
@@ -191,6 +278,51 @@ void BasicInterpreter::add_func(const std::string& name, BasicFuncFn fn) {
     _funcs[upper_str(trim_str(name))] = std::move(fn);
 }
 
+void BasicInterpreter::add_raw_cmd(const std::string& name, BasicRawCmdFn fn) {
+    _raw_cmds[upper_str(trim_str(name))] = std::move(fn);
+}
+
+void BasicInterpreter::set_input_str(BasicInputStrFn fn) {
+    _input_str = std::move(fn);
+    _has_input_str = static_cast<bool>(_input_str);
+}
+
+/* ---- 宿主回调辅助 ---- */
+double BasicInterpreter::eval_num_expr(const std::string& expr) {
+    return evaluate_expression(expr);
+}
+
+std::string BasicInterpreter::eval_str_expr(const std::string& expr) {
+    return evaluate_str_expr(expr);
+}
+
+bool BasicInterpreter::set_svar(const std::string& name, const std::string& value) {
+    std::string k = lower_str(trim_str(name));
+    if (k.size() < 2 || k.back() != '$') return false;
+    for (size_t i = 0; i + 1 < k.size(); i++) {
+        char c = k[i];
+        if (!(std::isalnum((unsigned char)c) || c == '_')) return false;
+    }
+    _svars[k] = value;
+    return true;
+}
+
+/* 数值变量预注入：变量名小写归一，禁 $ 结尾；供 v1.3 环境变量（ime_cn 等） */
+bool BasicInterpreter::set_nvar(const std::string& name, double value) {
+    std::string k = lower_str(trim_str(name));
+    if (k.empty() || k.back() == '$') return false;
+    for (char c : k) {
+        if (!(std::isalnum((unsigned char)c) || c == '_')) return false;
+    }
+    _vars[k] = value;
+    return true;
+}
+
+std::string BasicInterpreter::get_svar(const std::string& name) {
+    auto it = _svars.find(lower_str(trim_str(name)));
+    return it == _svars.end() ? std::string() : it->second;
+}
+
 /* ============================================================
  *  程序管理
  * ============================================================ */
@@ -202,6 +334,7 @@ void BasicInterpreter::add_line(int line_num, const std::string& code) {
 void BasicInterpreter::clear_program() {
     _program.clear();
     _vars.clear();
+    _svars.clear();
     _gosub_stack.clear();
     _for_stack.clear();
     _while_stack.clear();
@@ -304,14 +437,93 @@ double BasicInterpreter::evaluate_expression(const std::string& expr) {
     return 0;
 }
 
+/* ============================================================
+ *  字符串表达式求值：字面量 / 串变量 / + 拼接 / STR$ CHR$ LEFT$ RIGHT$ MID$
+ * ============================================================ */
+std::string BasicInterpreter::evaluate_str_expr(const std::string& expr) {
+    std::string e = trim_str(expr);
+    if (e.empty()) return "";
+
+    /* 纯字面量（单对引号） */
+    if (e.size() >= 2 && e[0] == '"' && e.back() == '"' && e.find('"', 1) == e.size() - 1)
+        return e.substr(1, e.size() - 2);
+
+    /* $ 结尾函数调用 */
+    size_t op = e.find('('), cp = e.rfind(')');
+    if (op != std::string::npos && cp != std::string::npos && cp > op &&
+        trim_str(e.substr(cp + 1)).empty()) {
+        std::string fname = upper_str(trim_str(e.substr(0, op)));
+        std::string arg = trim_str(e.substr(op + 1, cp - op - 1));
+        if (fname == "STR$") return num_to_string(evaluate_expression(arg));
+        if (fname == "CHR$") {
+            int c = (int)evaluate_expression(arg);
+            if (c < 0 || c > 255) { if (_has_out) _out("错误：CHR$ 参数 0~255"); return ""; }
+            return std::string(1, (char)c);
+        }
+        if (fname == "LEFT$" || fname == "RIGHT$" || fname == "MID$") {
+            std::vector<std::string> ps = split_top_commas(arg);
+            if (ps.empty()) { if (_has_out) _out("错误：" + fname + " 缺参数"); return ""; }
+            std::string s = evaluate_str_expr(ps[0]);
+            long n1 = ps.size() > 1 ? (long)evaluate_expression(ps[1]) : 0;
+            if (fname == "LEFT$") {
+                if (n1 < 0) n1 = 0;
+                size_t clen = utf8_charlen(s);
+                if (n1 > (long)clen) n1 = (long)clen;
+                return utf8_char_slice(s, 0, (size_t)n1);
+            }
+            if (fname == "RIGHT$") {
+                if (n1 <= 0) return "";
+                size_t clen = utf8_charlen(s);
+                if (n1 > (long)clen) n1 = (long)clen;
+                return utf8_char_slice(s, clen - (size_t)n1, (size_t)n1);
+            }
+            /* MID$(s, start, len)：start 从 1 计，按字符边界 */
+            long len = ps.size() > 2 ? (long)evaluate_expression(ps[2]) : (long)s.size();
+            size_t clen = utf8_charlen(s);
+            if (n1 < 1 || n1 > (long)clen) return "";
+            if (len < 0) len = 0;
+            if (len > (long)(clen - (size_t)(n1 - 1))) len = (long)(clen - (size_t)(n1 - 1));
+            return utf8_char_slice(s, (size_t)(n1 - 1), (size_t)len);
+        }
+    }
+
+    /* 串变量（未定义读出空串） */
+    if (e.back() == '$') {
+        auto it = _svars.find(lower_str(e));
+        return it == _svars.end() ? std::string() : it->second;
+    }
+
+    /* + 拼接（引号外，从右往左） */
+    bool in_str = false;
+    for (int i = (int)e.size() - 1; i >= 0; i--) {
+        char c = e[i];
+        if (c == '"') in_str = !in_str;
+        else if (c == '+' && !in_str && i > 0)
+            return evaluate_str_expr(e.substr(0, i)) + evaluate_str_expr(e.substr(i + 1));
+    }
+
+    if (_has_out) _out("错误：无法识别字符串表达式 " + e + "（数字转文本用 STR$(x)）");
+    return "";
+}
+
 /* 扩展函数调用：扩展表 → 数学表 → 失败 */
 double BasicInterpreter::call_func(const std::string& name, const std::string& arg_text, bool& ok) {
     auto eval_l = [this](const std::string& s) { return evaluate_expression(s); };
+    auto str_l  = [this](const std::string& s) { return evaluate_str_expr(s); };
 
     auto fit = _funcs.find(name);
     if (fit != _funcs.end()) {
         ok = true;
-        return fit->second(parse_args(arg_text, eval_l));
+        return fit->second(parse_args(arg_text, eval_l, str_l));
+    }
+
+    /* 内置串函数（返回数值）：LEN(s$) / VAL(s$) */
+    if (name == "LEN" || name == "VAL") {
+        auto args = parse_args(arg_text, eval_l, str_l);
+        ok = true;
+        if (args.empty() || !args[0].is_string) return 0;
+        if (name == "LEN") return (double)utf8_charlen(args[0].str);
+        return is_numeric_str(args[0].str) ? std::atof(args[0].str.c_str()) : 0.0;
     }
 
     struct MathFn { const char* n; double (*f)(double); };
@@ -330,7 +542,7 @@ double BasicInterpreter::call_func(const std::string& name, const std::string& a
         }
     }
     if (name == "POW") {
-        auto args = parse_args(arg_text, eval_l);
+        auto args = parse_args(arg_text, eval_l, str_l);
         if (args.size() >= 2 && !args[0].is_string && !args[1].is_string) {
             ok = true;
             return std::pow(args[0].num, args[1].num);
@@ -349,21 +561,30 @@ double BasicInterpreter::call_func(const std::string& name, const std::string& a
  * ============================================================ */
 bool BasicInterpreter::evaluate_condition(const std::string& cond) {
     std::string c = trim_str(cond);
-    std::string op;
     size_t pos;
-    if ((pos = c.find(">=")) != std::string::npos) op = ">=";
-    else if ((pos = c.find("<=")) != std::string::npos) op = "<=";
-    else if ((pos = c.find("<>")) != std::string::npos) op = "<>";
-    else if ((pos = c.find('>')) != std::string::npos) op = ">";
-    else if ((pos = c.find('<')) != std::string::npos) op = "<";
-    else if ((pos = c.find('=')) != std::string::npos) op = "=";
-    else {
+    std::string op;
+    if (!find_cmp_op(c, pos, op)) {
         /* 无数值比较符：按“非 0 即真”，WHILE 1 / IF X THEN 可用 */
         return evaluate_expression(c) != 0;
     }
+    std::string lt = trim_str(c.substr(0, pos));
+    std::string rt = trim_str(c.substr(pos + op.size()));
 
-    double l = evaluate_expression(trim_str(c.substr(0, pos)));
-    double r = evaluate_expression(trim_str(c.substr(pos + op.size())));
+    /* 字符串比较：任一侧为串表达式（"字面量"/串变量/STR$ 等） */
+    if (is_string_expr(lt) || is_string_expr(rt)) {
+        std::string l = evaluate_str_expr(lt);
+        std::string r = evaluate_str_expr(rt);
+        if (op == "=")  return l == r;
+        if (op == "<>") return l != r;
+        if (op == ">")  return l > r;
+        if (op == "<")  return l < r;
+        if (op == ">=") return l >= r;
+        if (op == "<=") return l <= r;
+        return false;
+    }
+
+    double l = evaluate_expression(lt);
+    double r = evaluate_expression(rt);
     if (op == "=")  return l == r;
     if (op == ">")  return l > r;
     if (op == "<")  return l < r;
@@ -391,12 +612,11 @@ void BasicInterpreter::do_print(const std::string& args) {
                    trim_str(t.substr(t.find('"', 1) + 1)).empty()) {
             size_t e2 = t.find('"', 1);
             line_out += t.substr(1, e2 - 1);
+        } else if (is_string_expr(t)) {
+            /* 串变量 / 串表达式（A$、"a"+B$、STR$(X)） */
+            line_out += evaluate_str_expr(t);
         } else {
-            double v = evaluate_expression(t);
-            char buf[32];
-            if (v == static_cast<int>(v)) std::snprintf(buf, sizeof(buf), "%d", (int)v);
-            else std::snprintf(buf, sizeof(buf), "%.4g", v);
-            line_out += buf;
+            line_out += num_to_string(evaluate_expression(t));
         }
     };
     for (size_t i = 0; i < a.size(); i++) {
@@ -412,12 +632,23 @@ void BasicInterpreter::do_let(const std::string& args) {
     size_t eq = args.find('=');
     if (eq == std::string::npos) { if (_has_out) _out("语法错误 LET"); return; }
     std::string var = lower_str(trim_str(args.substr(0, eq)));
+    /* 字符串变量：LET A$ = 串表达式 */
+    if (!var.empty() && var.back() == '$') {
+        _svars[var] = evaluate_str_expr(trim_str(args.substr(eq + 1)));
+        return;
+    }
     double val = evaluate_expression(trim_str(args.substr(eq + 1)));
     _vars[var] = val;
 }
 
 void BasicInterpreter::do_input(const std::string& args) {
     std::string var = lower_str(trim_str(args));
+    /* INPUT A$：字符串录入（宿主提供键盘回调） */
+    if (!var.empty() && var.back() == '$') {
+        if (!_has_input_str) { if (_has_out) _out("错误：宿主未提供字符串输入"); return; }
+        _svars[var] = _input_str("? ");
+        return;
+    }
     double v = 0;
     if (_has_input) v = _input("? ");
     else { if (_has_out) _out("INPUT 不可用"); return; }
@@ -595,7 +826,8 @@ void BasicInterpreter::do_system(const std::string& args) {
     auto it = _cmds.find("SYSTEM");
     if (it != _cmds.end()) {
         auto eval_l = [this](const std::string& s) { return evaluate_expression(s); };
-        it->second(parse_args(args, eval_l));
+        auto str_l  = [this](const std::string& s) { return evaluate_str_expr(s); };
+        it->second(parse_args(args, eval_l, str_l));
         return;
     }
     if (_has_out) _out("SYSTEM: 无内部命令");
@@ -644,6 +876,21 @@ void BasicInterpreter::exec_statement(const std::string& stmt) {
         return;
     }
 
+    /* 裸赋值（LET 可省）：VAR = 表达式；VAR 名 = 字母/下划线开头，可 $ 结尾 */
+    {
+        size_t eq = t.find('=');
+        if (eq != std::string::npos) {
+            std::string lhs = trim_str(t.substr(0, eq));
+            bool id = !lhs.empty() && (std::isalpha((unsigned char)lhs[0]) || lhs[0] == '_');
+            for (size_t i = 1; id && i < lhs.size(); i++) {
+                char c = lhs[i];
+                if (!(std::isalnum((unsigned char)c) || c == '_' ||
+                      (c == '$' && i == lhs.size() - 1))) id = false;
+            }
+            if (id) { do_let(t); return; }
+        }
+    }
+
     /* 扩展语句 */
     if (dispatch_cmd(t)) return;
 
@@ -676,13 +923,22 @@ bool BasicInterpreter::dispatch_cmd(const std::string& line) {
     std::string t = trim_str(line);
     size_t sp = t.find_first_of(" \t");
     std::string head = upper_str(sp == std::string::npos ? t : t.substr(0, sp));
-    auto it = _cmds.find(head);
-    if (it == _cmds.end()) return false;
-
-    std::string rest = (sp == std::string::npos) ? "" : t.substr(sp);
     auto eval_l = [this](const std::string& s) { return evaluate_expression(s); };
-    it->second(parse_args(rest, eval_l));
-    return true;
+    auto str_l  = [this](const std::string& s) { return evaluate_str_expr(s); };
+    std::string rest = (sp == std::string::npos) ? "" : t.substr(sp);
+
+    auto it = _cmds.find(head);
+    if (it != _cmds.end()) {
+        it->second(parse_args(rest, eval_l, str_l));
+        return true;
+    }
+    /* 原样参数语句（HTTPGET 等）：参数原文交宿主解析 */
+    auto rit = _raw_cmds.find(head);
+    if (rit != _raw_cmds.end()) {
+        rit->second(rest);
+        return true;
+    }
+    return false;
 }
 
 /* ============================================================
@@ -691,6 +947,7 @@ bool BasicInterpreter::dispatch_cmd(const std::string& line) {
 int BasicInterpreter::run(uint32_t max_steps) {
     if (_program.empty()) { if (_has_out) _out("没有程序"); return 2; }
     _vars.clear();
+    _svars.clear();
     _gosub_stack.clear();
     _for_stack.clear();
     _while_stack.clear();
