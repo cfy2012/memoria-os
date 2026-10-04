@@ -8,6 +8,14 @@
  *   INCLUDE "file.bas" 合并另一个程序文件的行（同号覆盖）
  *   数学函数：SIN COS TAN ABS SQR INT LOG LOG10 EXP POW RND
  *
+ * 字符串变量（经典 $ 变量）：
+ *   LET A$="hi"（LET 可省：裸赋值 A$="hi" / X=5）、+ 拼接、= <> 比较
+ *   串函数：STR$ CHR$ LEN VAL LEFT$ RIGHT$ MID$；INPUT A$ 键盘录入
+ *   字符串只与字符串运算，数字需 STR$(x) 转换；串变量无定义读出空串
+ *
+ * 原始参数扩展语句 add_raw_cmd：参数原文交给宿主解析
+ *   （HTTPGET / HTTPPOST 等需要"输出到变量"的语句由宿主注入）
+ *
  * GOTO 半禁用：仍然可用，但运行时提示一次注意事项（容易导致逻辑混乱/死循环）。
  * 跳转（GOTO/GOSUB/RETURN/循环）执行后不再自动前进一行，目标行真正被执行。
  *
@@ -38,6 +46,8 @@ struct BasicArg {
 
 using BasicOutFn   = std::function<void(const std::string& line)>;                /* 输出一行 */
 using BasicInputFn = std::function<double(const std::string& prompt)>;             /* INPUT 读数字 */
+using BasicInputStrFn = std::function<std::string(const std::string& prompt)>;     /* INPUT 读字符串 */
+using BasicRawCmdFn = std::function<void(const std::string& raw_args)>;            /* 原样参数扩展语句 */
 using BasicCmdFn   = std::function<void(const std::vector<BasicArg>& args)>;       /* 扩展语句 */
 using BasicFuncFn  = std::function<double(const std::vector<BasicArg>& args)>;     /* 扩展表达式函数 */
 
@@ -47,10 +57,19 @@ public:
 
     /* ---- IO 回调（PRGM 模式注入） ---- */
     void set_io(BasicOutFn out, BasicInputFn input);
+    void set_input_str(BasicInputStrFn fn);                    /* INPUT A$ 字符串录入 */
 
     /* ---- 扩展注册 ---- */
     void add_cmd(const std::string& name, BasicCmdFn fn);      /* 语句：TEXT / RECT / WIFI ... */
     void add_func(const std::string& name, BasicFuncFn fn);    /* 表达式函数：RND / WIFISTAT ... */
+    void add_raw_cmd(const std::string& name, BasicRawCmdFn fn); /* 语句（参数原文）：HTTPGET ... */
+
+    /* ---- 宿主回调辅助（raw_cmd 内取值/写串变量） ---- */
+    double      eval_num_expr(const std::string& expr);
+    std::string eval_str_expr(const std::string& expr);
+    bool        set_svar(const std::string& name, const std::string& value);
+    std::string get_svar(const std::string& name);
+    bool        set_nvar(const std::string& name, double value);   /* 数值变量预注入（v1.3 环境变量） */
 
     /* ---- 程序管理 ---- */
     void add_line(int line_num, const std::string& code);      /* 空 code = 删除该行 */
@@ -70,6 +89,7 @@ public:
 private:
     /* 核心（移植自 MiniBasic，行为保持一致） */
     double evaluate_expression(const std::string& expr);
+    std::string evaluate_str_expr(const std::string& expr);
     bool   evaluate_condition(const std::string& cond);
     void   execute_line(const std::string& line);
     void   go_to_next_line();
@@ -111,6 +131,7 @@ private:
 
     std::map<int, std::string> _program;       /* 行号 → 代码 */
     std::map<std::string, double> _vars;       /* 变量表（小写，大小写不敏感） */
+    std::map<std::string, std::string> _svars; /* 字符串变量表（小写名含 $ 结尾） */
     std::vector<int> _gosub_stack;
     std::vector<ForState>   _for_stack;        /* FOR..NEXT 嵌套 */
     std::vector<WhileState> _while_stack;      /* WHILE..WEND 嵌套 */
@@ -124,10 +145,13 @@ private:
     BasicInputFn _input;
     bool _has_out = false;
     bool _has_input = false;
+    BasicInputStrFn _input_str;
+    bool _has_input_str = false;
 
     /* 扩展表 */
     std::map<std::string, BasicCmdFn>   _cmds;
     std::map<std::string, BasicFuncFn>  _funcs;
+    std::map<std::string, BasicRawCmdFn> _raw_cmds;
 
     /* 数学桥接 */
     static double _math_sin(double a); static double _math_cos(double a);
@@ -137,9 +161,11 @@ private:
     static double _math_exp(double a);
 };
 
-/* 工具：把逗号分隔的参数串解析为 BasicArg 列表（字符串字面量保留原样） */
+/* 工具：把逗号分隔的参数串解析为 BasicArg 列表（字符串字面量保留原样）
+ *  str_eval 非空时：串变量（$ 结尾）/含引号的串表达式参数按字符串求值 */
 std::vector<BasicArg> parse_args(const std::string& args_text,
-                                 const std::function<double(const std::string&)>& eval);
+                                 const std::function<double(const std::string&)>& eval,
+                                 const std::function<std::string(const std::string&)>& str_eval = nullptr);
 
 } // namespace basic
 } // namespace memoria
