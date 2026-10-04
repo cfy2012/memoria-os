@@ -30,6 +30,12 @@ public:
 
     bool connected() const { return _connected; }
 
+    /* 开关 / 设备名（NVS "net" 持久化，重启生效） */
+    bool enabled() const;
+    void set_enabled(bool on);
+    std::string device_name() const;
+    void set_device_name(const std::string& name);
+
     void set_rx_cb(BleRxCb cb) { _rx_cb = std::move(cb); }
 
 private:
