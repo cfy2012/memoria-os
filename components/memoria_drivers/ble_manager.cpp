@@ -20,14 +20,18 @@ extern "C" {
 #include <esp_log.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <nvs_flash.h>
 }
 
 #include <cstring>
+#include <string>
 
 namespace memoria {
 namespace drivers {
 
 static const char* TAG = "BLE";
+static const char* NVS_NS = "net";
+static std::string s_ble_name = "Memoria-OS";
 
 /* Nordic UART Service UUID */
 static const ble_uuid128_t NUS_SVC_UUID = {
@@ -53,7 +57,56 @@ BleManager* BleManager::instance() {
     return &inst;
 }
 
+bool BleManager::enabled() const {
+    nvs_handle_t h;
+    uint8_t v = 1;
+    if (nvs_open(NVS_NS, NVS_READONLY, &h) == ESP_OK) {
+        nvs_get_u8(h, "ble_on", &v);
+        nvs_close(h);
+    }
+    return v != 0;
+}
+
+void BleManager::set_enabled(bool on) {
+    nvs_handle_t h;
+    if (nvs_open(NVS_NS, NVS_READWRITE, &h) == ESP_OK) {
+        nvs_set_u8(h, "ble_on", on ? 1 : 0);
+        nvs_commit(h);
+        nvs_close(h);
+    }
+}
+
+std::string BleManager::device_name() const {
+    nvs_handle_t h;
+    if (nvs_open(NVS_NS, NVS_READONLY, &h) == ESP_OK) {
+        char b[33] = {};
+        size_t l = sizeof(b);
+        if (nvs_get_str(h, "ble_name", b, &l) == ESP_OK && b[0]) {
+            nvs_close(h);
+            return b;
+        }
+        nvs_close(h);
+    }
+    return "Memoria-OS";
+}
+
+void BleManager::set_device_name(const std::string& name) {
+    nvs_handle_t h;
+    if (nvs_open(NVS_NS, NVS_READWRITE, &h) == ESP_OK) {
+        nvs_set_str(h, "ble_name", name.c_str());
+        nvs_commit(h);
+        nvs_close(h);
+    }
+}
+
 esp_err_t BleManager::init() {
+    /* 蓝牙开关（NVS）：关闭时跳过 NimBLE 启动 */
+    if (!enabled()) {
+        ESP_LOGI(TAG, "BLE disabled by setting, skip init");
+        return ESP_OK;
+    }
+    s_ble_name = device_name();
+
     /* NimBLE 主机初始化 */
     nimble_port_init();
 
@@ -128,7 +181,7 @@ void BleManager::_sync_cb() {
     adv.disc_mode = BLE_GAP_DISC_MODE_GEN;
 
     struct ble_hs_adv_fields fields = {};
-    const char* name = "Memoria-OS";
+    const char* name = s_ble_name.c_str();
     fields.name = (uint8_t*)name;
     fields.name_len = std::strlen(name);
     fields.name_is_complete = 1;
@@ -147,7 +200,7 @@ void BleManager::_ble_task_c(void* arg) {
     /* host task 标准结构：注册同步回调 + 设备名，进入 host 事件主循环（阻塞）
      * 原实现缺少 nimble_port_run()——task 提前返回且 host 无事件循环 */
     ble_hs_cfg.sync_cb = _sync_cb;
-    ble_svc_gap_device_name_set("Memoria-OS");
+    ble_svc_gap_device_name_set(s_ble_name.c_str());
     nimble_port_run();
     nimble_port_freertos_deinit();
 }
