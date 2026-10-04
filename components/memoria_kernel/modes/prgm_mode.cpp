@@ -17,6 +17,8 @@
  *   FOR..NEXT / WHILE..WEND 循环；':' 多语句同行；条件可为数值（非 0 即真）
  *   INCLUDE "file.bas" 合并另一个程序文件的行
  *   GOTO 半禁用（运行时会提示一次注意事项）
+ * 注：v1.3 预注入变量经 _inject_env() 弱依赖 net_manager.hpp（__has_include），
+ *     豆包-1 落码后重编自动接通真数据（2026-10-04）。
  */
 
 #include "mode_manager.hpp"
@@ -28,6 +30,15 @@
 #include "joystick.hpp"
 #include "wifi_manager.hpp"
 #include "ble_manager.hpp"
+#include "i2s_audio.hpp"
+
+/* v1.3 预注入：net_manager 弱依赖（豆包-1 网络线落码后自动接通） */
+#if __has_include("net_manager.hpp")
+#include "net_manager.hpp"
+#define HAS_NET_MGR 1
+#else
+#define HAS_NET_MGR 0
+#endif
 
 extern "C" {
 #include <dirent.h>
@@ -37,16 +48,19 @@ extern "C" {
 #include "freertos/task.h"
 #include "esp_system.h"
 #include "driver/gpio.h"
+#include "esp_http_client.h"
 }
 
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
 #include <cstdarg>
+#include <cctype>
 
 #include <vector>
 #include <string>
 #include <algorithm>
+#include <atomic>
 
 namespace memoria {
 using namespace drivers;
@@ -81,20 +95,40 @@ public:
 
     /* ================= 键盘输入（输入队列 → 编辑器） ================= */
     bool on_key(uint16_t key, bool pressed) override {
+        /* Ctrl / Shift 状态跟踪：同时按下 = 中英切换（IME-SPEC 拍板版，两模式均生效） */
+        if (key == input::K_CTRL) {
+            _ctrl_down = pressed;
+            if (pressed && _shift_down) _ime_toggle_cn();
+            return true;
+        }
+        if (key == input::K_SHIFT) {
+            _shift_down = pressed;
+            if (pressed && _ctrl_down) _ime_toggle_cn();
+            return true;
+        }
+
+        /* 运行页字符串 INPUT：中文走输入法面板，英文键盘直录，Enter 确认 */
+        if (_view == Run && _str_active) {
+            if (!pressed) return true;
+            if (ime::ime_mode() == ime::Mode::CN) {
+                bool consumed = ime::ime_handle_key(key, pressed);
+                if (consumed) return true;
+            }
+            if (key >= 0x20 && key <= 0x7E) { if (_str_buf.size() < MAX_LINE_LEN) _str_buf += (char)key; return true; }
+            if (key == input::K_BACKSPACE) { if (!_str_buf.empty()) _str_buf.pop_back(); return true; }
+            if (key == input::K_ENTER) { _str_enter = true; return true; }
+            return true;
+        }
         if (_view != Edit) return false;
         if (!pressed) return true;
 
-        /* F1 = 中英切换 */
-        if (key == input::K_F1) {
-            ime::ime_toggle();
-            _hint = ime::ime_mode() == ime::Mode::CN ? "中文输入 · F1 切回英文" : "英文输入 · F1 切中文";
-            return true;
-        }
         if (ime::ime_mode() == ime::Mode::CN) {
-            /* 中文模式：字母/数字/退格/空格/回车/左右 全部交给输入法 */
-            return ime::ime_handle_key(key, pressed);
+            /* 中文模式：a~z 拼音 / F1~F4 选字 / F5 F6 翻批 / 退格 / 回车 交给输入法；
+             * 未消费（如拼音空时回车=换行、退格=删字）回退到编辑器 */
+            bool consumed = ime::ime_handle_key(key, pressed);
+            if (consumed) return true;
         }
-        /* 英文模式：可打印字符直接上屏 */
+        /* 英文模式 / CN 未消费：可打印字符直接上屏 */
         if (key >= 0x20 && key <= 0x7E) {
             std::string& line = _edit_lines[_edit_cur].second;
             if ((int)line.size() < MAX_LINE_LEN) line += (char)key;
@@ -105,7 +139,17 @@ public:
         return false;
     }
 
+    void _ime_toggle_cn() {
+        ime::ime_toggle();
+        _hint = ime::ime_mode() == ime::Mode::CN
+                    ? "中文输入 · Ctrl+Shift 切英文" : "英文输入 · Ctrl+Shift 切中文";
+    }
+
     void _ime_commit(const char* utf8, size_t len) {
+        if (_view == Run && _str_active) {
+            if ((int)_str_buf.size() + (int)len <= MAX_LINE_LEN) _str_buf.append(utf8, len);
+            return;
+        }
         std::string& line = _edit_lines[_edit_cur].second;
         if ((int)line.size() + (int)len <= MAX_LINE_LEN) line.append(utf8, len);
     }
@@ -126,6 +170,7 @@ public:
         switch (_view) {
             case Edit: return _nav_edit(ni);
             case Run:
+                if (_str_active) return true;   /* 字符串 INPUT 中：吞掉摇杆事件防误退出 */
                 if (ni.dir == window::NavEvent::NavEnter || ni.dir == window::NavEvent::NavBack) {
                     _view = List; _hint.clear();
                 }
@@ -175,7 +220,7 @@ public:
             case 2: _edit_new_file(); break;
             case 3: if (!_files.empty()) { _pending = _cur; request_confirm("删除这个程序?"); } break;
             case 4: _scan(); break;
-            case 5: _hint = "BASIC: PRINT/LET/IF/FOR/WHILE/GOTO"; break;
+            case 5: _hint = "basic: print/let/if/for/while/goto"; break;
         }
     }
 
@@ -291,6 +336,45 @@ private:
         _interp.add_cmd("SYSTEM", [](const std::vector<basic::BasicArg>& a) {
             if (a.empty() || a[0].str == "REBOOT") esp_restart();
         });
+
+        /* ---- 字符串 INPUT（键盘录入，英文） ---- */
+        _interp.set_input_str([this](const std::string& p) { return _basic_input_str(p); });
+
+        /* ---- 网络 HTTP（明文；HTTPS 后补） ----
+         * HTTPGET "url", R$          → GET，响应体（上限 8KB）存入字符串变量 R$
+         * HTTPPOST "url", "body", R$ → POST（octet-stream 原样字节），响应体存 R$
+         * HTTPUP "url", "path" [,R$] → POST 文件字节（≤2MB，octet-stream），响应体存 R$（可选）
+         * HTTPDL "url", "path"       → GET 流式下载直写文件（不占内存），httpstat() 查结果
+         * HTTPSTAT()                 → 上一次 HTTP 状态码 */
+        _interp.add_raw_cmd("HTTPGET", [this](const std::string& raw) { _http_exec(raw, false); });
+        _interp.add_raw_cmd("HTTPPOST", [this](const std::string& raw) { _http_exec(raw, true); });
+        _interp.add_raw_cmd("HTTPUP", [this](const std::string& raw) { _http_file(raw, true); });
+        _interp.add_raw_cmd("HTTPDL", [this](const std::string& raw) { _http_file(raw, false); });
+        _interp.add_func("HTTPSTAT", [](const std::vector<basic::BasicArg>&) -> double {
+            return (double)s_http_status.load();
+        });
+
+        /* ---- 语音（WAV 全链路，无服务端转码） ----
+         * RECORD "path", 秒 → INMP441 录音到 WAV（16kHz 单声道 16bit），阻塞到秒数到（1~60）
+         * PLAY "path"       → 播放 WAV/MP3（后台播放不阻塞） */
+        _interp.add_cmd("RECORD", [](const std::vector<basic::BasicArg>& a) {
+            if (a.empty() || !a[0].is_string) return;
+            uint32_t sec = a.size() > 1 ? (uint32_t)a[1].num : 5;
+            if (sec < 1) sec = 1;
+            if (sec > 60) sec = 60;
+            auto* au = I2sAudio::instance();
+            if (au->rec_start(a[0].str, 16000) != ESP_OK) return;
+            uint32_t waited = 0;
+            while (au->is_recording() && waited < sec * 10) {
+                vTaskDelay(pdMS_TO_TICKS(100));
+                waited++;
+            }
+            au->rec_stop();
+        });
+        _interp.add_cmd("PLAY", [](const std::vector<basic::BasicArg>& a) {
+            if (a.empty() || !a[0].is_string) return;
+            I2sAudio::instance()->play_audio(a[0].str);
+        });
     }
 
     window::UIRenderer* _ui() { return window::UIRenderer::instance(); }
@@ -341,6 +425,25 @@ private:
     static bool _is_bas(const std::string& n) { return n.size() > 4 && n.substr(n.size() - 4) == ".bas"; }
     static bool _is_ms(const std::string& n)  { return n.size() > 3 && n.substr(n.size() - 3) == ".ms"; }
 
+    /* ================= v1.3 环境变量预注入 =================
+     * 每次运行 .bas 前刷新：系统连什么 WiFi，程序就读到什么。
+     * net_manager 未落码时注入空值（__has_include 弱依赖，落码后自动接通）。 */
+    void _inject_env() {
+#if HAS_NET_MGR
+        _interp.set_svar("wifi_ssid$", net::sta_connected() ? net::sta_ssid() : "");
+        _interp.set_svar("wifi_pass$", net::sta_pass());
+        _interp.set_svar("ap_ssid$",   net::ap_ssid());
+        _interp.set_svar("ap_pass$",   net::ap_pass());
+        _interp.set_svar("ble_name$",  net::ble_name());
+#else
+        _interp.set_svar("wifi_ssid$", "");
+        _interp.set_svar("ap_ssid$",   "");
+        _interp.set_svar("ble_name$",  "");
+#endif
+        const double cn = ime::ime_cn() ? 1.0 : 0.0;
+        _interp.set_nvar("ime_cn", cn);
+    }
+
     /* ================= 运行 ================= */
     void _run_sel() {
         if (_files.empty()) return;
@@ -352,6 +455,7 @@ private:
         if (_is_bas(_files[_cur])) {
             _interp.clear_program();
             if (!_interp.load_file(path)) { _hint = "读取失败"; return; }
+            _inject_env();
             _view = Run;
             _ui()->clear(COLOR_BLACK);
             int rc = _interp.run(100000);
@@ -416,6 +520,162 @@ private:
             vTaskDelay(pdMS_TO_TICKS(80));
         }
         return v;
+    }
+
+    /* INPUT 字符串输入：键盘录入（英文），Enter 确认；摇杆事件被 on_key/mode_nav 吞掉 */
+    std::string _basic_input_str(const std::string& prompt) {
+        _str_buf.clear();
+        _str_enter = false;
+        _str_active = true;
+        _str_buf.clear();
+        while (!_str_enter) {
+            _ui()->fill_rect({4, 96, SCREEN_W - 8, 40}, COLOR_DARK_GRAY);
+            _ui()->draw_rect({4, 96, SCREEN_W - 8, 40}, COLOR_YELLOW, 1);
+            _ui()->draw_text_utf8(10, 100, prompt + _str_buf + "_", COLOR_WHITE);
+            if (ime::ime_mode() == ime::Mode::CN) {
+                /* 中文模式：拼音面板（候选上屏走 _ime_commit → _str_buf） */
+                ime::ime_draw_bar(_ui(), 2, 140);
+                _ui()->draw_text_utf8(2, 160,
+                    ime::ime_active()
+                        ? "F1-F4 选字  F5/F6 翻批  退格删拼音  回车上屏  Ctrl+Shift 切英"
+                        : "输入拼音，如 ni → 候选  F1-F4 选字  Ctrl+Shift 切英文",
+                    COLOR_DARK_GRAY);
+            } else {
+                _ui()->draw_text_utf8(10, 118, "键盘输入 · Enter 确认 · 退格删除 · Ctrl+Shift 中文", COLOR_LIGHT_GRAY);
+            }
+            _ui()->flush();
+            vTaskDelay(pdMS_TO_TICKS(60));
+        }
+        _str_active = false;
+        return _str_buf;
+    }
+
+    /* ================= HTTP 扩展语句 ================= */
+    void _http_exec(const std::string& raw, bool post) {
+        s_http_status.store(0);
+        _http_resp.clear();
+        size_t need = post ? 3 : 2;
+        auto parts = split_top(raw);
+        if (parts.size() < need) { _run_out("HTTP: 参数不足"); return; }
+
+        /* 最后一个参数 = 目标字符串变量名 */
+        std::string var = parts.back();
+        bool var_ok = var.size() >= 2 && var.back() == '$';
+        for (size_t i = 0; var_ok && i + 1 < var.size(); i++)
+            if (!(std::isalnum((unsigned char)var[i]) || var[i] == '_')) var_ok = false;
+        if (!var_ok) { _run_out("HTTP: 末参数须为字符串变量名"); return; }
+
+        /* 前面的参数 = URL（POST 再加 body），复用解释器参数求值 */
+        std::string head_args;
+        for (size_t i = 0; i + 1 < parts.size(); i++) {
+            if (i) head_args += ",";
+            head_args += parts[i];
+        }
+        auto num_l = [this](const std::string& s) { return _interp.eval_num_expr(s); };
+        auto str_l = [this](const std::string& s) { return _interp.eval_str_expr(s); };
+        auto vals = basic::parse_args(head_args, num_l, str_l);
+        if (vals.empty() || !vals[0].is_string) { _run_out("HTTP: URL 需为字符串"); return; }
+        std::string body;
+        if (post) {
+            if (vals.size() < 2 || !vals[1].is_string) { _run_out("HTTP: body 需为字符串"); return; }
+            body = vals[1].str;
+        }
+
+        _http_request(vals[0].str, body, post);
+        if (!_interp.set_svar(var, _http_resp)) _run_out("HTTP: 变量写入失败");
+    }
+
+    /* ================= HTTP 文件语句（掌机语音链路） ================= */
+    void _http_file(const std::string& raw, bool up) {
+        s_http_status.store(0);
+        auto parts = split_top(raw);
+        if (parts.size() < 2) { _run_out("HTTP: 参数不足"); return; }
+        auto num_l = [this](const std::string& s) { return _interp.eval_num_expr(s); };
+        auto str_l = [this](const std::string& s) { return _interp.eval_str_expr(s); };
+        auto vals = basic::parse_args(parts[0] + "," + parts[1], num_l, str_l);
+        if (vals.size() < 2 || !vals[0].is_string || !vals[1].is_string) {
+            _run_out("HTTP: url/path 需为字符串"); return;
+        }
+        const std::string& url = vals[0].str;
+        const std::string& path = vals[1].str;
+
+        if (up) {
+            /* 上传：整读文件（≤2MB）作 body，复用 _http_request */
+            FILE* f = std::fopen(path.c_str(), "rb");
+            if (!f) { _run_out("HTTP: 文件打开失败"); return; }
+            std::fseek(f, 0, SEEK_END);
+            long sz = std::ftell(f);
+            std::fseek(f, 0, SEEK_SET);
+            if (sz < 0 || sz > 2 * 1024 * 1024) { std::fclose(f); _run_out("HTTP: 文件超 2MB"); return; }
+            std::string body((size_t)sz, '\0');
+            size_t rd = sz ? std::fread(&body[0], 1, (size_t)sz, f) : 0;
+            std::fclose(f);
+            if ((long)rd != sz) { _run_out("HTTP: 文件读取失败"); return; }
+            _http_request(url, body, true);
+        } else {
+            /* 下载：流式直写 TF，不占内存 */
+            FILE* f = std::fopen(path.c_str(), "wb");
+            if (!f) { _run_out("HTTP: 文件创建失败"); return; }
+            _http_request(url, "", false, f);
+            std::fclose(f);
+        }
+
+        /* 可选第三参：响应体写入字符串变量（up 后查 ok/err 用） */
+        if (parts.size() >= 3) {
+            std::string var = parts[2];
+            bool var_ok = var.size() >= 2 && var.back() == '$';
+            for (size_t i = 0; var_ok && i + 1 < var.size(); i++)
+                if (!(std::isalnum((unsigned char)var[i]) || var[i] == '_')) var_ok = false;
+            if (var_ok) _interp.set_svar(var, _http_resp);
+        }
+    }
+
+    void _http_request(const std::string& url, const std::string& body, bool post, FILE* sink = nullptr) {
+        esp_http_client_config_t cfg = {};
+        cfg.url = url.c_str();
+        cfg.timeout_ms = 10000;
+        cfg.buffer_size = 4096;
+        esp_http_client_handle_t c = esp_http_client_init(&cfg);
+        if (!c) { _run_out("HTTP: 初始化失败"); return; }
+
+        esp_http_client_set_method(c, post ? HTTP_METHOD_POST : HTTP_METHOD_GET);
+        if (post) esp_http_client_set_header(c, "Content-Type", "application/octet-stream");
+        int send_len = post ? (int)body.size() : 0;
+
+        if (esp_http_client_open(c, send_len) == ESP_OK) {
+            if (send_len) esp_http_client_write(c, body.data(), (size_t)send_len);
+            esp_http_client_fetch_headers(c);
+            s_http_status.store(esp_http_client_get_status_code(c));
+            char buf[512];
+            const size_t CAP = 8 * 1024;
+            while (true) {
+                int n = esp_http_client_read(c, buf, sizeof(buf));
+                if (n <= 0) break;
+                if (sink) {
+                    std::fwrite(buf, 1, (size_t)n, sink);
+                } else {
+                    if (_http_resp.size() + (size_t)n > CAP) { _run_out("HTTP: 响应超 8KB 截断"); break; }
+                    _http_resp.append(buf, (size_t)n);
+                }
+            }
+        } else {
+            _run_out("HTTP: 连接失败");
+        }
+        esp_http_client_cleanup(c);
+    }
+
+    static std::vector<std::string> split_top(const std::string& s) {
+        std::vector<std::string> out;
+        std::string cur;
+        bool in_str = false;
+        for (size_t i = 0; i < s.size(); i++) {
+            char ch = s[i];
+            if (ch == '"') in_str = !in_str;
+            if (ch == ',' && !in_str) { out.push_back(cur); cur.clear(); }
+            else cur += ch;
+        }
+        out.push_back(cur);
+        return out;
     }
 
     /* ================= 编辑器 ================= */
@@ -484,14 +744,18 @@ private:
             ui->draw_text_utf8(2, y, line, i == _edit_cur ? COLOR_YELLOW : COLOR_WHITE);
         }
 
-        /* 中文输入法激活：画候选条，替代字符条 */
+        /* 中文输入法激活：画候选条，替代字符条（IME-SPEC v1.0 键位） */
         if (ime::ime_active() || ime::ime_mode() == ime::Mode::CN) {
             ime::ime_draw_bar(ui, 2, CHAR_BAR_Y);
-            ui->draw_text_utf8(2, CHAR_BAR_Y + 18,
-                ime::ime_active()
-                    ? "数字选字  左右换候选  空格/回车上屏  F1 英文"
-                    : "输入拼音，如 ni  → 候选  F1 切回英文",
-                COLOR_DARK_GRAY);
+            if (ime::ime_active()) {
+                ui->draw_text_utf8(2, CHAR_BAR_Y + 18,
+                    "F1-F4 选字  F5/F6 翻批  退格删拼音  回车上屏", COLOR_DARK_GRAY);
+                ui->draw_text_utf8(2, CHAR_BAR_Y + 30,
+                    "Ctrl+Shift 中英切换", COLOR_DARK_GRAY);
+            } else {
+                ui->draw_text_utf8(2, CHAR_BAR_Y + 18,
+                    "输入拼音，如 ni → F1-F4 选字  Ctrl+Shift 切英文", COLOR_DARK_GRAY);
+            }
             return;
         }
 
@@ -511,7 +775,7 @@ private:
                 ui->draw_text(x, CHAR_BAR_Y, std::string(1, kChars[idx]), COLOR_LIGHT_GRAY);
             }
         }
-        ui->draw_text_utf8(2, CHAR_BAR_Y + 16, "键盘直接输入 · 摇杆左右选字 Enter 插入 · 上下切行 · F1 中文", COLOR_DARK_GRAY);
+        ui->draw_text_utf8(2, CHAR_BAR_Y + 16, "键盘直接输入 · 摇杆左右选字 Enter 插入 · 上下切行 · Ctrl+Shift 中文", COLOR_DARK_GRAY);
     }
 
     bool _nav_edit(const window::NavInput& ni) {
@@ -602,6 +866,15 @@ private:
     std::vector<std::string> _run_lines;
     uint16_t _fg = COLOR_WHITE;
 
+    /* HTTP / 字符串 INPUT */
+    std::string _http_resp;
+    std::string _str_buf;
+    bool _str_enter = false;
+    bool _str_active = false;
+    bool _ctrl_down = false;   /* Ctrl/Shift 组合键状态（Ctrl+Shift = 中英切换） */
+    bool _shift_down = false;
+    static std::atomic<int> s_http_status;
+
     /* 键盘/IME */
     static PrgmMode* s_self;
 
@@ -617,6 +890,7 @@ private:
 };
 
 PrgmMode* PrgmMode::s_self = nullptr;
+std::atomic<int> PrgmMode::s_http_status{0};
 
 static std::shared_ptr<window::Window> prgm_create() {
     return std::make_shared<PrgmMode>();
