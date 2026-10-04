@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Memoria OS 焊接接线图 · WIRING-MAP v1.0</title>
+<style>
+:root{
+  --bg:#0d1117;--panel:#161b27;--panel2:#1c2333;--border:#2a3247;
+  --text:#e6e9f2;--sub:#8b93a7;--accent:#5b6cf7;
+  --c-3v3:#ff5d5d;--c-gnd:#9aa4b5;--c-5v:#ff9f43;
+  --c-lcd:#4dabf7;--c-tf:#74c0fc;--c-spi:#339af0;
+  --c-i2c:#b197fc;--c-joy:#69db7c;--c-i2s:#ffd43b;
+  --c-bat:#ffa8a8;--c-led:#f783ac;--c-mic:#63e6be;
+  --danger:#ff6b6b;--ok:#51cf66;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:"Segoe UI",system-ui,sans-serif;padding:24px;line-height:1.5}
+.wrap{max-width:1240px;margin:0 auto}
+h1{font-size:26px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+h1 .pill{font-size:12px;padding:4px 12px;border-radius:20px;background:rgba(91,108,247,.18);color:#aab4ff;border:1px solid rgba(91,108,247,.4)}
+.note{color:var(--sub);font-size:13px;margin:10px 0 20px}
+.note b{color:#ffd43b}
+h2{font-size:18px;margin:30px 0 12px;padding-left:10px;border-left:4px solid var(--accent)}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:18px}
+/* 图例 */
+.legend{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.chip{display:flex;align-items:center;gap:6px;font-size:12px;padding:5px 12px;border-radius:8px;background:var(--panel2);border:1px solid var(--border);cursor:pointer;transition:all .15s;user-select:none}
+.chip:hover{background:var(--panel)}
+.chip.on{border-color:var(--accent);background:rgba(91,108,247,.15)}
+.dot{width:10px;height:10px;border-radius:3px}
+/* SVG */
+svg{width:100%;height:auto;display:block}
+.wire{fill:none;stroke-width:2;opacity:.85;transition:all .15s}
+.wire.hot{stroke-width:4;opacity:1;filter:drop-shadow(0 0 4px currentColor)}
+.node rect{transition:all .15s}
+.node.hot rect{stroke:#fff;stroke-width:2}
+.gpbox{cursor:default}
+/* 模块卡 */
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:14px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px;transition:all .15s}
+.card.hot{border-color:var(--accent);background:var(--panel2)}
+.card h3{font-size:15px;margin-bottom:4px;display:flex;align-items:center;gap:8px}
+.card .ord{font-size:11px;color:#0d1117;background:var(--accent);border-radius:6px;padding:1px 8px;font-weight:700}
+.card .src{font-size:12px;color:var(--sub);margin-bottom:10px}
+.card table{width:100%;border-collapse:collapse;font-size:13px}
+.card td{padding:5px 8px;border-bottom:1px solid rgba(255,255,255,.06)}
+.card td:first-child{color:var(--sub);width:42%}
+.pin{display:inline-block;font-size:11px;font-weight:600;padding:1px 7px;border-radius:5px;margin:1px 2px;color:#0d1117}
+.warn{margin-top:10px;font-size:12px;color:#ffc9c9;background:rgba(255,107,107,.1);border:1px solid rgba(255,107,107,.3);border-radius:8px;padding:8px 10px}
+/* 自检/坑位 */
+.check{width:100%;border-collapse:collapse;font-size:13px}
+.check th,.check td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--border)}
+.check th{color:var(--sub);font-weight:600;font-size:12px}
+.stepn{display:inline-flex;width:24px;height:24px;border-radius:50%;background:var(--accent);color:#fff;align-items:center;justify-content:center;font-weight:700;font-size:12px}
+.redcards{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.redcard{background:rgba(255,107,107,.07);border:1px solid rgba(255,107,107,.35);border-radius:12px;padding:14px;font-size:13px}
+.redcard b{color:var(--danger)}
+.kbmat{font-family:Consolas,monospace;font-size:12.5px;background:#0a0e15;border:1px solid var(--border);border-radius:10px;padding:14px;overflow-x:auto;white-space:pre;line-height:1.7}
+.foot{margin-top:26px;color:var(--sub);font-size:12px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Memoria OS 焊接接线图 <span class="pill">WIRING-MAP v1.0 · 2026-10-04</span></h1>
+  <div class="note">
+    数据来源 <b>docs/WIRING.md</b>（冲突时以 components/memoria_drivers/include/drivers_config.hpp 为准）· 配套：BOM 采购单 / 洞洞板点位图.html / HARDWARE-DIMENSIONS v10<br>
+    用法：鼠标<b>悬停图例或模块卡</b>可高亮对应连线 · 核心板引脚以到手实物丝印为准（图为逻辑分组，非实体排位）
+  </div>
+
+  <h2>① 全机接线拓扑（悬停高亮）</h2>
+  <div class="panel">
+    <div class="legend" id="legend">
+      <span class="chip on" data-w="all">全部</span>
+      <span class="chip" data-w="p3">3.3V 电源</span>
+      <span class="chip" data-w="gnd">GND 共地</span>
+      <span class="chip" data-w="p5">5V 供电</span>
+      <span class="chip" data-w="spi">SPI 总线（屏+TF 共享）</span>
+      <span class="chip" data-w="lcd">屏专用脚</span>
+      <span class="chip" data-w="tf">TF 专用脚</span>
+      <span class="chip" data-w="i2c">I2C（键盘扩展）</span>
+      <span class="chip" data-w="joy">摇杆 ADC</span>
+      <span class="chip" data-w="i2s">I2S 音频</span>
+      <span class="chip" data-w="bat">电池采样</span>
+      <span class="chip" data-w="led">灯带</span>
+      <span class="chip" data-w="usb">USB 禁接</span>
+    </div>
+    <svg viewBox="0 0 1240 780" xmlns="http://www.w3.org/2000/svg">
+      <!-- 核心板 -->
+      <g class="node" data-w="core">
+        <rect x="520" y="40" width="200" height="700" rx="14" fill="#1c2333" stroke="#3d4bd8" stroke-width="2"/>
+        <text x="620" y="66" fill="#aab4ff" font-size="15" font-weight="700" text-anchor="middle">ESP32-S3 核心板</text>
+        <text x="620" y="84" fill="#8b93a7" font-size="10" text-anchor="middle">N16R8 · 直插焊盘（天线端朝上）</text>
+      </g>
+      <!-- 左排 GPIO -->
+      <g font-size="11" font-weight="600">
+        <g class="gpbox" data-w="p3"><rect x="530" y="100" width="80" height="24" rx="6" fill="rgba(255,93,93,.15)"/><text x="570" y="116" fill="#ff8787" text-anchor="middle">3V3</text></g>
+        <g class="gpbox" data-w="gnd"><rect x="530" y="132" width="80" height="24" rx="6" fill="rgba(154,164,181,.15)"/><text x="570" y="148" fill="#b6bdcc" text-anchor="middle">GND</text></g>
+        <g class="gpbox" data-w="i2c"><rect x="530" y="164" width="80" height="24" rx="6" fill="rgba(177,151,252,.15)"/><text x="570" y="180" fill="#d0bfff" text-anchor="middle">GPIO1 SDA</text></g>
+        <g class="gpbox" data-w="bat"><rect x="530" y="196" width="80" height="24" rx="6" fill="rgba(255,168,168,.15)"/><text x="570" y="212" fill="#ffc9c9" text-anchor="middle">GPIO4 BAT</text></g>
+        <g class="gpbox" data-w="joy"><rect x="530" y="228" width="80" height="24" rx="6" fill="rgba(105,219,124,.15)"/><text x="570" y="244" fill="#8ce99a" text-anchor="middle">GPIO5 VRy</text></g>
+        <g class="gpbox" data-w="i2c"><rect x="530" y="260" width="80" height="24" rx="6" fill="rgba(177,151,252,.15)"/><text x="570" y="276" fill="#d0bfff" text-anchor="middle">GPIO6 SCL</text></g>
+        <g class="gpbox" data-w="joy"><rect x="530" y="292" width="80" height="24" rx="6" fill="rgba(105,219,124,.15)"/><text x="570" y="308" fill="#8ce99a" text-anchor="middle">GPIO7 VRx</text></g>
+        <g class="gpbox" data-w="lcd"><rect x="530" y="324" width="80" height="24" rx="6" fill="rgba(77,171,247,.15)"/><text x="570" y="340" fill="#a5d8ff" text-anchor="middle">GPIO8 RST</text></g>
+        <g class="gpbox" data-w="lcd"><rect x="530" y="356" width="80" height="24" rx="6" fill="rgba(77,171,247,.15)"/><text x="570" y="372" fill="#a5d8ff" text-anchor="middle">GPIO9 DC</text></g>
+        <g class="gpbox" data-w="lcd"><rect x="530" y="388" width="80" height="24" rx="6" fill="rgba(77,171,247,.15)"/><text x="570" y="404" fill="#a5d8ff" text-anchor="middle">GPIO10 CS</text></g>
+        <g class="gpbox" data-w="spi"><rect x="530" y="420" width="80" height="24" rx="6" fill="rgba(51,154,240,.15)"/><text x="570" y="436" fill="#74c0fc" text-anchor="middle">GPIO11 MOSI</text></g>
+        <g class="gpbox" data-w="spi"><rect x="530" y="452" width="80" height="24" rx="6" fill="rgba(51,154,240,.15)"/><text x="570" y="468" fill="#74c0fc" text-anchor="middle">GPIO12 SCLK</text></g>
+        <g class="gpbox" data-w="spi"><rect x="530" y="484" width="80" height="24" rx="6" fill="rgba(51,154,240,.15)"/><text x="570" y="500" fill="#74c0fc" text-anchor="middle">GPIO13 MISO</text></g>
+        <g class="gpbox" data-w="lcd"><rect x="530" y="516" width="80" height="24" rx="6" fill="rgba(77,171,247,.15)"/><text x="570" y="532" fill="#a5d8ff" text-anchor="middle">GPIO14 背光</text></g>
+        <g class="gpbox" data-w="i2s"><rect x="530" y="548" width="80" height="24" rx="6" fill="rgba(255,212,59,.15)"/><text x="570" y="564" fill="#ffe066" text-anchor="middle">GPIO15 DIN</text></g>
+        <g class="gpbox" data-w="i2s"><rect x="530" y="580" width="80" height="24" rx="6" fill="rgba(255,212,59,.15)"/><text x="570" y="596" fill="#ffe066" text-anchor="middle">GPIO16 麦SD</text></g>
+        <g class="gpbox" data-w="tf"><rect x="530" y="612" width="80" height="24" rx="6" fill="rgba(116,192,252,.15)"/><text x="570" y="628" fill="#91caff" text-anchor="middle">GPIO17 TFCS</text></g>
+        <g class="gpbox" data-w="i2s"><rect x="530" y="644" width="80" height="24" rx="6" fill="rgba(255,212,59,.15)"/><text x="570" y="660" fill="#ffe066" text-anchor="middle">GPIO18 BCLK</text></g>
+        <g class="gpbox" data-w="i2s"><rect x="530" y="676" width="80" height="24" rx="6" fill="rgba(255,212,59,.15)"/><text x="570" y="692" fill="#ffe066" text-anchor="middle">GPIO21 LRC</text></g>
+        <!-- 右排 -->
+        <g class="gpbox" data-w="joy"><rect x="630" y="228" width="80" height="24" rx="6" fill="rgba(105,219,124,.15)"/><text x="670" y="244" fill="#8ce99a" text-anchor="middle">GPIO38 SW</text></g>
+        <g class="gpbox" data-w="led"><rect x="630" y="260" width="80" height="24" rx="6" fill="rgba(247,131,172,.15)"/><text x="670" y="276" fill="#fcc2d7" text-anchor="middle">GPIO46 灯带</text></g>
+        <g class="gpbox" data-w="usb"><rect x="630" y="292" width="80" height="24" rx="6" fill="rgba(255,107,107,.2)"/><text x="670" y="308" fill="#ff8787" text-anchor="middle">GPIO19/20</text></g>
+        <g class="gpbox" data-w="usb"><rect x="630" y="324" width="80" height="24" rx="6" fill="rgba(255,107,107,.2)"/><text x="670" y="340" fill="#ff8787" text-anchor="middle">GPIO33~37</text></g>
+        <g class="gpbox" data-w="p5"><rect x="630" y="356" width="80" height="24" rx="6" fill="rgba(255,159,67,.15)"/><text x="670" y="372" fill="#ffc078" text-anchor="middle">5V(VIN)</text></g>
+        <g class="gpbox" data-w="gnd"><rect x="630" y="388" width="80" height="24" rx="6" fill="rgba(154,164,181,.15)"/><text x="670" y="404" fill="#b6bdcc" text-anchor="middle">GND</text></g>
+      </g>
+      <!-- 屏 -->
+      <g class="node" data-w="lcd">
+        <rect x="60" y="290" width="200" height="190" rx="14" fill="#161b27" stroke="#4dabf7"/>
+        <text x="160" y="316" fill="#4dabf7" font-size="14" font-weight="700" text-anchor="middle">屏幕 ILI9488 3.5"</text>
+        <text x="160" y="334" fill="#8b93a7" font-size="10" text-anchor="middle">SPI 屏 · VCC=3.3V</text>
+        <text x="80" y="362" fill="#a5d8ff" font-size="11">CS→10 · RST→8</text>
+        <text x="80" y="382" fill="#a5d8ff" font-size="11">DC→9 · 背光→14</text>
+        <text x="80" y="402" fill="#74c0fc" font-size="11">SDI→11 · SCK→12</text>
+        <text x="80" y="422" fill="#74c0fc" font-size="11">SDO→13</text>
+        <text x="80" y="450" fill="#ff8787" font-size="11">VCC→3V3 · GND→共地</text>
+      </g>
+      <!-- TF -->
+      <g class="node" data-w="tf">
+        <rect x="60" y="540" width="200" height="150" rx="14" fill="#161b27" stroke="#74c0fc"/>
+        <text x="160" y="566" fill="#74c0fc" font-size="14" font-weight="700" text-anchor="middle">TF 卡模块</text>
+        <text x="160" y="584" fill="#8b93a7" font-size="10" text-anchor="middle">FAT32 · 卡内拷 sdcard/ 全部</text>
+        <text x="80" y="610" fill="#91caff" font-size="11">CS→17</text>
+        <text x="80" y="630" fill="#74c0fc" font-size="11">MOSI→11 · SCK→12 · MISO→13</text>
+        <text x="80" y="658" fill="#ff8787" font-size="11">VCC→3V3 · GND→共地</text>
+      </g>
+      <!-- 摇杆 -->
+      <g class="node" data-w="joy">
+        <rect x="980" y="120" width="220" height="140" rx="14" fill="#161b27" stroke="#69db7c"/>
+        <text x="1090" y="146" fill="#69db7c" font-size="14" font-weight="700" text-anchor="middle">摇杆 KY-023</text>
+        <text x="1090" y="164" fill="#8b93a7" font-size="10" text-anchor="middle">杆帽穿顶面板 · 必接 3.3V！</text>
+        <text x="1000" y="190" fill="#8ce99a" font-size="11">VRx→7 · VRy→5 · SW→38</text>
+        <text x="1000" y="212" fill="#ff8787" font-size="11">VCC→3V3（5V 超 ADC 量程）</text>
+        <text x="1000" y="232" fill="#b6bdcc" font-size="11">GND→共地</text>
+      </g>
+      <!-- MCP -->
+      <g class="node" data-w="i2c">
+        <rect x="980" y="300" width="220" height="200" rx="14" fill="#161b27" stroke="#b197fc"/>
+        <text x="1090" y="326" fill="#b197fc" font-size="14" font-weight="700" text-anchor="middle">MCP23017 ×2（键盘扫描）</text>
+        <text x="1000" y="352" fill="#d0bfff" font-size="11">#1(0x20)：SDA→1 · SCL→6</text>
+        <text x="1000" y="372" fill="#d0bfff" font-size="11">#2(0x21)：与#1 并联同线</text>
+        <text x="1000" y="398" fill="#fcc2d7" font-size="11">#1 A0A1A2 全接 GND</text>
+        <text x="1000" y="418" fill="#fcc2d7" font-size="11">#2 A0→3V3（A1A2→GND）</text>
+        <text x="1000" y="444" fill="#8b93a7" font-size="11">RESET 各→3V3 · GPA/GPB→行列</text>
+        <text x="1000" y="470" fill="#b6bdcc" font-size="11">线长&gt;10cm：SDA/SCL 加 4.7K 上拉</text>
+      </g>
+      <!-- 功放 -->
+      <g class="node" data-w="i2s">
+        <rect x="980" y="540" width="220" height="130" rx="14" fill="#161b27" stroke="#ffd43b"/>
+        <text x="1090" y="566" fill="#ffd43b" font-size="14" font-weight="700" text-anchor="middle">功放 MAX98357A + 喇叭</text>
+        <text x="1000" y="592" fill="#ffe066" font-size="11">BCLK→18 · LRC→21 · DIN→15</text>
+        <text x="1000" y="614" fill="#ffe066" font-size="11">麦克风 INMP441：SD→16</text>
+        <text x="1000" y="636" fill="#8b93a7" font-size="11">麦时钟复用 18/21 · GAIN 悬空=9dB</text>
+        <text x="1000" y="656" fill="#ff8787" font-size="11">VIN→3V3 · 喇叭 4Ω3W 接 +/-</text>
+      </g>
+      <!-- 电源链 -->
+      <g class="node" data-w="p5">
+        <rect x="60" y="60" width="380" height="170" rx="14" fill="#161b27" stroke="#ff9f43"/>
+        <text x="250" y="86" fill="#ff9f43" font-size="14" font-weight="700" text-anchor="middle">电源链（先焊这条！）</text>
+        <text x="80" y="114" fill="#ffc078" font-size="11.5">电池(3.7V) 红→TP4056 B+ · 黑→B−</text>
+        <text x="80" y="138" fill="#ffc078" font-size="11.5">TP4056 OUT+ → 拨动开关 SS12D00 → 核心板 5V</text>
+        <text x="80" y="162" fill="#ffc078" font-size="11.5">TP4056 OUT− → 核心板 GND（共地点）</text>
+        <text x="80" y="190" fill="#ff8787" font-size="11.5">USB-C（TP4056 自带）伸出侧壁 = 充电口</text>
+        <text x="80" y="212" fill="#b6bdcc" font-size="10.5">所有模块 VCC 一律 3.3V（除 TP4056 本体）</text>
+      </g>
+      <!-- 电池采样 -->
+      <g class="node" data-w="bat">
+        <rect x="60" y="100" width="0" height="0"/>
+      </g>
+      <!-- 连线：左出 -->
+      <path class="wire" data-w="lcd" stroke="#4dabf7" d="M 530 336 C 420 336 380 350 260 350"/>
+      <path class="wire" data-w="lcd" stroke="#4dabf7" d="M 530 368 C 420 368 380 370 260 370"/>
+      <path class="wire" data-w="lcd" stroke="#4dabf7" d="M 530 400 C 420 400 380 390 260 390"/>
+      <path class="wire" data-w="lcd" stroke="#4dabf7" d="M 530 528 C 430 528 390 410 260 410"/>
+      <path class="wire" data-w="spi" stroke="#339af0" d="M 530 432 C 430 432 380 400 260 400"/>
+      <path class="wire" data-w="spi" stroke="#339af0" d="M 530 464 C 430 464 380 420 260 420"/>
+      <path class="wire" data-w="spi" stroke="#339af0" d="M 530 496 C 430 496 380 640 260 640"/>
+      <path class="wire" data-w="tf"  stroke="#74c0fc" d="M 530 624 C 440 624 400 610 260 610"/>
+      <path class="wire" data-w="p5"  stroke="#ff9f43" d="M 440 120 C 480 120 490 368 630 368"/>
+      <path class="wire" data-w="gnd" stroke="#9aa4b5" d="M 440 215 C 470 215 480 400 630 400"/>
+      <path class="wire" data-w="p3"  stroke="#ff5d5d" d="M 570 112 C 560 100 570 96 570 100" opacity=".6"/>
+      <!-- 连线：右出 -->
+      <path class="wire" data-w="joy" stroke="#69db7c" d="M 710 240 C 800 240 880 175 980 175"/>
+      <path class="wire" data-w="joy" stroke="#69db7c" d="M 710 304 C 800 304 880 195 980 195"/>
+      <path class="wire" data-w="joy" stroke="#69db7c" d="M 710 240 C 820 240 900 220 980 220"/>
+      <path class="wire" data-w="i2c" stroke="#b197fc" d="M 710 176 C 810 176 880 340 980 340"/>
+      <path class="wire" data-w="i2c" stroke="#b197fc" d="M 710 272 C 810 272 880 360 980 360"/>
+      <path class="wire" data-w="led" stroke="#f783ac" d="M 710 272 C 790 272 850 300 930 300"/>
+      <path class="wire" data-w="i2s" stroke="#ffd43b" d="M 710 560 C 810 560 880 585 980 585"/>
+      <path class="wire" data-w="i2s" stroke="#ffd43b" d="M 710 656 C 800 656 880 600 980 600"/>
+      <path class="wire" data-w="i2s" stroke="#ffd43b" d="M 710 688 C 800 688 880 620 980 620"/>
+      <path class="wire" data-w="p3"  stroke="#ff5d5d" d="M 900 690 C 900 730 700 750 570 112" opacity=".5"/>
+      <text x="1160" y="740" fill="#8b93a7" font-size="10">* 3V3/GND 主干线各模块就近并接共地星点</text>
+    </svg>
+  </div>
+
+  <h2>② 电池电压采样（GPIO4 分压，独立小电路）</h2>
+  <div class="panel">
+    <svg viewBox="0 0 900 170" xmlns="http://www.w3.org/2000/svg">
+      <g class="node" data-w="bat">
+        <text x="30" y="40" fill="#ffa8a8" font-size="13" font-weight="700">电池+</text>
+        <line x1="90" y1="35" x2="200" y2="35" stroke="#ffa8a8" stroke-width="2"/>
+        <rect x="200" y="20" width="120" height="30" rx="8" fill="rgba(255,168,168,.1)" stroke="#ffa8a8"/>
+        <text x="260" y="40" fill="#ffc9c9" font-size="12" text-anchor="middle">R1 100K</text>
+        <line x1="320" y1="35" x2="440" y2="35" stroke="#ffa8a8" stroke-width="2"/>
+        <circle cx="440" cy="35" r="5" fill="#ffc9c9"/>
+        <text x="440" y="18" fill="#ffc9c9" font-size="12" text-anchor="middle" font-weight="700">采样节点 → GPIO4</text>
+        <line x1="440" y1="35" x2="560" y2="35" stroke="#ffa8a8" stroke-width="2"/>
+        <rect x="560" y="20" width="120" height="30" rx="8" fill="rgba(255,168,168,.1)" stroke="#ffa8a8"/>
+        <text x="620" y="40" fill="#ffc9c9" font-size="12" text-anchor="middle">R2 100K</text>
+        <line x1="680" y1="35" x2="780" y2="35" stroke="#9aa4b5" stroke-width="2"/>
+        <text x="800" y="40" fill="#b6bdcc" font-size="13">GND</text>
+        <line x1="440" y1="35" x2="440" y2="95" stroke="#ffa8a8" stroke-width="2"/>
+        <line x1="440" y1="95" x2="400" y2="95" stroke="#ffa8a8" stroke-width="2"/>
+        <rect x="300" y="80" width="100" height="30" rx="8" fill="rgba(255,168,168,.1)" stroke="#ffa8a8"/>
+        <text x="350" y="100" fill="#ffc9c9" font-size="12" text-anchor="middle">100nF</text>
+        <line x1="300" y1="95" x2="260" y2="95" stroke="#9aa4b5" stroke-width="2"/>
+        <text x="230" y="100" fill="#b6bdcc" font-size="13">GND</text>
+        <text x="30" y="150" fill="#8b93a7" font-size="11.5">⚠ 不并 100nF → ADC 读数偏低（电量永远显示不准）；R1=R2=100K → GPIO4 最高采到 1.85V，安全</text>
+      </g>
+    </svg>
+  </div>
+
+  <h2>③ 分模块接线卡（按焊接顺序）</h2>
+  <div class="cards" id="cards">
+    <div class="card" data-w="p5 p3 gnd"><h3><span class="ord">1</span>电源链</h3><div class="src">WIRING §2.1</div>
+      <table>
+        <tr><td>电池红 / 黑</td><td>TP4056 B+ / B−</td></tr>
+        <tr><td>TP4056 OUT+</td><td>拨动开关 → 核心板 5V</td></tr>
+        <tr><td>TP4056 OUT−</td><td>核心板 GND（共地）</td></tr>
+        <tr><td>USB-C</td><td>TP4056 自带，伸出侧壁充电</td></tr>
+      </table>
+      <div class="warn">所有模块 VCC 一律 3.3V——除 TP4056 本体</div>
+    </div>
+    <div class="card" data-w="bat"><h3><span class="ord">2</span>电池采样分压</h3><div class="src">WIRING §2.1</div>
+      <table>
+        <tr><td>电池+ → R1 100K</td><td>节点</td></tr>
+        <tr><td>节点 → R2 100K</td><td>GND</td></tr>
+        <tr><td>节点 → 100nF → GND</td><td>必并！</td></tr>
+        <tr><td>节点</td><td><span class="pin" style="background:#ffa8a8">GPIO4</span></td></tr>
+      </table>
+    </div>
+    <div class="card" data-w="lcd spi"><h3><span class="ord">3</span>屏幕 ILI9488 3.5"</h3><div class="src">WIRING §2.2</div>
+      <table>
+        <tr><td>VCC / GND</td><td><span class="pin" style="background:#ff8787">3V3</span> / <span class="pin" style="background:#9aa4b5">GND</span></td></tr>
+        <tr><td>CS / RESET / DC</td><td><span class="pin" style="background:#a5d8ff">10</span> <span class="pin" style="background:#a5d8ff">8</span> <span class="pin" style="background:#a5d8ff">9</span></td></tr>
+        <tr><td>SDI / SCK / SDO</td><td><span class="pin" style="background:#74c0fc">11</span> <span class="pin" style="background:#74c0fc">12</span> <span class="pin" style="background:#74c0fc">13</span></td></tr>
+        <tr><td>LED 背光</td><td><span class="pin" style="background:#a5d8ff">14</span></td></tr>
+      </table>
+    </div>
+    <div class="card" data-w="tf spi"><h3><span class="ord">4</span>TF 卡模块</h3><div class="src">WIRING §2.3 · 卡先拷 sdcard/ 全部内容</div>
+      <table>
+        <tr><td>VCC / GND</td><td><span class="pin" style="background:#ff8787">3V3</span> / <span class="pin" style="background:#9aa4b5">GND</span></td></tr>
+        <tr><td>CS</td><td><span class="pin" style="background:#91caff">17</span></td></tr>
+        <tr><td>MOSI / SCK / MISO</td><td><span class="pin" style="background:#74c0fc">11</span> <span class="pin" style="background:#74c0fc">12</span> <span class="pin" style="background:#74c0fc">13</span>（与屏同总线）</td></tr>
+      </table>
+    </div>
+    <div class="card" data-w="joy"><h3><span class="ord">5</span>摇杆 KY-023</h3><div class="src">WIRING §2.4 · 杆帽穿顶面板</div>
+      <table>
+        <tr><td>VCC / GND</td><td><span class="pin" style="background:#ff8787">3V3 勿接5V</span> / <span class="pin" style="background:#9aa4b5">GND</span></td></tr>
+        <tr><td>VRx / VRy / SW</td><td><span class="pin" style="background:#8ce99a">7</span> <span class="pin" style="background:#8ce99a">5</span> <span class="pin" style="background:#8ce99a">38</span></td></tr>
+      </table>
+      <div class="warn">5V 供电 → ADC 超量程、中位漂移</div>
+    </div>
+    <div class="card" data-w="i2s"><h3><span class="ord">6</span>功放 MAX98357A + 麦克风</h3><div class="src">WIRING §2.5 · 麦 SCK/WS 复用功放时钟</div>
+      <table>
+        <tr><td>VIN / GND</td><td><span class="pin" style="background:#ff8787">3V3</span> / <span class="pin" style="background:#9aa4b5">GND</span></td></tr>
+        <tr><td>BCLK / LRC / DIN</td><td><span class="pin" style="background:#ffe066">18</span> <span class="pin" style="background:#ffe066">21</span> <span class="pin" style="background:#ffe066">15</span></td></tr>
+        <tr><td>麦 INMP441 SD</td><td><span class="pin" style="background:#63e6be">16</span></td></tr>
+        <tr><td>GAIN</td><td>悬空=9dB（嫌声小接 GND=12dB）</td></tr>
+        <tr><td>喇叭 4Ω 3W</td><td>模块 +/- 输出</td></tr>
+      </table>
+      <div class="warn">焊完无声 → SD 脚串 100K 接 3.3V 强制开声</div>
+    </div>
+    <div class="card" data-w="i2c"><h3><span class="ord">7</span>键盘扫描 MCP23017 ×2</h3><div class="src">WIRING §2.6</div>
+      <table>
+        <tr><td>SDA / SCL（并联）</td><td><span class="pin" style="background:#d0bfff">1</span> <span class="pin" style="background:#d0bfff">6</span></td></tr>
+        <tr><td>#1 A0 A1 A2</td><td>全接 GND（地址 0x20）</td></tr>
+        <tr><td>#2 A0 / A1 A2</td><td>3V3 / GND（地址 0x21）</td></tr>
+        <tr><td>RESET ×2</td><td>3V3</td></tr>
+        <tr><td>#1 GPA0~5</td><td>键盘行 R0~R5</td></tr>
+        <tr><td>#1 GPB0~3</td><td>列 C0~C3</td></tr>
+        <tr><td>#2 GPA0~5</td><td>列 C4~C9</td></tr>
+      </table>
+      <div class="warn">#2 A0 忘接 3V3 → 两片同地址，列 C4~C9 全乱</div>
+    </div>
+    <div class="card" data-w="led"><h3><span class="ord">8</span>键盘灯带 WS2812 ×2（12 珠）</h3><div class="src">WIRING §2.8</div>
+      <table>
+        <tr><td>GPIO46 → 330Ω → 灯带① DIN</td><td><span class="pin" style="background:#fcc2d7">46</span></td></tr>
+        <tr><td>灯带① DOUT → 灯带② DIN</td><td>串接</td></tr>
+        <tr><td>VCC / GND</td><td>3V3 / 共地</td></tr>
+      </table>
+      <div class="warn">DIN 箭头必须朝进数据侧，接反整条不亮</div>
+    </div>
+  </div>
+
+  <h2>④ 键盘矩阵 6×10（60 键）</h2>
+  <div class="panel">
+    <div class="kbmat">行    C0    C1    C2    C3    C4    C5    C6    C7    C8    C9
+R1   ON    F1    F2    F3    F4    F5    F6    F7    灯带   ⌫
+R2   1     2     3     4     5     6     7     8     9     0
+R3   q     w     e     r     t     y     u     i     o     p
+R4   a     s     d     f     g     h     j     k     l     ;
+R5   ⇧     z     x     c     v     b     n     m     ,     .
+R6   CAP   CTRL  VOL−  VOL+  空格   ←     →     ↓     ↑     ⏎</div>
+    <div class="note" style="margin-top:12px">
+      行线：每行 10 颗键<b>左脚并联</b> → R0~R5 → <b>MCP#1 GPA0~5</b> ｜ 列线：每列 6 颗键<b>右脚并联</b> → C0~C3 → <b>MCP#1 GPB0~3</b>，C4~C9 → <b>MCP#2 GPA0~5</b><br>
+      二极管 A 案（不焊，可先开机）：60 键直连 ｜ <b>B 案（推荐）</b>：每键串 1N4148——键右脚→阳极，阴极→列线（电流方向 列→行 导通）｜ 两案固件通用
+    </div>
+  </div>
+
+  <h2>⑤ 焊完上电自检（8 步）</h2>
+  <div class="panel">
+    <table class="check">
+      <tr><th>步</th><th>动作</th><th>预期</th></tr>
+      <tr><td><span class="stepn">1</span></td><td>拨开关前插 USB 充电线</td><td>TP4056 红灯亮 = 充电回路 OK</td></tr>
+      <tr><td><span class="stepn">2</span></td><td>拨开关上电</td><td>背光亮、桌面出现，<b style="color:#51cf66">不无限重启</b></td></tr>
+      <tr><td><span class="stepn">3</span></td><td>看 A 桌面右上角电池图标</td><td>百分比 ≈ 实测电压（永远 0% = 采样线错）</td></tr>
+      <tr><td><span class="stepn">4</span></td><td>拨摇杆</td><td>焦点在桌面格子间移动（X/Y 反了互换 VRx/VRy）</td></tr>
+      <tr><td><span class="stepn">5</span></td><td>按任意键</td><td>终端出字符；F1~F7 进对应模式</td></tr>
+      <tr><td><span class="stepn">6</span></td><td>按"灯带"键</td><td>灯带亮/换档（全黑 = 查 330Ω 与 DIN 方向）</td></tr>
+      <tr><td><span class="stepn">7</span></td><td>进 MUSIC 播 sample/ 下 mp3</td><td>出声 = I2S 链 OK</td></tr>
+      <tr><td><span class="stepn">8</span></td><td>拔 TF 再插回</td><td>字库加载失败报错 = TF 座接触不良，重焊</td></tr>
+    </table>
+  </div>
+
+  <h2>⑥ 红牌坑位（焊前看一遍，焊完出问题先查这里）</h2>
+  <div class="redcards">
+    <div class="redcard"><b>GPIO33~37 绝对不接东西</b>——Octal PSRAM 内部占用，接了直接崩机</div>
+    <div class="redcard"><b>摇杆 VCC 必须 3.3V</b>——5V 供电 ADC 超量程，中位值漂移</div>
+    <div class="redcard"><b>MCP #2 A0 忘接 3.3V</b>——两颗芯片同地址 0x20，列 C4~C9 全乱</div>
+    <div class="redcard"><b>二极管方向焊反（B 案）</b>——该键永远无反应；排查用自检第 5 步逐键过</div>
+    <div class="redcard"><b>灯带 DIN 方向接反</b>——整条不亮；箭头朝数据进入侧</div>
+    <div class="redcard"><b>GPIO19/20 不接外设</b>——USB D−/D+ 专用；天线端 15×5mm 周边 5mm 禁金属禁铜</div>
+  </div>
+
+  <div class="foot">Memoria OS · WIRING-MAP v1.0 · 生成于 2026-10-04 · 数据源 docs/WIRING.md（引脚唯一来源 drivers_config.hpp）· [GLM] 制作</div>
+</div>
+
+<script>
+/* 图例/卡片悬停 → 高亮同类连线+节点+卡片 */
+var chips = document.querySelectorAll('.chip');
+function setW(k){
+  chips.forEach(function(c){ c.classList.toggle('on', k==='all' ? c.dataset.w==='all' : c.dataset.w===k); });
+  document.querySelectorAll('.wire,.node,.card').forEach(function(el){
+    var ws = (el.dataset.w||'').split(' ');
+    el.classList.toggle('hot', k!=='all' && ws.indexOf(k)>=0);
+  });
+}
+chips.forEach(function(c){
+  c.addEventListener('mouseenter', function(){ setW(c.dataset.w); });
+  c.addEventListener('mouseleave', function(){ setW('all'); });
+  c.addEventListener('click', function(){ setW(c.dataset.w); });
+});
+document.querySelectorAll('.card,.node').forEach(function(el){
+  el.addEventListener('mouseenter', function(){
+    var ws=(el.dataset.w||'').split(' ');
+    document.querySelectorAll('.wire').forEach(function(w){
+      var s=(w.dataset.w||'').split(' ');
+      w.classList.toggle('hot', ws.some(function(x){return s.indexOf(x)>=0;}));
+    });
+  });
+  el.addEventListener('mouseleave', function(){
+    document.querySelectorAll('.wire').forEach(function(w){ w.classList.remove('hot'); });
+  });
+});
+</script>
+</body>
+</html>
