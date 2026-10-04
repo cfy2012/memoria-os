@@ -61,7 +61,9 @@ idf.py build
 idf.py -p COMx flash monitor
 ```
 
-构建基线保持全绿，编译选项启用 `-Werror`，当前零警告。固件二进制大小为 `0x1DD130`（1,954,096 字节，约 1.9 MB）。固件自研源码共 100 个文件（50 个 .cpp 实现文件，其余为 .h/.hpp 头文件；不含 `third_party/` 下的第三方解码库）。
+构建基线保持全绿，编译选项启用 `-Werror`，当前零警告。固件二进制大小为 `0x1E0560`（1,967,456 字节，约 1.9 MB）。固件自研源码共 100 个文件（50 个 .cpp 实现文件，其余为 .h/.hpp 头文件；不含 `third_party/` 下的第三方解码库）。
+
+**v1.1.0 新增**：BASIC v1.2 语句集（字符串变量、httpget/httpup/httpdl、record/play、wifi 托管 wifistat）、拼音输入法（F1~F4 选字 / Ctrl+Shift 中英切换 / ime_cn 环境变量）、系统设置网络管理页（WiFi 扫描连接 / 热点 / 蓝牙）、$ 字符串原生中文（UTF-8 存储，len 按字数）。掌机应用见 `sdcard/scripts/chat.bas`（chat 聊天 App，含语音收发），拼音码表见 `sdcard/ime/pinyin.bin`。
 
 **分区表**（`partitions.csv`）：
 
