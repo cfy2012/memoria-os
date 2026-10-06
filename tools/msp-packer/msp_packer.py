@@ -226,6 +226,8 @@ def run_gui():
 
 
 if __name__ == "__main__":
+    if sys.stdout is None:                     # PyInstaller --noconsole 无控制台
+        sys.stdout = open(os.devnull, "w", encoding="utf-8")
     if "--selftest" in sys.argv:
         sys.exit(selftest())
     run_gui()
