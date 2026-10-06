@@ -54,16 +54,20 @@ esp_err_t Power::init() {
         .flags = { .output_invert = 0 },
         .deconfigure = false,
     };
+    /* BOD 错峰：boot 期背光全灭。WiFi phy 上电校准是全 boot 最大电流峰
+     * （160/240MHz 均实证复位循环，串口 E BOD 日志），半亮 80 仍会跌压，
+     * 改为 0：由 wifi_manager 延迟任务在 phy 校准稳定后统一拉亮。 */
+    ccfg.duty = 0;
     ledc_channel_config(&ccfg);
 
-    _backlight = 255;
+    _backlight = 0;
     _last_activity_ms = (esp_timer_get_time() / 1000);
 
     BaseType_t ok = xTaskCreate(_power_task_c, "power", 2048, this, 2, nullptr);
     if (ok != pdPASS) return ESP_ERR_NO_MEM;
 
     _inited = true;
-    ESP_LOGI(TAG, "LEDC PWM OK. GPIO%d backlight duty=255.", LCD_BLK_GPIO);
+    ESP_LOGI(TAG, "LEDC PWM OK. GPIO%d duty=0 (boot, wifi task raises to 255).", LCD_BLK_GPIO);
     return ESP_OK;
 }
 
@@ -83,8 +87,10 @@ void Power::touch_event() {
 }
 
 uint32_t Power::idle_sec() const {
+    /* 修：原实现返回毫秒差却被 _power_task_c 当秒与 _idle_timeout_sec 比较，
+     * boot 后 ~1.4s 即满足"idle>60s"→ 背光灭（2916ms 灭屏实录）。 */
     uint32_t now = static_cast<uint32_t>(esp_timer_get_time() / 1000);
-    return now - _last_activity_ms;
+    return (now - _last_activity_ms) / 1000;
 }
 
 void Power::deep_sleep() {

@@ -3,7 +3,7 @@
  * @brief 固件更新检查与安装（版本清单 + OTA 触发）
  *
  * 清单来源：软件源镜像同目录下的 firmware/version.json：
- *   { "version": "1.1.0", "url": "https://…/memoria-os.bin",
+ *   { "version": "1.2.0", "url": "https://…/memoria-os.bin",
  *     "major": false, "changelog": "修复 xxx" }
  * major=true 表示大版本（可能包含文件系统/数据布局变化）：
  * OTA 仍可刷固件，但若涉及存储结构变更需整包重刷（TF 卡数据不受影响）。

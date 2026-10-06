@@ -5,6 +5,7 @@
 
 #include "mode_manager.hpp"
 #include "desktop_manager.hpp"
+#include "app_mode.hpp"
 #include "ili9341.hpp"
 
 extern "C" {
@@ -82,6 +83,16 @@ void ModeManager::back_to_menu() {
     if (_launcher) wm->push_top(_launcher);
 }
 
+bool ModeManager::enter_app(const std::string& bas_path) {
+    auto* wm = window::WindowManager::instance();
+    if (_current) { wm->pop_top(); _current.reset(); }
+    _current = std::make_shared<AppRunWindow>(bas_path);
+    _current->set_rect({0, 16, static_cast<int16_t>(SCREEN_W), static_cast<int16_t>(SCREEN_H - 16)});
+    wm->push_top(_current);
+    ESP_LOGI(TAG, "enter app '%s'", bas_path.c_str());
+    return true;
+}
+
 bool ModeManager::dispatch_key(uint16_t key, bool pressed) {
     if (!_current || _current == _launcher) return false;
     /* _current 只会是 ModeWindow 子类（enter() 时由 d->create() 创建） */
@@ -101,6 +112,13 @@ LauncherWindow::LauncherWindow() {
 void LauncherWindow::on_render() {
     auto* ui = window::UIRenderer::instance();
     auto* dm = DesktopManager::instance();
+
+    /* APP 直启：周期扫描 TF 卡 .bas 自动上桌面（首帧 + 每 100 帧 ≈2s） */
+    {
+        static uint32_t s_frame = 0;
+        if ((s_frame++ % 100) == 0) dm->scan_bas_apps();
+    }
+
     ui->fill_rect({0, 16, static_cast<int16_t>(SCREEN_W), static_cast<int16_t>(SCREEN_H - 16)}, COLOR_BLACK);
 
     const bool edit = dm->is_edit();
@@ -114,11 +132,13 @@ void LauncherWindow::on_render() {
 
     auto* mm = ModeManager::instance();
     const auto& cells = dm->cells();
+    if (cells.empty()) return; /* 桌面未铺保底时拒绝越界读（双保险） */
     for (int r = 0; r < ROWS; r++) {
         for (int c = 0; c < COLS; c++) {
             int idx = r * COLS + c;
             int x = pad + c * (cell_w + gap);
             int y = 16 + pad + r * (cell_h + gap);
+            if (idx >= (int)cells.size()) continue;
             const Cell& cell = cells[idx];
 
             window::Rect rc{static_cast<int16_t>(x), static_cast<int16_t>(y),
@@ -139,6 +159,27 @@ void LauncherWindow::on_render() {
                               name, COLOR_BLACK);
                 char num[8]; snprintf(num, sizeof(num), "%02d", idx + 1);
                 ui->draw_text(x + 2, y + 1, num, COLOR_BLACK);
+            } else if (cell.type == CellType::BasApp) {
+                /* BASIC APP：文件名哈希取色瓷砖，名字去 .bas */
+                uint32_t hsh = 2166136261u;
+                for (char ch : cell.app_id) { hsh ^= (uint8_t)ch; hsh *= 16777619u; }
+                static const uint16_t kPal[8] = {
+                    rgb565(59, 130, 246),  rgb565(16, 185, 129), rgb565(245, 158, 11),
+                    rgb565(239, 68, 68),   rgb565(139, 92, 246), rgb565(236, 72, 153),
+                    rgb565(20, 184, 166),  rgb565(132, 204, 22),
+                };
+                uint16_t color = kPal[(hsh >> 8) & 7];
+                ui->fill_rect(rc, color);
+                ui->fill_rect({static_cast<int16_t>(x), static_cast<int16_t>(y),
+                               static_cast<int16_t>(cell_w), 3}, COLOR_WHITE);
+                std::string name = cell.app_id;
+                if (name.size() > 4 && name.compare(name.size() - 4, 4, ".bas") == 0)
+                    name = name.substr(0, name.size() - 4);
+                int tw = window::UIRenderer::text_width_utf8(name);
+                ui->draw_text(x + (cell_w - tw) / 2, y + (cell_h - window::UIRenderer::FONT_H) / 2 - 3,
+                              name, COLOR_BLACK);
+                char num2[8]; snprintf(num2, sizeof(num2), "%02d", idx + 1);
+                ui->draw_text(x + 2, y + 1, num2, COLOR_BLACK);
             } else if (cell.type == CellType::Folder) {
                 ui->fill_rect(rc, rgb565(250, 204, 21));
                 ui->fill_rect({static_cast<int16_t>(x), static_cast<int16_t>(y),
@@ -199,7 +240,7 @@ bool LauncherWindow::on_nav(const window::NavInput& ni) {
         const Cell& cell = cells[_sel];
 
         if (edit) {
-            if (cell.type == CellType::App) {
+            if (cell.type == CellType::App || cell.type == CellType::BasApp) {
                 if (dm->picked() < 0) dm->move_pick(_sel);
                 else dm->move_drop(_sel);
             } else if (cell.type == CellType::Folder) {
@@ -215,6 +256,9 @@ bool LauncherWindow::on_nav(const window::NavInput& ni) {
         if (cell.type == CellType::App) {
             int mi = mm->index_of(cell.app_id.c_str());
             if (mi >= 0) mm->enter(mi);
+        } else if (cell.type == CellType::BasApp) {
+            /* APP 直启：桌面图标直达，跳过 PRGM（用户拍板 2026-10-06） */
+            mm->enter_app("/mem_fat/scripts/" + cell.app_id);
         } else if (cell.type == CellType::Folder) {
             dm->enter_folder(_sel);
         }

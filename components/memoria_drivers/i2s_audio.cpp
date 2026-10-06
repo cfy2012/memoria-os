@@ -223,8 +223,8 @@ static esp_err_t play_wav_impl(const std::string& path) {
     s_ctx.playing->store(true);
     if (s_done_evt) xEventGroupClearBits(s_done_evt, PLAY_DONE_BIT);
 
-    BaseType_t ok = xTaskCreate(playback_task, "audio_play", 6144,
-                                nullptr, 3, nullptr);
+    BaseType_t ok = xTaskCreatePinnedToCore(playback_task, "audio_play", 6144,
+                                nullptr, 3, nullptr, 1);   /* P1 双核：解码重活钉 core1 */
     if (ok != pdPASS) {
         i2s_channel_disable(tx); i2s_del_channel(tx);
         if (rx) { i2s_channel_disable(rx); i2s_del_channel(rx); s_ctx.rx = nullptr; }
@@ -279,8 +279,8 @@ static esp_err_t play_mp3_impl(const std::string& path) {
     s_ctx.playing->store(true);
     if (s_done_evt) xEventGroupClearBits(s_done_evt, PLAY_DONE_BIT);
 
-    BaseType_t ok = xTaskCreate(playback_task, "audio_play", 6144,
-                                nullptr, 3, nullptr);
+    BaseType_t ok = xTaskCreatePinnedToCore(playback_task, "audio_play", 6144,
+                                nullptr, 3, nullptr, 1);   /* P1 双核：解码重活钉 core1 */
     if (ok != pdPASS) {
         i2s_channel_disable(tx); i2s_del_channel(tx);
         if (rx) { i2s_channel_disable(rx); i2s_del_channel(rx); s_ctx.rx = nullptr; }
@@ -402,8 +402,8 @@ static esp_err_t play_aac_impl(const std::string& path) {
         s_ctx.playing->store(true);
         if (s_done_evt) xEventGroupClearBits(s_done_evt, PLAY_DONE_BIT);
 
-        BaseType_t ok = xTaskCreate(playback_task, "audio_play", 6144,
-                                    nullptr, 3, nullptr);
+        BaseType_t ok = xTaskCreatePinnedToCore(playback_task, "audio_play", 6144,
+                                    nullptr, 3, nullptr, 1);   /* P1 双核：解码重活钉 core1 */
         if (ok != pdPASS) {
             i2s_channel_disable(tx); i2s_del_channel(tx);
             if (rx) { i2s_channel_disable(rx); i2s_del_channel(rx); s_ctx.rx = nullptr; }
@@ -711,7 +711,7 @@ esp_err_t I2sAudio::rec_start(const std::string& path, uint32_t sample_rate) {
     s_rec.rx = rx; s_rec.tx = tx; s_rec.fp = fp; s_rec.rate = sample_rate;
     _rec_seconds.store(0);
     _recording.store(true);
-    if (xTaskCreate(rec_task, "audio_rec", 4096, nullptr, 3, nullptr) != pdPASS) {
+    if (xTaskCreatePinnedToCore(rec_task, "audio_rec", 4096, nullptr, 3, nullptr, 1) != pdPASS) {
         _recording.store(false);
         if (tx) {
             /* 纯录音：两个都回收 */

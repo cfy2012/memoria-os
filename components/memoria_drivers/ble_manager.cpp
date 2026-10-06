@@ -123,7 +123,7 @@ esp_err_t BleManager::init() {
             .characteristics = (struct ble_gatt_chr_def[]){
                 {
                     .uuid = &NUS_TX_UUID.u,
-                    .access_cb = nullptr,
+                    .access_cb = &_on_gatt_access,
                     .arg = nullptr,
                     .descriptors = NULL,
                     .flags = BLE_GATT_CHR_F_NOTIFY,
@@ -247,6 +247,15 @@ int BleManager::_on_gatt_write(uint16_t conn_handle, uint16_t attr_handle,
     static BleManager* self = BleManager::instance();
     if (self->_rx_cb) self->_rx_cb(ctxt->om->om_data, ctxt->om->om_len);
     return 0;
+}
+
+int BleManager::_on_gatt_access(uint16_t conn_handle, uint16_t attr_handle,
+                                struct ble_gatt_access_ctxt* ctxt, void* arg) {
+    /* NOTIFY 特征不接受客户端读写（值由 server notify 写入）；
+     * NimBLE 要求 access_cb 非 NULL（ble_gatts_chr_is_sane 检查），
+     * CCCD 描述符读写由 NimBLE 内部默认处理，不走此回调。 */
+    (void)conn_handle; (void)attr_handle; (void)ctxt; (void)arg;
+    return BLE_ATT_ERR_UNLIKELY;
 }
 
 void BleManager::_reset_cb(int reason) {

@@ -25,7 +25,7 @@
 namespace memoria {
 namespace modes {
 
-enum class CellType : uint8_t { Empty = 0, App = 1, Folder = 2 };
+enum class CellType : uint8_t { Empty = 0, App = 1, Folder = 2, BasApp = 3 };
 
 struct Cell {
     CellType    type = CellType::Empty;
@@ -62,6 +62,11 @@ public:
     /* ---- 编辑模式 ---- */
     bool is_edit() const { return _edit; }
     void set_edit(bool e) { _edit = e; if (!e) _picked = -1; }
+
+    /* ---- APP 直启：TF 卡 .bas 扫描上桌面 ----
+     * 扫 /mem_fat/scripts 下全部 .bas，未上桌面的进根桌空位；
+     * 满了复用/自动建「BASIC」文件夹收纳。装了即上图标（用户拍板）。 */
+    void scan_bas_apps();
 
 private:
     DesktopManager() = default;

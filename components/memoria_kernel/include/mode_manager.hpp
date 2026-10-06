@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <string>
 #include <vector>
 
 namespace memoria {
@@ -56,6 +57,8 @@ public:
     void boot();
     /* 进入第 index 个模式 */
     void enter(int index);
+    /* APP 直启：进 BASIC APP 全屏运行窗（桌面图标点击直达，跳过 PRGM） */
+    bool enter_app(const std::string& bas_path);
     /* 返回主菜单 */
     void back_to_menu();
 

@@ -110,7 +110,7 @@ private:
         uint32_t used = 0, total = 0, ue = 0, te = 0;
         fs::PrivateFs::instance()->stats(used, total, ue, te);
         std::string title = "note_" + std::to_string(ue + 1);
-        std::string body = "今天在操场拍了很多照片，风很舒服。";
+        std::string body = "欢迎使用 Memoria OS。本机可记事、拍照、听歌、运行 BASIC 程序。按 Fn 键新建或删除记事，方向键翻页查看。";
         fs::Entry* out = nullptr;
         fs::PrivateFs::instance()->create(fs::FileType::Note, title, (uint32_t)body.size(), &out);
         if (out) {

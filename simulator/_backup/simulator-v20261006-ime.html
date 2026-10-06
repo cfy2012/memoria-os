@@ -1,0 +1,2424 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230B0A18'/%3E%3Cpath d='M18 44V24l8 8 8-8 8 8v20' stroke='%2334D399' stroke-width='4' fill='none'/%3E%3C/svg%3E">
+<title>Memoria OS —— Simulator (480×320 · 键盘)</title>
+<style>
+/* ============================================================
+ * Memoria OS Simulator v2 —— 卡西欧程序计算器范式
+ * 画布严格贴合硬件：ILI9488 480×320 RGB565，无触摸
+ * 输入 = KY-023 摇杆（方向 + 按下）+ 返回键（长按摇杆）
+ * 无 backdrop-filter：真机是纯色半透明叠加，模拟器同样用 rgba 纯色
+ * 字体贴近真机自制 FONT_8x12（小字号等宽）
+ * ============================================================ */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: radial-gradient(ellipse at 30% 20%, rgba(80,60,140,0.25) 0%, transparent 55%),
+              linear-gradient(150deg, #141128, #0b0918 70%);
+  min-height: 100vh;
+  display: flex; align-items: center; justify-content: center; gap: 42px;
+  flex-wrap: wrap;
+  padding: 40px 20px;
+  font-family: 'Consolas', 'Cascadia Mono', ui-monospace, monospace;
+  color: #e8e8f2;
+}
+
+/* ---------- 设备外壳 ---------- */
+.device {
+  padding: 26px 26px 54px;
+  border-radius: 34px;
+  background: linear-gradient(150deg, #232042, #0d0b1e);
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.05), 0 40px 90px rgba(0,0,0,0.7);
+  position: relative;
+}
+.device::before {
+  content: ''; position: absolute; top: 9px; left: 50%; transform: translateX(-50%);
+  width: 42px; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.07);
+}
+
+/* ---------- 480×320 屏幕画布（像素真实） ---------- */
+.stage { width: 480px; height: 320px; }
+.screen {
+  width: 480px; height: 320px;
+  background: #0b0a18;
+  position: relative; overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05), inset 0 3px 14px rgba(0,0,0,0.65);
+}
+
+/* 状态栏 22px（贴合真机 StatusBar） */
+.status-bar {
+  position: absolute; top: 0; left: 0; right: 0; height: 22px;
+  padding: 0 8px;
+  display: flex; align-items: center; justify-content: space-between;
+  background: rgba(13, 11, 30, 0.92);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  font-size: 9px; letter-spacing: 0.4px; z-index: 20;
+}
+.sb-left { display: flex; gap: 7px; align-items: center; }
+.sb-left .mode-tag { color: rgba(255,255,255,0.75); font-weight: 700; }
+.sb-left .ico { color: rgba(255,255,255,0.45); }
+.sb-right { display: flex; gap: 7px; align-items: center; }
+.bat { display: inline-flex; align-items: center; gap: 2px; }
+.bat .bar { width: 20px; height: 6px; border-radius: 2px; border: 1px solid rgba(255,255,255,0.25); padding: 1px; }
+.bat .fill { height: 100%; border-radius: 1px; background: #34d399; }
+
+/* 内容区（状态栏与功能键行之间） */
+.main { position: absolute; top: 22px; left: 0; right: 0; bottom: 24px; overflow: hidden; }
+
+/* 功能键行 24px（卡西欧范式核心） */
+.fn-bar {
+  position: absolute; bottom: 0; left: 0; right: 0; height: 24px;
+  display: flex;
+  background: rgba(10, 8, 24, 0.92);
+  border-top: 1px solid rgba(255,255,255,0.06);
+  z-index: 20;
+}
+.fn-key {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  font-size: 8px; color: rgba(255,255,255,0.55);
+  position: relative; letter-spacing: 0.3px;
+}
+.fn-key b { font-weight: 700; font-size: 8px; }
+.fn-key .lab { margin-left: 2px; color: rgba(255,255,255,0.9); }
+.fn-key.active { color: #fff; background: rgba(255,255,255,0.08); }
+.fn-key.active::after {
+  content: ''; position: absolute; bottom: 0; left: 20%; right: 20%; height: 2px;
+  background: currentColor; border-radius: 1px;
+}
+
+/* ============================================================
+ * 主菜单：3×4 模式图标网格（12 格，10 模式 + 2 空位）
+ * ============================================================ */
+.menu-grid {
+  height: 100%; padding: 6px 8px 6px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(4, 1fr);
+  gap: 4px;
+}
+.mode-tile {
+  border-radius: 8px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  background: rgba(255,255,255,0.045);
+  border: 1px solid rgba(255,255,255,0.06);
+  position: relative;
+  transition: background 0.1s, transform 0.08s;
+}
+.mode-tile svg { width: 22px; height: 22px; }
+.mode-tile .tname { font-size: 9px; color: rgba(255,255,255,0.72); letter-spacing: 0.4px; }
+.mode-tile .tnum { position: absolute; top: 2px; left: 4px; font-size: 8px; color: rgba(255,255,255,0.3); }
+.mode-tile.selected {
+  background: rgba(255,255,255,0.12);
+  border-color: rgba(255,255,255,0.5);
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.15), 0 0 12px rgba(255,255,255,0.15);
+  transform: scale(1.06);
+}
+.mode-tile.empty { background: transparent; border-style: dashed; border-color: rgba(255,255,255,0.08); }
+.mode-tile.empty .tname { color: rgba(255,255,255,0.2); }
+.mode-tile.folder { background: rgba(250,204,21,0.16); border-color: rgba(250,204,21,0.45); }
+.mode-tile.folder .tname { color: #fde68a; }
+.mode-tile.picked { border-color: #f87171; box-shadow: 0 0 0 1px #f87171, 0 0 14px rgba(248,113,113,.5); transform: scale(1.04); }
+.mode-tile.picked::after { content:'✕'; position:absolute; top:2px; right:4px; font-size:10px; color:#f87171; font-weight:700; }
+
+/* BASIC 编辑器行 */
+.edit-list { padding: 3px 6px; overflow: hidden; }
+.edit-row { display:flex; gap:4px; padding:1px 4px; font-size:9px; min-height:16px; align-items:center; }
+.edit-row .ln { width:26px; color:rgba(255,255,255,0.35); flex:none; text-align:right; }
+.edit-row .code { flex:1; white-space:pre; overflow:hidden; color:rgba(255,255,255,0.85); }
+.edit-row.selected { background:rgba(255,255,255,0.12); }
+.edit-row.selected .ln { color:#fde68a; }
+.edit-row.selected .code { color:#fff; }
+.edit-row.selected .code::after { content:'▌'; color:#fde68a; }
+/* 字符条 */
+.char-bar { position:absolute; bottom:0; left:0; right:0; height:34px; background:rgba(10,8,24,.96); border-top:1px solid rgba(255,255,255,.08); padding:2px 2px 0; z-index:15; }
+.char-row { display:flex; height:16px; }
+.char-cell { width:8px; font-size:8px; text-align:center; color:rgba(255,255,255,.45); line-height:16px; flex:none; }
+.char-cell.sel { color:#fde68a; background:rgba(250,204,21,.22); box-shadow:inset 0 0 0 1px rgba(250,204,21,.6); }
+.char-tip { font-size:7px; color:rgba(255,255,255,.35); padding:1px 4px; }
+/* BASIC 运行画布 */
+.basic-run { position:relative; height:100%; }
+.basic-canvas { width:480px; height:280px; display:block; background:#0b0a18; }
+.basic-out { position:absolute; left:0; right:0; bottom:0; height:88px; background:rgba(5,4,12,.88); border-top:1px solid rgba(255,255,255,.1); padding:3px 6px; font-size:8px; color:#a7f3d0; white-space:pre-wrap; overflow:hidden; }
+.basic-full { height:100%; background:#0b0a18; padding:4px 6px; font-size:9px; color:#a7f3d0; white-space:pre-wrap; overflow:hidden; }
+/* 商店 */
+.store-page { padding:3px 6px; }
+.store-row { display:flex; gap:6px; padding:3px 6px; font-size:9px; align-items:center; border-radius:5px; color:rgba(255,255,255,.8); }
+.store-row.selected { background:rgba(255,255,255,.12); color:#fff; }
+.store-row .nm { flex:1; }
+.store-row .sub { color:rgba(255,255,255,.45); font-size:8px; flex:none; }
+.store-row .ok { color:#34d399; flex:none; }
+.store-src { padding:8px 10px; font-size:9px; line-height:1.8; color:rgba(255,255,255,.75); }
+.store-src b { color:#fde68a; }
+
+/* ============================================================
+ * 通用列表 / 卡片 / 弹窗（真机风格：纯色半透明叠加）
+ * ============================================================ */
+.list { height: 100%; padding: 4px 6px; overflow: hidden; }
+.list-row {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 6px; border-radius: 6px;
+  font-size: 9px; min-height: 20px;
+  color: rgba(255,255,255,0.8);
+}
+.list-row .idx { width: 14px; color: rgba(255,255,255,0.35); font-size: 8px; flex: none; }
+.list-row .val { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.list-row .right { color: rgba(255,255,255,0.5); font-size: 8px; flex: none; }
+.list-row.selected { background: rgba(255,255,255,0.12); color: #fff; box-shadow: inset 2px 0 0 rgba(255,255,255,0.6); }
+.list-row.selected .right { color: rgba(255,255,255,0.85); }
+.list-title { font-size: 9px; font-weight: 700; color: rgba(255,255,255,0.9); padding: 3px 6px 2px; border-bottom: 1px solid rgba(255,255,255,0.07); display:flex; justify-content: space-between; }
+.list-title .hint { font-weight: 400; color: rgba(255,255,255,0.4); font-size: 8px; }
+
+/* 卡片内容区 */
+.card { position: absolute; top: 4px; left: 6px; right: 6px; bottom: 4px; border-radius: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); overflow: hidden; }
+.card-head { padding: 4px 8px; font-size: 9px; font-weight: 700; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.07); color: #fff; }
+.card-head .sub { font-weight: 400; font-size: 8px; color: rgba(255,255,255,0.45); }
+.card-body { padding: 6px 8px; font-size: 9px; color: rgba(255,255,255,0.75); line-height: 1.7; }
+
+/* 弹窗 */
+.modal {
+  position: absolute; inset: 0; z-index: 50;
+  background: rgba(5, 4, 12, 0.72);
+  display: flex; align-items: center; justify-content: center;
+}
+.modal-box {
+  width: 190px; border-radius: 10px;
+  background: rgba(24, 21, 46, 0.97);
+  border: 1px solid rgba(255,255,255,0.15);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+  padding: 10px 12px;
+  text-align: center;
+}
+.modal-box .m-title { font-size: 9px; font-weight: 700; color: #fff; margin-bottom: 6px; }
+.modal-box .m-body { font-size: 9px; color: rgba(255,255,255,0.7); line-height: 1.6; margin-bottom: 10px; }
+.modal-box .m-actions { display: flex; gap: 6px; justify-content: center; }
+.m-btn {
+  padding: 4px 14px; border-radius: 12px; font-size: 8px; font-weight: 700;
+  background: rgba(255,255,255,0.12); color: #fff; cursor: pointer;
+}
+.m-btn.primary { background: rgba(255,255,255,0.9); color: #10101c; }
+.m-btn.danger { background: rgba(248,113,113,0.25); color: #fca5a5; }
+
+/* 计算器按键网格 */
+.calc-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; padding: 4px 6px; }
+.calc-key {
+  border-radius: 5px; background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.07);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; color: #fff; height: 26px; font-weight: 700;
+}
+.calc-key.op { color: #a7f3d0; background: rgba(52,211,153,0.12); }
+.calc-key.selected { background: rgba(255,255,255,0.2); box-shadow: 0 0 0 1px #fff; }
+.calc-display { margin: 4px 6px 2px; padding: 5px 8px; border-radius: 5px; background: rgba(0,0,0,0.4); text-align: right; font-size: 12px; color: #e6ffe6; white-space: nowrap; overflow: hidden; }
+.calc-display .expr { font-size: 8px; color: rgba(255,255,255,0.45); min-height: 10px; overflow: hidden; white-space: nowrap; }
+
+/* 进度条 / 用量条 */
+.bar-outer { height: 5px; border-radius: 3px; background: rgba(255,255,255,0.1); overflow: hidden; }
+.bar-inner { height: 100%; border-radius: 3px; background: linear-gradient(90deg, #34d399, #22d3ee); }
+
+/* 缩略图网格（相册） */
+.thumb-grid { height: 100%; padding: 4px 6px; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); gap: 4px; }
+.thumb {
+  border-radius: 5px; border: 1px solid rgba(255,255,255,0.1);
+  background-size: cover; background-position: center;
+  position: relative; display: flex; align-items: flex-end; justify-content: flex-end;
+  padding: 2px 3px;
+}
+.thumb .nm { font-size: 6px; color: rgba(255,255,255,0.85); text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
+.thumb.selected { border-color: #fff; box-shadow: 0 0 0 1px #fff, 0 0 10px rgba(255,255,255,0.3); }
+
+/* 音乐播放器 */
+.now-playing { padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,0.07); }
+.np-track { font-size: 11px; font-weight: 700; color: #fff; }
+.np-status { font-size: 8px; color: rgba(255,255,255,0.5); display: flex; justify-content: space-between; margin-top: 2px; }
+.np-progress { margin-top: 5px; }
+
+/* 视频画面 */
+.video-frame { position: relative; height: 100%; display: flex; align-items: center; justify-content: center; }
+.video-frame .vf { width: 100%; height: 100%; position: relative; overflow: hidden; border-radius: 6px; }
+
+/* 秒表/计时大字 */
+.big-num { font-size: 26px; font-weight: 700; color: #fff; text-align: center; letter-spacing: 1px; font-variant-numeric: tabular-nums; }
+.mid-num { font-size: 14px; font-weight: 700; color: #fff; text-align: center; font-variant-numeric: tabular-nums; }
+
+/* 设置行 */
+.set-row { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px; border-radius: 5px; font-size: 9px; }
+.set-row .k { color: rgba(255,255,255,0.8); }
+.set-row .v { color: #a7f3d0; font-weight: 700; }
+.set-row.selected { background: rgba(255,255,255,0.12); }
+.set-row.selected .k { color: #fff; }
+
+/* ============================================================
+ * 右侧硬件说明面板
+ * ============================================================ */
+.hw-panel {
+  width: 300px; border-radius: 14px;
+  background: rgba(24, 21, 46, 0.75);
+  border: 1px solid rgba(255,255,255,0.08);
+  padding: 16px 18px;
+  font-size: 11px; color: rgba(255,255,255,0.75); line-height: 1.8;
+}
+.hw-panel h3 { font-size: 13px; color: #fff; margin-bottom: 2px; }
+.hw-panel .sub { font-size: 9px; color: rgba(255,255,255,0.4); margin-bottom: 10px; }
+.hw-panel .row { display: flex; gap: 8px; align-items: baseline; margin-bottom: 6px; }
+.hw-panel kbd {
+  background: rgba(255,255,255,0.09); border: 1px solid rgba(255,255,255,0.15);
+  padding: 1px 6px; border-radius: 4px; font-size: 9px; color: #fff; flex: none;
+  display: inline-block; min-width: 44px; text-align: center;
+}
+.hw-panel .note { font-size: 9px; color: rgba(255,255,255,0.35); border-top: 1px solid rgba(255,255,255,0.08); margin-top: 10px; padding-top: 8px; line-height: 1.7; }
+
+/* ============================================================
+ * 硬件键盘 stub —— 真机 6×10 矩阵（可点击）
+ * ============================================================ */
+.kbd-panel { margin-top: 16px; width: 480px; }
+.kbd-row { display:flex; gap:3px; margin-bottom:3px; }
+.kbd-key {
+  flex:1; height:27px; border-radius:6px; cursor:pointer; user-select:none;
+  background: linear-gradient(180deg,#2b2750,#171430);
+  border:1px solid rgba(255,255,255,.14);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 2px 4px rgba(0,0,0,.45);
+  display:flex; align-items:center; justify-content:center; position:relative;
+}
+.kbd-key:hover { background:#38335c; }
+.kbd-key:active, .kbd-key.press { background:#4d4480; transform:translateY(1px); box-shadow: 0 0 8px rgba(150,130,255,.5); }
+.kbd-key .main { font-size:11px; color:#e8e8f2; font-weight:700; letter-spacing:.3px; }
+.kbd-key .sub { position:absolute; top:2px; right:4px; font-size:7px; color:rgba(255,255,255,.4); }
+.kbd-key.wide { flex:2.6; }
+.kbd-key.fn .main { font-size:8px; color:#9b93d8; }
+.kbd-key.sys .main { font-size:8px; color:#fde68a; }
+.kbd-key.nav .main { font-size:13px; color:#34d399; }
+.ctrl-zone { margin-top:12px; width:480px; display:flex; align-items:center; gap:24px; }
+.stick {
+  width:100px; height:100px; border-radius:50%; position:relative;
+  background: radial-gradient(circle at 35% 30%, #3a3560, #151230 70%);
+  border:1px solid rgba(255,255,255,.2);
+  box-shadow: 0 8px 20px rgba(0,0,0,.55), inset 0 2px 5px rgba(255,255,255,.1);
+}
+.stick .d {
+  position:absolute; width:27px; height:27px; border-radius:8px; cursor:pointer;
+  background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.13);
+  display:flex; align-items:center; justify-content:center; font-size:11px; color:rgba(255,255,255,.65);
+}
+.stick .d:hover { background:rgba(255,255,255,.18); }
+.stick .d:active { background:rgba(150,130,255,.35); }
+.stick .up { left:36px; top:3px; } .stick .down { left:36px; bottom:3px; }
+.stick .left { left:3px; top:36px; } .stick .right { right:3px; top:36px; }
+.stick .mid { left:36px; top:36px; border-radius:50%; background:rgba(52,211,153,.28); border-color:rgba(52,211,153,.7); color:#34d399; }
+.ctrl-hint { font-size:9px; color:rgba(255,255,255,.42); line-height:1.9; }
+/* IME 候选条 */
+.ime-bar {
+  position:absolute; bottom:0; left:0; right:0; height:34px; z-index:16;
+  background:rgba(10,8,24,.97); border-top:1px solid rgba(250,204,21,.55);
+  padding:3px 6px; font-size:9px; color:#fff; display:flex; align-items:center; gap:7px;
+}
+.ime-bar .tag { color:#fde68a; font-weight:700; }
+.ime-bar .py { color:#fde68a; font-weight:700; }
+.ime-bar .cand { padding:1px 5px; border-radius:4px; white-space:nowrap; }
+.ime-bar .cand.sel { background:rgba(250,204,21,.35); box-shadow:inset 0 0 0 1px rgba(250,204,21,.75); }
+/* ============ CHAT App（原生模拟 · 对齐 chat.bas v2 流程） ============ */
+.chat-wrap { height:100%; display:flex; flex-direction:column; }
+.chat-head { padding:5px 8px; font-size:9px; border-bottom:1px solid rgba(255,255,255,.1); }
+.chat-head b { color:#8ab4ff; letter-spacing:.5px; }
+.chat-head .sub { font-size:7.5px; color:rgba(255,255,255,.5); margin-left:6px; }
+.chat-head .ok { color:#34d399; font-size:7.5px; }
+.chat-scroll { flex:1; overflow:hidden; padding:6px 8px; font-size:8.5px; line-height:1.8; }
+.chat-scroll .sysline { color:rgba(255,255,255,.38); font-size:7.5px; }
+.chat-scroll .m { display:flex; gap:5px; }
+.chat-scroll .m .who { color:#7dd3fc; white-space:nowrap; }
+.chat-scroll .m .who.me { color:#a5f3fc; }
+.chat-scroll .m .who.she { color:#fbbf24; }
+.chat-scroll .m .txt { color:rgba(255,255,255,.9); }
+.chat-scroll .m .v { color:#fde68a; }
+.chat-menu { display:flex; border-top:1px solid rgba(255,255,255,.12); font-size:8px; color:rgba(255,255,255,.6); }
+.chat-menu span { flex:1; text-align:center; padding:4px 0; }
+.chat-menu span.on { color:#fff; background:rgba(255,255,255,.14); }
+.chat-prompt { padding:6px 8px; font-size:9px; color:#a7f3d0; border-bottom:1px dashed rgba(255,255,255,.1); }
+.chat-input { padding:4px 8px; font-size:9px; color:#fff; display:flex; gap:5px; }
+.chat-input .lb { color:rgba(255,255,255,.55); }
+.chat-input .in { color:#fff; border-bottom:1px solid rgba(255,255,255,.4); min-width:100px; }
+.chat-input .cur::after { content:'▌'; color:#fde68a; }
+/* ============ 网络管理页（对齐 SYS 第 6 tab 三子页） ============ */
+.net-tabs { display:flex; border-bottom:1px solid rgba(255,255,255,.12); font-size:7.5px; }
+.net-tabs span { padding:4px 0; flex:1; text-align:center; color:rgba(255,255,255,.45); }
+.net-tabs span.on { color:#fff; background:rgba(255,255,255,.12); box-shadow:inset 0 -2px 0 #6ee7ff; }
+.net-row { display:flex; justify-content:space-between; gap:6px; padding:3px 8px; font-size:8.5px; border-bottom:1px dashed rgba(255,255,255,.07); color:rgba(255,255,255,.85); }
+.net-row.sel { background:rgba(255,255,255,.12); color:#fff; }
+.net-row .k { color:rgba(255,255,255,.6); }
+.net-row .v { color:#a7f3d0; }
+.net-row .sig { color:#34d399; font-size:7.5px; }
+.net-row .conn { color:#6ee7ff; font-size:7.5px; }
+/* ============ GUI 化（按钮 / 气泡 / 软键盘 / 图标） ============ */
+.gbtn { display:flex; align-items:center; justify-content:center; gap:4px; padding:6px 0; font-size:8.5px; border-radius:6px; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.16); color:#fff; cursor:pointer; user-select:none; }
+.gbtn:hover { background:rgba(255,255,255,.18); }
+.gbtn.primary { background:rgba(52,211,153,.22); border-color:rgba(52,211,153,.6); color:#a7f3d0; }
+.gbtn.danger { background:rgba(248,113,113,.18); border-color:rgba(248,113,113,.5); color:#fecaca; }
+.gbtn.ghost { background:transparent; border-color:transparent; color:rgba(255,255,255,.55); }
+.gbtn.on { background:rgba(255,255,255,.2); border-color:rgba(255,255,255,.45); }
+.gbtn svg, .gbtn .ic { width:12px; height:12px; }
+.chat-bubble { max-width:75%; padding:5px 8px; border-radius:8px; font-size:8.5px; line-height:1.5; word-break:break-all; }
+.b-she { background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.1); }
+.b-me { background:rgba(52,211,153,.2); border:1px solid rgba(52,211,153,.45); margin-left:auto; }
+.b-v { background:rgba(253,230,138,.14); border:1px solid rgba(253,230,138,.4); color:#fde68a; cursor:pointer; }
+.chat-row { display:flex; flex-direction:column; margin-bottom:6px; }
+.chat-row .nm { font-size:7px; color:rgba(255,255,255,.5); margin-bottom:2px; }
+.chat-row.me { align-items:flex-end; }
+.chat-row.me .nm { color:rgba(52,211,153,.7); }
+.kbd { display:flex; flex-direction:column; gap:3px; padding:4px 6px; }
+.kbd-row { display:flex; gap:3px; }
+.kbd-k { flex:1; padding:4px 0; font-size:8px; text-align:center; border-radius:4px; background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.14); color:#fff; cursor:pointer; user-select:none; }
+.kbd-k:hover { background:rgba(255,255,255,.22); }
+.kbd-k.wide { flex:2; }
+.kbd-k.fn { background:rgba(52,211,153,.2); border-color:rgba(52,211,153,.5); color:#a7f3d0; }
+.kbd-k.bk { background:rgba(248,113,113,.18); border-color:rgba(248,113,113,.45); color:#fecaca; }
+.chat-ico { width:14px; height:14px; vertical-align:-3px; }
+.stat-chip { display:flex; align-items:center; gap:5px; padding:6px 8px; font-size:8.5px; border-radius:6px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); color:rgba(255,255,255,.85); }
+.stat-chip .dot { width:6px; height:6px; border-radius:50%; background:#34d399; }
+.chat-authcard { display:flex; align-items:center; gap:8px; padding:7px 10px; border-radius:6px; border:1px solid rgba(255,255,255,.12); background:rgba(255,255,255,.05); font-size:9px; color:rgba(255,255,255,.9); cursor:pointer; }
+.chat-authcard:hover { background:rgba(255,255,255,.13); }
+.chat-authcard.sel { border-color:rgba(52,211,153,.7); background:rgba(52,211,153,.15); }
+.chat-authcard .no { font-size:7px; color:rgba(255,255,255,.4); min-width:14px; }
+.chat-authcard .arr { margin-left:auto; color:rgba(52,211,153,.8); }
+.gui-ico { width:12px; height:12px; fill:none; stroke:currentColor; stroke-width:2.2; }
+</style>
+</head>
+<body>
+
+<div class="device">
+  <div class="stage">
+    <div class="screen" id="screen" tabindex="0">
+      <div class="status-bar" id="statusbar">
+        <div class="sb-left"><span class="mode-tag" id="sb-mode">MENU</span><span class="ico" id="sb-ico"></span></div>
+        <div class="sb-right"><span id="sb-wifi">WiFi</span><span class="bat"><span class="bar"><span class="fill" id="sb-bat" style="width:82%"></span></span></span><span id="sb-clock">00:00</span></div>
+      </div>
+      <div class="main" id="main"></div>
+      <div class="fn-bar" id="fnbar"></div>
+    </div>
+  </div>
+  <div class="kbd-panel" id="kbdpanel"></div>
+  <div class="ctrl-zone">
+    <div class="stick" id="stick">
+      <div class="d up" data-k="ArrowUp">▲</div>
+      <div class="d down" data-k="ArrowDown">▼</div>
+      <div class="d left" data-k="ArrowLeft">◀</div>
+      <div class="d right" data-k="ArrowRight">▶</div>
+      <div class="d mid" data-k="Enter">●</div>
+    </div>
+    <div class="ctrl-hint">摇杆：方向移动 · 按下确认（●）<br>长按 ● = 返回 · 屏幕 F1-F6 为功能键行</div>
+  </div>
+</div>
+
+<div class="hw-panel">
+  <h3>Memoria OS · 硬件实际预览</h3>
+  <div class="sub">ILI9488 480×320 · 无触摸 · 6×10 矩阵键盘 + KY-023 摇杆</div>
+  <div class="row"><kbd>↑↓←→</kbd> 摇杆移动光标</div>
+  <div class="row"><kbd>Enter</kbd> 摇杆按下 = EXE 确认</div>
+  <div class="row"><kbd>Esc</kbd> 长按摇杆 = EXIT 返回</div>
+  <div class="row"><kbd>Esc</kbd> 桌面编辑模式（移动图标/建文件夹）</div>
+  <div class="row"><kbd>F1-F6</kbd> 底部功能键行（屏幕内按键）</div>
+  <div class="row"><kbd>A-Z 0-9</kbd> BASIC 编辑时直接打字</div>
+  <div class="note">
+    主菜单 = 安卓式桌面：图标可移动、可收进文件夹（套娃）、布局存本地。<br>
+    PRGM 支持 BASIC（.bas）与保留的 .ms 脚本。<br>
+    显示为纯色半透明叠加渲染（真机无毛玻璃）。
+  </div>
+</div>
+
+<script>
+/* ============================================================
+ * Memoria OS Simulator v2 —— 卡西欧程序计算器范式
+ * 主菜单 10 模式 + F1~F6 功能键行 + EXE/EXIT
+ * ============================================================ */
+
+/* ---------- SVG 图标库（模拟真机自制位图图标，单色线条） ---------- */
+const IC = {
+  photo: '<svg viewBox="0 0 24 24" fill="none" stroke="#ec4899" stroke-width="2.2"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M4 17l4-4 3 3 3-2 6 5"/></svg>',
+  music: '<svg viewBox="0 0 24 24" fill="none" stroke="#f472b6" stroke-width="2.2"><path d="M9 18V5l10-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg>',
+  video: '<svg viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="2.2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9l5 3-5 3z" fill="#22d3ee"/></svg>',
+  clock: '<svg viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2.2"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/></svg>',
+  notes: '<svg viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2.2"><path d="M5 3h14v18H5z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>',
+  calc: '<svg viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.2"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M8 11h1M11 11h1M14 11h1M8 15h1M11 15h1M14 15h1M8 19h1M11 19h1M14 19h1M17 11h0"/></svg>',
+  prgm: '<svg viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2.2"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5"/><path d="M13 4l-2 16"/></svg>',
+  setup: '<svg viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.2"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5 5l2.1 2.1M16.9 16.9L19 19M19 5l-2.1 2.1M7.1 16.9L5 19"/></svg>',
+  fmem: '<svg viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2.2"><path d="M3 7h7l2 2h9v10H3z"/><circle cx="12" cy="14" r="1.6"/></svg>',
+  sys: '<svg viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2.2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 3v2M15 3v2M7 20l4-6h2l4 6"/></svg>',
+  store: '<svg viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="2.2"><path d="M3 7l2-4h14l2 4"/><path d="M3 7h18v3a2.5 2.5 0 0 1-5 0 2.5 2.5 0 0 1-5 0 2.5 2.5 0 0 1-5 0 2.5 2.5 0 0 1-5 0z"/><path d="M5 11v9h14v-9"/></svg>',
+  chat: '<svg viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.2"><path d="M4 5h16v11H10l-5 4z"/><path d="M8 9h8M8 12h5"/></svg>',
+};
+
+/* ---------- 10 个模式定义 ---------- */
+const MODES = [
+  { id:'photo',  name:'PHOTO',  cn:'相册',   icon:IC.photo,  fn:['查看','上一','下一','信息','幻灯','菜单'] },
+  { id:'music',  name:'MUSIC',  cn:'音乐',   icon:IC.music,  fn:['播放','上一曲','下一曲','音量-','音量+','菜单'] },
+  { id:'video',  name:'VIDEO',  cn:'视频',   icon:IC.video,  fn:['播放','快退','快进','倍速','音量','菜单'] },
+  { id:'clock',  name:'CLOCK',  cn:'时钟',   icon:IC.clock,  fn:['样式','秒表','倒计时','闹钟','纪念日','菜单'] },
+  { id:'notes',  name:'NOTES',  cn:'记事',   icon:IC.notes,  fn:['查看','新建','编辑','删除','翻页','菜单'] },
+  { id:'calc',   name:'CALC',   cn:'计算器', icon:IC.calc,   fn:['清空','退格','科学','进制','历史','菜单'] },
+  { id:'prgm',   name:'PRGM',   cn:'程序',   icon:IC.prgm,   fn:['运行','编辑','新建','删除','改名','菜单'] },
+  { id:'store',  name:'STORE',  cn:'商店',   icon:IC.store,  fn:['安装','刷新','已装','卸载','源','菜单'] },
+  { id:'setup',  name:'SETUP',  cn:'设置',   icon:IC.setup,  fn:['上组','下组','默认','保存','—','菜单'] },
+  { id:'fmem',   name:'FMEM',   cn:'文件',   icon:IC.fmem,   fn:['打开','复制','移动','删除','信息','菜单'] },
+  { id:'sys',    name:'SYS',    cn:'系统',   icon:IC.sys,    fn:['信息','内存','自检','初始化','关于','菜单'] },
+  { id:'chat',   name:'CHAT',   cn:'聊天',   icon:IC.chat,   fn:['发言','刷新','听语音','发语音','','退出'] },
+];
+
+/* ---------- 全局状态 ---------- */
+const S = {
+  mode:'menu',          // 'menu' | 'app'
+  sel:0,                // 主菜单光标 0-11
+  app:null,             // 当前模式 id
+  sub:null,             // 模式内子视图
+  cur:0,                // 模式内列表光标
+  modal:null,           // {title,body,actions:[{t,cls,fn}]}
+  shift:false,          // SHIFT 第二层
+  toast:null, toastT:0,
+  clockTimer:null, intv:null,
+};
+
+/* ============================================================
+ * 桌面布局（安卓式可编辑桌面）—— localStorage 持久化（模拟真机 NVS）
+ *   cells 12 格：{t:'a',id:'photo'} 应用 / {t:'d',id:1} 文件夹 / {t:'e'} 空
+ * ============================================================ */
+const DESK_DEFAULT = ()=>Array.from({length:12},(_,i)=> i<MODES.length ? {t:'a',id:MODES[i].id} : {t:'e'});
+let DESK = {
+  edit:false, picked:-1, stack:[], seq:1,
+  root: DESK_DEFAULT(),
+  folders: {},           // id -> cells
+  fnames: {},            // id -> 名称
+};
+function deskLayer(){ return DESK.stack.length ? (DESK.folders[DESK.stack[DESK.stack.length-1]]||DESK.root) : DESK.root; }
+function deskName(id){ return DESK.fnames[id] || ('文件夹'+id); }
+function deskSave(){
+  try{
+    localStorage.setItem('memoria_desktop', JSON.stringify({
+      ver:MODES.length, root:DESK.root, seq:DESK.seq, folders:DESK.folders, fnames:DESK.fnames }));
+  }catch(e){}
+}
+function deskLoad(){
+  try{
+    const raw = localStorage.getItem('memoria_desktop');
+    if (raw){ const d = JSON.parse(raw);
+      if (d.root && d.ver===MODES.length){ DESK.root = d.root; DESK.seq = d.seq||1; DESK.folders = d.folders||{}; DESK.fnames = d.fnames||{}; }
+      else localStorage.removeItem('memoria_desktop');
+    }
+  }catch(e){}
+}
+deskLoad();
+window.addEventListener('load', ()=>{
+  const q = location.search.replace(/^\?/,'') || location.hash.replace(/^#/,'');
+  if (!q) return;
+  const parts = q.split('&'); const hm = {};
+  parts.forEach(p=>{ const i=p.indexOf('='); if(i>0) hm[p.slice(0,i)]=p.slice(i+1); });
+  if (hm.app){ const mo = MODES.find(x=>x.id===hm.app); if (mo){ enterMode(mo.id); if (hm.sub) S.sub=hm.sub; if (hm.cur!==undefined) S.cur=parseInt(hm.cur)||0; if (hm.sel!==undefined) S.sel=parseInt(hm.sel)||0; render(); } }
+  else if (hm.desk==='edit'){ DESK.edit=true; render(); }
+  else if (hm.folder){ deskEnterFolder(parseInt(hm.folder)||0); render(); }
+});
+function deskNextId(){ while (DESK.folders[DESK.seq]) DESK.seq++; return DESK.seq; }
+function deskEnterFolder(idx){
+  const c = deskLayer()[idx];
+  if (c && c.t==='d'){ if(!DESK.folders[c.id]) DESK.folders[c.id]=Array.from({length:12},()=>({t:'e'})); DESK.stack.push(c.id); }
+}
+function deskCreateFolder(idx){
+  const layer = deskLayer();
+  if (layer[idx].t!=='e') return;
+  const fid = deskNextId();
+  layer[idx] = {t:'d', id:fid};
+  DESK.fnames[fid] = '文件夹'+fid;
+  DESK.folders[fid] = Array.from({length:12},()=>({t:'e'}));
+  DESK.seq = fid+1; deskSave(); render();
+}
+function deskDrop(idx){
+  const layer = deskLayer();
+  if (DESK.picked<0 || idx===DESK.picked) { DESK.picked=-1; render(); return; }
+  const moving = layer[DESK.picked];
+  const target = layer[idx];
+  if (moving.t==='a'){
+    if (target.t==='e'){ layer[DESK.picked]={t:'e'}; layer[idx]=moving; }
+    else if (target.t==='a'){ layer[DESK.picked]=target; layer[idx]=moving; }
+    else if (target.t==='d'){
+      const fc = DESK.folders[target.id] || (DESK.folders[target.id]=Array.from({length:12},()=>({t:'e'})));
+      const slot = fc.findIndex(x=>x.t==='e');
+      if (slot>=0) fc[slot]=moving;
+      layer[DESK.picked]={t:'e'};
+    }
+  }
+  DESK.picked=-1; deskSave(); render();
+}
+function deskEditToggle(){
+  if (DESK.picked>=0){ DESK.picked=-1; }
+  else if (DESK.edit && DESK.stack.length){ DESK.stack.pop(); }
+  else { DESK.edit=!DESK.edit; }
+  render();
+}
+
+/* 各模式持久状态 */
+const PS = {
+  photo: { files:[
+      {n:'IMG_0001', h:'linear-gradient(135deg,#f472b6,#be185d)'},
+      {n:'IMG_0002', h:'linear-gradient(135deg,#22d3ee,#0891b2)'},
+      {n:'IMG_0003', h:'linear-gradient(135deg,#fbbf24,#d97706)'},
+      {n:'IMG_0004', h:'linear-gradient(135deg,#34d399,#047857)'},
+      {n:'IMG_0005', h:'linear-gradient(135deg,#a78bfa,#7c3aed)'},
+      {n:'IMG_0006', h:'linear-gradient(135deg,#f87171,#b91c1c)'},
+    ], view:-1, slide:false, sort:0, dir:'/mem_fat/photos', interval:3 },
+  music: { tracks:[
+      {n:'第一首 · 遇见', t:'3:42'},
+      {n:'第二首 · 晴天', t:'4:29'},
+      {n:'第三首 · 小幸运', t:'4:11'},
+      {n:'第四首 · 告白气球', t:'3:35'},
+      {n:'第五首 · 夜曲', t:'3:46'},
+    ], idx:0, playing:false, vol:60, prog:0, mode:0, listView:false },
+  video: { files:['演示短片_01.mjpg','演示短片_02.mjpg'], idx:0, playing:false, speed:1, vol:50, frame:0, fit:0 },
+  clock: { style:0, tab:'clock', sw:{on:false,ms:0,laps:[]}, cd:{total:0,left:0,on:false}, alarmOn:true, h24:true },
+  notes: { list:[
+      {t:'2026-09-01', b:'第一次见到你…'},
+      {t:'2026-09-12', b:'今天一起去了江边…'},
+      {t:'2026-09-20', b:'运动会彩排…'},
+    ], view:-1, edit:null, input:'' },
+  calc: { expr:'', last:'0', hist:[], base:10, sci:false },
+  prgm: { list:[
+      {n:'hello.bas', sz:'0.2K', type:'bas', src:'10 PRINT "HELLO, MEMORIA!"\n20 PRINT "THIS IS BASIC ON ESP32"\n30 END\n'},
+      {n:'guess.bas', sz:'0.4K', type:'bas', src:'10 RANDOMIZE\n20 X = INT(RND()*6)+1\n30 PRINT "掷骰子..."\n40 PRINT "点数 = ";X\n50 END\n'},
+      {n:'CHAT.bas', sz:'1.2K', type:'bas', src:'10 REM CHAT v2 - 文字+语音\n20 REM 真机走 HTTPGET/HTTPUP/HTTPDL\n30 REM 模拟器原生界面演示\n'},
+      {n:'hello.ms', sz:'0.3K', type:'ms', src:'print("hello, memoria!")\nfor i in 1..3:\n  print(i)\n'},
+      {n:'fortune.ms', sz:'0.2K', type:'ms', src:'print("今天也要开心")'},
+    ], idx:0, view:null, run:null, out:'', editing:null, editLines:[], charSel:0, canvas:null },
+  net: {
+    tab:0, cur:0, wifiOn:true, conn:'HomeWiFi', ip:'192.168.1.108',
+    aps:[ {n:'HomeWiFi',sig:3}, {n:'邻居5G',sig:2}, {n:'CMCC',sig:1}, {n:'Memoria-AP',sig:3} ],
+    apOn:false, apSsid:'Memoria-AP', apPass:'12345678',
+    bleOn:true, bleName:'Memoria-OS', mac:'A4:CB:8F:DA:58:94',
+  },
+  chat: { scene:'boot', sel:0, u:'', p:'', rm:'lobby', room:'lobby', msgs:[], lm:0, input:'', prompt:'', vmid:'', busy:false },
+  store: {
+    page:0, online:[
+      {n:'hello.bas', v:'1.0', sz:'0.2K'},
+      {n:'draw.bas',  v:'1.0', sz:'0.4K'},
+      {n:'guess.bas', v:'1.1', sz:'0.4K'},
+    ], installed:[], source:'https://github.com/memoria-os/packages', hint:'' },
+  setup: {
+    group:0, groups:[
+      {g:'显示', items:[
+        {k:'背光亮度', v:['10%','30%','50%','70%','100%'], i:3},
+        {k:'自动休眠', v:['关闭','10s','30s','1min','2min','5min'], i:2},
+        {k:'自动关机', v:['关闭','5min','10min','30min','1h'], i:0},
+        {k:'主题', v:['暗黑','浅白','琉璃'], i:0},
+        {k:'壁纸', v:['内置','相册'], i:0},
+      ]},
+      {g:'声音', items:[
+        {k:'音量', v:['10%','30%','50%','70%','100%'], i:3},
+        {k:'系统提示音', v:['开','关'], i:0},
+        {k:'淡入淡出', v:['开','关'], i:1},
+        {k:'后台播放', v:['开','关'], i:0},
+      ]},
+      {g:'网络', items:[
+        {k:'WiFi', v:['开','关'], i:0},
+        {k:'已存网络', v:['HomeWiFi'], i:0},
+        {k:'自动OTA检查', v:['开','关'], i:1},
+      ]},
+      {g:'电源', items:[
+        {k:'低电量提醒', v:['开','关'], i:0},
+        {k:'低电量阈值', v:['10%','15%','20%'], i:1},
+        {k:'充电常亮', v:['开','关'], i:1},
+      ]},
+      {g:'时间', items:[
+        {k:'时间格式', v:['24h','12h'], i:0},
+        {k:'日期格式', v:['YYYY-MM-DD','MM/DD/YYYY'], i:0},
+        {k:'WiFi同步时间', v:['开','关'], i:0},
+      ]},
+      {g:'输入', items:[
+        {k:'摇杆灵敏度', v:['低','标准','高'], i:1},
+        {k:'长按延时', v:['200ms','400ms','600ms'], i:1},
+      ]},
+      {g:'系统', items:[
+        {k:'语言', v:['简体中文','English'], i:0},
+      ]},
+      {g:'商店·源', items:[
+        {k:'软件源', v:['官方源','TF卡自定义'], i:0},
+        {k:'自动检查更新', v:['开','关'], i:0},
+        {k:'安装前校验', v:['CRC32','关'], i:0},
+      ]},
+    ],
+  },
+  fmem: { path:['mem_fat'], list:[], cursor:0, view:null },
+  sys: { tab:'overview', selfTest:null },
+};
+
+/* ---------- 工具 ---------- */
+const $ = id => document.getElementById(id);
+function pad(n){ return String(n).padStart(2,'0'); }
+function nowStr(){ const d=new Date(); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; }
+function toast(t){
+  S.toast = t; S.toastT = Date.now();
+  setTimeout(()=>{ S.toast=null; renderMain(); }, 1800);
+}
+function setModal(title, body, actions){
+  S.modal = { title, body, actions };
+  renderMain();
+}
+function closeModal(){ S.modal = null; renderMain(); }
+
+/* ---------- 主渲染 ---------- */
+function render(){
+  renderStatus();
+  renderMain();
+  renderFn();
+}
+function renderStatus(){
+  $('sb-mode').textContent = S.mode==='menu' ? 'MENU' : (MODES.find(m=>m.id===S.app)||{}).name || S.app;
+  $('sb-ico').textContent = PS.music.playing ? '♪' : '';
+  $('sb-wifi').textContent = S.mode==='menu' ? 'WiFi' : 'WiFi·BLE';
+  $('sb-clock').textContent = nowStr();
+}
+function renderMain(){
+  const m = $('main');
+  if (S.modal){ renderModal(m); return; }
+  if (S.toast){ renderToast(m); return; }
+  if (S.mode==='menu') renderMenu(m);
+  else renderApp(m);
+}
+
+/* ---------- 主菜单（安卓式可编辑桌面） ---------- */
+function renderMenu(m){
+  const layer = deskLayer();
+  m.innerHTML = `<div class="menu-grid">${
+    Array.from({length:12},(_,i)=>{
+      const c = layer[i] || {t:'e'};
+      let cls = 'mode-tile', inner='';
+      if (c.t==='a'){
+        const mo = MODES.find(x=>x.id===c.id);
+        cls += (i===S.sel?' selected':'');
+        inner = `<span class="tnum">${String(i+1).padStart(2,'0')}</span>${mo?mo.icon:''}<span class="tname">${mo?mo.name:c.id}</span>`;
+      } else if (c.t==='d'){        cls += (i===S.sel?' selected':'') + ' folder';
+        inner = `<span class="tnum">${String(i+1).padStart(2,'0')}</span><svg viewBox="0 0 24 24" fill="none" stroke="#0b0a18" stroke-width="2.2"><path d="M3 7h7l2 2h9v10H3z"/></svg><span class="tname">${deskName(c.id)}</span>`;
+      } else {
+        cls += (i===S.sel?' selected':'') + ' empty';
+        inner = `<span class="tname">${DESK.edit?'+ 新建夹':'—'}</span>`;
+      }
+      if (DESK.edit && i===DESK.picked) cls += ' picked';
+      return `<div class="${cls}" ${c.t!=='e'?'data-act="desk-open" data-sel="'+i+'" style="cursor:pointer"':''}>${inner}</div>`;
+    }).join('')
+  }</div>`;
+  if (DESK.edit){
+    const path = DESK.stack.length ? ' · '+deskName(DESK.stack[DESK.stack.length-1]) : '';
+    const tip = document.createElement('div');
+    tip.id='desk-tip';
+    tip.style.cssText = 'position:absolute;bottom:0;left:0;right:0;height:20px;display:flex;align-items:center;justify-content:center;font-size:8px;color:#fde68a;background:rgba(10,8,24,.95);border-top:1px solid rgba(255,255,255,.08);z-index:30';
+    tip.textContent = '编辑桌面'+path+' · Enter 拿起/放下 · 空格建夹 · Esc 退出';
+    m.appendChild(tip);
+  }
+}
+
+/* ---------- 功能键行 ---------- */
+function renderFn(){
+  const bar = $('fnbar');
+  let fns = ['','','','','',''];
+  if (S.mode==='app'){
+    const mo = MODES.find(x=>x.id===S.app);
+    if (S.app==='prgm' && S.sub==='chat'){ fns = ['发言','刷新','听语音','发语音','','退出']; }
+    else if (mo && S.app!=='setup'){
+      fns = mo.fn.slice();
+    } else if (S.app==='setup'){
+      fns = ['上组','下组','默认','','','菜单'];
+    }
+  } else if (DESK.edit){
+    fns = ['拿起/放下','新建夹','','','','退出'];
+  } else {
+    fns = ['确认','','','','',''];
+  }
+  bar.innerHTML = fns.map((f,i)=>{
+    if (!f) return `<div class="fn-key"></div>`;
+    return `<div class="fn-key"><b>F${i+1}</b><span class="lab">${f}</span></div>`;
+  }).join('');
+}
+
+/* ---------- 输入系统（键盘 = 摇杆 + 按键） ---------- */
+document.addEventListener('keydown', (e)=>{
+  const k = e.key;
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter','Escape','Shift','Backspace'].includes(k)) e.preventDefault();
+  if (k==='Shift'){ S.shift = !S.shift; return; }
+  if (S.modal){ modalKey(k); return; }
+
+  if (S.mode==='menu'){
+    if (k==='Escape'){ deskEditToggle(); return; }
+    const layer = deskLayer();
+    if (k===' ' && DESK.edit){ deskCreateFolder(S.sel); return; }
+    if (k==='ArrowUp'){ S.sel = S.sel-3>=0 ? S.sel-3 : S.sel; render(); }
+    else if (k==='ArrowDown'){ S.sel = S.sel+3<12 ? S.sel+3 : S.sel; render(); }
+    else if (k==='ArrowLeft'){ S.sel = (S.sel-1+12)%12; render(); }
+    else if (k==='ArrowRight'){ S.sel = (S.sel+1)%12; render(); }
+    else if (k==='Enter'){
+      const c = layer[S.sel];
+      if (DESK.edit){
+        if (c.t==='a'){ if (DESK.picked<0) DESK.picked=S.sel; else deskDrop(S.sel); render(); }
+        else if (c.t==='d'){ if (DESK.picked>=0) deskDrop(S.sel); else deskEnterFolder(S.sel); render(); }
+        else { if (DESK.picked>=0) deskDrop(S.sel); else deskCreateFolder(S.sel); }
+      } else if (c.t==='a'){ const mo = MODES.find(x=>x.id===c.id); if (mo) enterMode(mo.id); }
+      else if (c.t==='d'){ deskEnterFolder(S.sel); render(); }
+    }
+    return;
+  }
+
+  // 模式内
+  appKey(k);
+});
+
+function modalKey(k){
+  if (!S.modal) return;
+  const a = S.modal.actions || [];
+  if (k==='ArrowLeft'||k==='ArrowUp'){ S.modal.selA = Math.max(0, (S.modal.selA||0)-1); }
+  else if (k==='ArrowRight'||k==='ArrowDown'){ S.modal.selA = Math.min(a.length-1, (S.modal.selA||0)+1); }
+  else if (k==='Enter'){ const act = a[S.modal.selA||0]; if (act && act.fn) act.fn(); renderMain(); return; }
+  else if (k==='Escape'){ closeModal(); return; }
+  renderModal($('main'));
+}
+function renderModal(m){
+  const mo = S.modal;
+  m.innerHTML = `<div class="modal"><div class="modal-box">
+    <div class="m-title">${mo.title}</div>
+    <div class="m-body">${mo.body}</div>
+    <div class="m-actions">${mo.actions.map((a,i)=>{
+      const sel = (mo.selA||0)===i ? ' style="box-shadow:0 0 0 1px #fff"' : '';
+      return `<span class="m-btn ${a.cls||''}"${sel}>${a.t}</span>`;
+    }).join('')}</div>
+  </div></div>`;
+}
+function renderToast(m){
+  m.innerHTML = `<div class="modal"><div class="modal-box"><div class="m-title">${S.toast}</div></div></div>`;
+}
+
+/* ---------- 模式进入/退出 ---------- */
+function enterMode(id){
+  S.mode='app'; S.app=id; S.sub=null; S.cur=0;
+  if (id==='clock') PS.clock.tab='clock';
+  if (id==='calc'){ PS.calc.expr=''; PS.calc.last='0'; }
+  render();
+}
+function exitMode(){
+  S.mode='menu'; S.app=null; S.sub=null; S.modal=null;
+  if (PS.music.playing){ /* 后台播放不中断 */ }
+  render();
+}
+function fnKey(i){
+  if (S.mode!=='app') return;
+  if (S.app==='prgm' && S.sub==='chat'){ chatFn(i); return; }
+  if (S.shift){ shiftFn(i); return; }
+  const id = S.app;
+  const handlers = {
+    photo:   ['photo_view','photo_prev','photo_next','photo_info','photo_slide','photo_menu'],
+    music:   ['mus_play','mus_prev','mus_next','mus_voldn','mus_volup','mus_menu'],
+    video:   ['vid_play','vid_rwd','vid_fwd','vid_speed','vid_vol','vid_menu'],
+    clock:   ['clk_style','clk_sw','clk_cd','clk_alarm','clk_dday','clk_menu'],
+    notes:   ['note_view','note_new','note_edit','note_del','note_next','note_menu'],
+    calc:    ['calc_clear','calc_back','calc_sci','calc_base','calc_hist','calc_menu'],
+    prgm:    ['prgm_run','prgm_edit','prgm_new','prgm_del','prgm_ren','prgm_menu'],
+    store:   ['store_ins','store_ref','store_inst','store_unins','store_src','store_menu'],
+    setup:   ['setup_pg','setup_ng','setup_def','setup_save','','setup_menu'],
+    fmem:    ['fmem_open','fmem_copy','fmem_move','fmem_del','fmem_info','fmem_menu'],
+    sys:     ['sys_info','sys_mem','sys_test','sys_init','sys_about','sys_menu'],
+    chat:    ['chatF1','chatF2','chatF3','chatF4','','chatF6'],
+  };
+  const fn = (handlers[id]||[])[i];
+  if (fn && window[fn]) window[fn]();
+}
+function shiftFn(i){
+  // 第二层功能：各模式补充键（SHIFT 青色标签）
+  const map = {
+    photo:   ['photo_setwp','photo_rot','photo_zoom','photo_dir','photo_intv','photo_menu'],
+    music:   ['mus_queue','mus_mode','mus_info','mus_note','mus_saveq','mus_menu'],
+    clock:   ['clk_h24','clk_export','clk_reset','clk_set','clk_edit','clk_menu'],
+    notes:   ['note_sort','note_words','note_export','note_prev','note_next','note_menu'],
+    calc:    ['calc_pct','calc_pow','calc_sqrt','calc_clear','calc_last','calc_menu'],
+    sys:     ['sys_ver','sys_restart','sys_boot','sys_log','sys_backup','sys_menu'],
+  };
+  const fn = (map[S.app]||[])[i];
+  if (fn && window[fn]) window[fn]();
+}
+
+/* ============================================================
+ * 模式渲染分发 + 输入分发
+ * ============================================================ */
+function renderApp(m){
+  const r = { photo:renderPhoto, music:renderMusic, video:renderVideo,
+              clock:renderClock, notes:renderNotes, calc:renderCalc,
+              prgm:renderPrgm, store:renderStore, setup:renderSetup, fmem:renderFmem, sys:renderSys,
+              chat:renderChat }[S.app];
+  if (r) r(m);
+}
+function appKey(k){
+  const h = { photo:photoKey, music:musicKey, video:videoKey, clock:clockKey,
+              notes:notesKey, calc:calcKey, prgm:prgmKey, store:storeKey, setup:setupKey,
+              fmem:fmemKey, sys:sysKey, chat:chatKey }[S.app];
+  if (h) h(k);
+}
+
+/* ---------- 系统时钟引擎（tick 只更新文本，不重建 DOM） ---------- */
+setInterval(()=>{
+  const c = $('sb-clock'); if (c) c.textContent = nowStr();
+  if (S.mode==='app' && S.app==='music' && PS.music.playing){
+    const np = $('np-bar'); const npT = $('np-time');
+    if (np){ const pr=sndProg()*100; np.style.width = pr.toFixed(1)+'%'; }
+    if (npT){ npT.textContent = Math.floor(sndProg()*210)+'s / '+PS.music.tracks[PS.music.idx].t; }
+  }
+  if (S.mode==='app' && S.app==='clock'){
+    if (PS.clock.sw.on){
+      PS.clock.sw.ms += 500;
+      const sw = $('sw-num'); if (sw) sw.textContent = fmtMs(PS.clock.sw.ms);
+    }
+    if (PS.clock.cd.on){
+      PS.clock.cd.left -= 0.5;
+      const cd = $('cd-num');
+      if (cd){ cd.textContent = fmtCd(PS.clock.cd.left); }
+      if (PS.clock.cd.left<=0 && PS.clock.cd.on){
+        PS.clock.cd.on = false;
+        setModal('⏰ 倒计时结束','时间到了，记得抬头看看窗外的云。',[{t:'知道了',cls:'primary',fn:closeModal}]);
+      }
+    }
+  }
+  if (S.mode==='app' && S.app==='photo' && PS.photo.slide && PS.photo.view>=0){
+    // 幻灯片轮播：整页刷新，间隔由 PS.photo.interval 控制
+    clearTimeout(S._slideT);
+    S._slideT = setTimeout(()=>{
+      PS.photo.view = (PS.photo.view+1) % PS.photo.files.length;
+      renderMain();
+    }, PS.photo.interval*1000);
+  }
+}, 500);
+
+/* ============================================================
+ * PHOTO 相册
+ * ============================================================ */
+function renderPhoto(m){
+  const p = PS.photo;
+  if (p.view >= 0){
+    const f = p.files[p.view];
+    m.innerHTML = `
+      <div class="card" style="background:#0d0b1e;border:none">
+        <div style="height:100%;background:${f.h};display:flex;align-items:center;justify-content:center;position:relative">
+          <div style="position:absolute;bottom:4px;left:0;right:0;text-align:center;font-size:8px;color:rgba(255,255,255,0.9);text-shadow:0 1px 2px #000">${f.n}.jpg  ·  ${p.view+1}/${p.files.length}</div>
+          ${p.slide?'<div style="position:absolute;top:4px;right:6px;font-size:7px;color:rgba(255,255,255,0.6)">SLIDE '+p.interval+'s</div>':''}
+        </div>
+      </div>`;
+  } else {
+    m.innerHTML = `<div class="thumb-grid">${
+      p.files.map((f,i)=>`
+        <div class="thumb ${i===S.cur?'selected':''}" style="background-image:${f.h}">
+          <span class="nm">${f.n.slice(-4)}</span>
+        </div>`).join('')
+    }</div>`;
+  }
+}
+function photoKey(k){
+  const p = PS.photo;
+  if (p.view>=0){
+    if (k==='ArrowLeft'){ p.view=(p.view-1+p.files.length)%p.files.length; render(); }
+    else if (k==='ArrowRight'){ p.view=(p.view+1)%p.files.length; render(); }
+    else if (k==='Enter'||k==='Escape'){ p.view=-1; p.slide=false; render(); }
+  } else {
+    if (k==='ArrowUp'){ S.cur = S.cur-3>=0 ? S.cur-3 : S.cur; render(); }
+    else if (k==='ArrowDown'){ S.cur = S.cur+3<p.files.length ? S.cur+3 : S.cur; render(); }
+    else if (k==='ArrowLeft'){ S.cur = Math.max(0,S.cur-1); render(); }
+    else if (k==='ArrowRight'){ S.cur = Math.min(p.files.length-1,S.cur+1); render(); }
+    else if (k==='Enter'){ p.view=S.cur; p.slide=false; render(); }
+    else if (k==='Escape'){ exitMode(); }
+  }
+}
+function photo_view(){ PS.photo.view = PS.photo.view>=0 ? PS.photo.view : S.cur; PS.photo.slide=false; render(); }
+function photo_prev(){ const p=PS.photo; if(p.view>=0){ p.view=(p.view-1+p.files.length)%p.files.length; render(); } else toast('F2 上一张（先进入查看）'); }
+function photo_next(){ const p=PS.photo; if(p.view>=0){ p.view=(p.view+1)%p.files.length; render(); } else toast('F3 下一张（先进入查看）'); }
+function photo_info(){
+  const p=PS.photo; const f=p.files[p.view>=0?p.view:S.cur];
+  setModal('📷 图片信息', `${f.n}.jpg<br>分辨率 640×480<br>大小 128 KB<br>日期 2026-09-25`, [{t:'关闭',cls:'primary',fn:closeModal}]);
+}
+function photo_slide(){ const p=PS.photo; p.view = p.view>=0?p.view:S.cur; p.slide=!p.slide; render(); toast(p.slide?'幻灯片播放中（F6 设间隔）':'幻灯片已停止'); }
+function photo_menu(){
+  setModal('相册菜单','排序：文件名 / 日期<br>目录：/mem_fat/photos<br>幻灯片间隔：'+PS.photo.interval+'s', [
+    {t:'间隔 3s', fn:()=>{PS.photo.interval=3; closeModal();}},
+    {t:'间隔 5s', fn:()=>{PS.photo.interval=5; closeModal();}},
+    {t:'关闭', cls:'primary', fn:closeModal},
+  ]);
+}
+function photo_setwp(){ setModal('设置壁纸','已设为系统壁纸 ✓<br>（真机：写 config 持久化）',[{t:'好',cls:'primary',fn:closeModal}]); }
+function photo_rot(){ const p=PS.photo; if(p.view>=0){ toast('已旋转 90°'); } }
+function photo_zoom(){ toast('已放大 2 倍'); }
+function photo_dir(){ toast('目录：/mem_fat/photos'); }
+function photo_intv(){ PS.photo.interval = PS.photo.interval===3?5:3; toast('幻灯片间隔 '+PS.photo.interval+'s'); }
+
+/* ============================================================
+ * 音频引擎（Web Audio）：合成旋律 + 本地文件真实播放
+ * ============================================================ */
+let SND = null;               /* AudioContext（首次用户手势内创建） */
+let SND_G = null;             /* 主增益 */
+let SND_SRC = null;           /* 当前 source */
+let SND_T0 = 0;               /* 本次播放起始（ctx 时间） */
+let SND_LEN = 0;              /* 当前曲目时长（秒，文件=时长，合成=循环长） */
+let SND_BUFS = {};            /* 已解码的本地文件 {name: AudioBuffer} */
+let SND_NOTE_IDX = 0;         /* 合成器调度游标 */
+let SND_NOTE_T = 0;           /* 合成器下一个音符调度时刻 */
+
+/* 五首歌的合成旋律：[midi, 拍数] 循环；不同调性/速度区分情绪 */
+const SND_SEQ = [
+  { bpm:72, notes:[ [60,2],[64,1],[67,1],[72,2],[67,1],[64,1],[62,2],[65,1],[69,1],[74,2],[69,1],[65,1] ] }, /* 遇见: C 大调琶音 */
+  { bpm:80, notes:[ [67,1],[71,1],[74,1],[71,1],[69,1],[66,1],[62,1],[66,1],[67,1],[71,1],[74,1],[79,2],[74,1],[71,1] ] }, /* 晴天: G 大调 */
+  { bpm:76, notes:[ [65,1],[69,1],[72,1],[69,1],[65,1],[62,1],[65,1],[69,1],[70,1],[74,1],[77,2],[74,1],[70,1] ] }, /* 小幸运: F 大调 */
+  { bpm:92, notes:[ [60,1],[64,1],[67,1],[72,1],[76,1],[72,1],[67,1],[64,1],[62,1],[66,1],[69,1],[74,1],[77,1],[74,1],[69,1],[66,1] ] }, /* 告白气球: C 上行 */
+  { bpm:66, notes:[ [69,2],[65,1],[62,1],[57,2],[62,1],[65,1],[67,2],[64,1],[60,1],[55,2],[60,1],[64,1] ] }  /* 夜曲: A 小调下行 */
+];
+function sndMid2Hz(m){ return 440 * Math.pow(2, (m-69)/12); }
+
+function sndEnsure(){
+  if (SND) { if (SND.state==='suspended') SND.resume(); return; }
+  try {
+    SND = new (window.AudioContext||window.webkitAudioContext)();
+    SND_G = SND.createGain(); SND_G.gain.value = PS.music.vol/100; SND_G.connect(SND.destination);
+  } catch(e){ SND=null; }
+}
+function sndNow(){ return SND ? SND.currentTime : 0; }
+function sndProg(){ /* 当前曲目播放进度 0..1 */
+  const p=PS.music; if (!p.playing) return p.prog;
+  if (SND_LEN<=0) return p.prog;
+  const t = (sndNow()-SND_T0) % SND_LEN;
+  return t/SND_LEN;
+}
+function sndBeep(freq, t0, dur, type, vol){
+  const o=SND.createOscillator(), g=SND.createGain();
+  o.type=type||'triangle'; o.frequency.value=freq;
+  g.gain.setValueAtTime(0.0001,t0);
+  g.gain.exponentialRampToValueAtTime(vol,t0+0.015);
+  g.gain.exponentialRampToValueAtTime(0.0001,t0+dur);
+  o.connect(g); g.connect(SND_G);
+  o.start(t0); o.stop(t0+dur+0.05);
+}
+function sndScheduleSynth(idx){
+  const seq=SND_SEQ[idx], spb=60/seq.bpm;
+  const now=sndNow();
+  SND_NOTE_T = Math.max(now, SND_T0);
+  SND_NOTE_IDX = 0;
+  function tick(){
+    while (SND && PS.music.playing && SND_NOTE_IDX < seq.notes.length){
+      const [m,b]=seq.notes[SND_NOTE_IDX];
+      sndBeep(sndMid2Hz(m), SND_NOTE_T, spb*b*0.9, (SND_NOTE_IDX%3===1)?'sine':'triangle', 0.12);
+      SND_NOTE_T += spb*b; SND_NOTE_IDX++;
+    }
+    if (PS.music.playing && SND_NOTE_IDX>=seq.notes.length){
+      SND_NOTE_IDX=0; SND_NOTE_T = Math.max(sndNow(), SND_T0 + SND_LEN);
+      SND_LEN = SND_LEN; /* 保持循环长 */
+      setTimeout(tick, 120);
+      return;
+    }
+    if (PS.music.playing) setTimeout(tick, 180);
+  }
+  tick();
+}
+function sndPlay(){
+  sndEnsure(); if (!SND) return;
+  const p=PS.music, idx=p.idx;
+  if (SND_BUFS[p.tracks[idx].name]){
+    /* 本地文件：bufferSource 一次放完，循环由 onended 接续 */
+    const src=SND.createBufferSource(); src.buffer=SND_BUFS[p.tracks[idx].name];
+    src.connect(SND_G); SND_LEN = src.buffer.duration;
+    SND_T0 = sndNow(); SND_SRC=src; src.start(0);
+    src.onended = ()=>{ if (PS.music.playing){ PS.music.playing=false; render(); } };
+  } else {
+    /* 内置合成旋律：循环调度 */
+    const seq=SND_SEQ[idx]; SND_LEN = seq.notes.reduce((a,n)=>a+n[1],0)*60/seq.bpm;
+    SND_T0 = sndNow(); SND_SRC=null;
+    sndScheduleSynth(idx);
+  }
+}
+function sndStop(){
+  if (SND_SRC){ try{ SND_SRC.stop(); }catch(e){} SND_SRC=null; }
+  SND_LEN=0;
+}
+function sndLoadFile(file){
+  const rd=new FileReader();
+  rd.onload = ()=>{
+    if (!SND) sndEnsure(); if (!SND){ toast('浏览器不支持 Web Audio'); return; }
+    SND.decodeAudioData(rd.result, buf=>{
+      if (!buf) return;
+      const name=file.name;
+      SND_BUFS[name]=buf;
+      const p=PS.music;
+      if (!p.tracks.some(t=>t.name===name)){
+        p.tracks.push({ name, t: Math.floor(buf.duration/60)+':'+String(Math.floor(buf.duration%60)).padStart(2,'0'), local:true });
+        p.idx=p.tracks.length-1;
+      }
+      toast('已载入 ' + name);
+      render();
+    }, ()=>{ toast('音频解码失败：'+file.name); });
+  };
+  rd.readAsArrayBuffer(file);
+}
+
+/* ============================================================
+ * MUSIC 音乐播放器
+ * ============================================================ */
+function renderMusic(m){
+  const p = PS.music; const t = p.tracks[p.idx];
+  const prog = sndProg();
+  m.innerHTML = `
+    <div class="now-playing">
+      <div class="np-track">${p.playing?'♪':'♫'} ${t.n||t.name}</div>
+      <div class="np-status"><span id="np-time">${Math.floor(prog*100/100*(t.local?210:210))}s / ${t.t}</span><span>${['列表循环','单曲循环','随机播放'][p.mode]} · 音量 ${p.vol}%${t.local?' · 本地':''}</span></div>
+      <div class="bar-outer np-progress"><div class="bar-inner" id="np-bar" style="width:${(prog*100).toFixed(1)}%"></div></div>
+      <div style="display:flex;gap:4px;margin-top:3px;align-items:center;justify-content:space-between">
+        <span style="font-size:8px;color:rgba(255,255,255,.45)">${t.local?'真实播放中 · Web Audio':'内置合成音 · 可载入本地歌曲'}</span>
+        <button class="mini-btn" onclick="document.getElementById('snd-file').click()" style="font-size:8px;padding:1px 6px;border-radius:4px;background:rgba(255,255,255,.08);color:#fff;border:1px solid rgba(255,255,255,.15)">载入歌曲</button>
+      </div>
+      <input type="file" id="snd-file" accept="audio/*,.mp3,.wav,.m4a,.ogg" style="display:none" onchange="if(this.files&&this.files[0])sndLoadFile(this.files[0]);this.value=''">
+    </div>
+    <div class="list">${p.tracks.map((x,i)=>`
+      <div class="list-row ${i===p.idx?'selected':''}">
+        <span class="idx">${String(i+1).padStart(2,'0')}</span>
+        <span class="val">${x.n||x.name}${x.local?' · 本地':''}</span>
+        <span class="right">${x.t}</span>
+      </div>`).join('')}</div>`;
+}
+function musicKey(k){
+  const p=PS.music;
+  if (k==='ArrowUp'){ p.idx=Math.max(0,p.idx-1); if (p.playing){ sndStop(); sndPlay(); } render(); }
+  else if (k==='ArrowDown'){ p.idx=Math.min(p.tracks.length-1,p.idx+1); if (p.playing){ sndStop(); sndPlay(); } render(); }
+  else if (k==='Enter'){ p.playing=!p.playing; if(p.playing){ sndPlay(); } else { sndStop(); } p.prog=0; render(); }
+  else if (k==='Escape'){ if (p.playing){ p.playing=false; sndStop(); } exitMode(); }
+}
+function mus_play(){ const p=PS.music; p.playing=!p.playing; if(p.playing){ sndPlay(); } else { sndStop(); } if(!p.playing){p.prog=p.prog;} render(); }
+function mus_prev(){ const p=PS.music; p.idx=(p.idx-1+p.tracks.length)%p.tracks.length; p.prog=0; if(p.playing){ sndStop(); sndPlay(); } render(); }
+function mus_next(){ const p=PS.music; p.idx=(p.idx+1)%p.tracks.length; p.prog=0; if(p.playing){ sndStop(); sndPlay(); } render(); }
+function mus_voldn(){ PS.music.vol=Math.max(0,PS.music.vol-10); if(SND_G) SND_G.gain.value=PS.music.vol/100; render(); }
+function mus_volup(){ PS.music.vol=Math.min(100,PS.music.vol+10); if(SND_G) SND_G.gain.value=PS.music.vol/100; render(); }
+function mus_menu(){
+  setModal('音乐菜单','播放模式：'+['列表循环','单曲循环','随机播放'][PS.music.mode], [
+    {t:'切模式', fn:()=>{ PS.music.mode=(PS.music.mode+1)%3; closeModal(); render(); }},
+    {t:'关闭', cls:'primary', fn:closeModal},
+  ]);
+}
+function mus_mode(){ PS.music.mode=(PS.music.mode+1)%3; toast('播放模式：'+['列表循环','单曲循环','随机播放'][PS.music.mode]); }
+function mus_queue(){ setModal('播放队列','当前队列：'+PS.music.tracks.map(t=>t.n).join(' → '),[{t:'关闭',cls:'primary',fn:closeModal}]); }
+function mus_info(){ const t=PS.music.tracks[PS.music.idx]; setModal('歌曲信息', `${t.n}<br>时长 ${t.t}<br>采样率 44.1kHz`, [{t:'关闭',cls:'primary',fn:closeModal}]); }
+function mus_note(){ setModal('歌曲备注','给这首歌添加一条备注。<br>（真机读取同名 .note 文件）',[{t:'存',cls:'primary',fn:closeModal}]); }
+function mus_saveq(){ toast('队列已保存 play.m3u ✓'); }
+
+/* ============================================================
+ * VIDEO 视频播放器
+ * ============================================================ */
+function renderVideo(m){
+  const p=PS.video;
+  if (S.sub==='play'){
+    m.innerHTML = `
+      <div class="video-frame">
+        <div class="vf" style="background:linear-gradient(135deg,#111a33,#0d0b1e)">
+          <div style="position:absolute;left:0;right:0;top:0;bottom:0;display:flex;align-items:center;justify-content:center;font-size:22px;color:rgba(255,255,255,0.6)">${p.playing?'▶':'⏸'}</div>
+          <div style="position:absolute;top:6px;left:8px;font-size:8px;color:rgba(255,255,255,0.7)">${p.files[p.idx]} · ${p.speed}x</div>
+          <div style="position:absolute;bottom:4px;left:8px;right:8px">
+            <div class="bar-outer"><div class="bar-inner" style="width:${Math.min(100,(Date.now()%20000)/200*100)}%"></div></div>
+          </div>
+        </div>
+      </div>`;
+  } else {
+    m.innerHTML = `<div class="list-title"><span>视频文件</span><span class="hint">${p.files.length} 个</span></div>
+      <div class="list">${p.files.map((f,i)=>`
+        <div class="list-row ${i===S.cur?'selected':''}">
+          <span class="idx">${String(i+1).padStart(2,'0')}</span>
+          <span class="val">${f}</span>
+          <span class="right">MJPG</span>
+        </div>`).join('')}</div>`;
+  }
+}
+function videoKey(k){
+  const p=PS.video;
+  if (S.sub==='play'){
+    if (k==='ArrowLeft'){ p.frame-=5; toast('快退 5s'); }
+    else if (k==='ArrowRight'){ p.frame+=5; toast('快进 5s'); }
+    else if (k==='Enter'){ p.playing=!p.playing; render(); }
+    else if (k==='Escape'){ S.sub=null; render(); }
+  } else {
+    if (k==='ArrowUp'){ S.cur=Math.max(0,S.cur-1); render(); }
+    else if (k==='ArrowDown'){ S.cur=Math.min(p.files.length-1,S.cur+1); render(); }
+    else if (k==='Enter'){ S.sub='play'; p.playing=true; render(); }
+    else if (k==='Escape'){ exitMode(); }
+  }
+}
+function vid_play(){ const p=PS.video; if(S.sub==='play'){ p.playing=!p.playing; render(); } else { S.sub='play'; p.playing=true; render(); } }
+function vid_rwd(){ toast('快退 5s'); }
+function vid_fwd(){ toast('快进 5s'); }
+function vid_speed(){ const p=PS.video; p.speed=[0.5,1,1.5,2][([0.5,1,1.5,2].indexOf(p.speed)+1)%4]; toast('倍速 '+p.speed+'x'); }
+function vid_vol(){ PS.video.vol=Math.min(100,PS.video.vol+10); toast('音量 '+PS.video.vol+'%'); }
+function vid_menu(){ setModal('视频菜单','画面适配：'+(['保持比例','拉伸填满'][PS.video.fit]),[
+  {t:'切换适配', fn:()=>{PS.video.fit=(PS.video.fit+1)%2; closeModal();}},
+  {t:'视频信息', fn:()=>{ setModal('视频信息','分辨率 480×320<br>编码 MJPG<br>时长 0:20',[{t:'关闭',cls:'primary',fn:closeModal}]); }},
+  {t:'关闭', cls:'primary', fn:closeModal},
+]); }
+
+/* ============================================================
+ * CLOCK 时钟（秒表 / 倒计时 / 闹钟 / 纪念日）
+ * ============================================================ */
+function fmtMs(ms){
+  const m=Math.floor(ms/60000), s=Math.floor(ms%60000/1000), d=Math.floor(ms%1000/100);
+  return pad(m)+':'+pad(s)+'.'+d;
+}
+function fmtCd(sec){
+  if (sec<0) sec=0;
+  const m=Math.floor(sec/60), s=Math.floor(sec%60);
+  return pad(m)+':'+pad(s);
+}
+function renderClock(m){
+  const c=PS.clock;
+  const d=new Date();
+  const dayLeft = Math.ceil((new Date(2026,11,25,0,0,0)-d)/86400000);
+  m.innerHTML = `
+    <div class="list-title"><span>${['时钟','秒表','倒计时','闹钟','纪念日'][['clock','sw','cd','alarm','dday'].indexOf(c.tab)]}</span>
+    <span class="hint">${c.h24?'24h':'12h'}</span></div>`;
+  if (c.tab==='clock'){
+    const hh = c.h24 ? pad(d.getHours()) : ((d.getHours()%12)||12);
+    m.innerHTML += `<div style="padding:14px 8px">
+      <div class="big-num" style="font-size:40px">${hh}:${pad(d.getMinutes())}</div>
+      <div style="text-align:center;font-size:9px;color:rgba(255,255,255,0.55);margin-top:6px">${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${'日一二三四五六'[d.getDay()]}</div>
+      <div style="text-align:center;font-size:8px;color:rgba(255,255,255,0.35);margin-top:10px">F1 切换 数字/表盘 · F5 纪念日</div>
+    </div>`;
+  } else if (c.tab==='sw'){
+    m.innerHTML += `<div style="padding:18px 8px;text-align:center">
+      <div class="big-num" id="sw-num">${fmtMs(c.sw.ms)}</div>
+      <div style="font-size:8px;color:rgba(255,255,255,0.4);margin-top:12px">分段：${c.sw.laps.length ? c.sw.laps.map(fmtMs).join(' / ') : '—'}</div>
+      <div style="font-size:8px;color:rgba(255,255,255,0.4);margin-top:8px">Enter 开始/暂停 · F6 记录分段</div>
+    </div>`;
+  } else if (c.tab==='cd'){
+    m.innerHTML += `<div style="padding:18px 8px;text-align:center">
+      <div class="big-num" id="cd-num">${fmtCd(c.cd.on?c.cd.left:c.cd.total)}</div>
+      <div style="font-size:8px;color:rgba(255,255,255,0.4);margin-top:12px">F6 设定时长 · Enter 开始/暂停</div>
+    </div>`;
+  } else if (c.tab==='alarm'){
+    m.innerHTML += `<div class="list" style="padding-top:2px">
+      <div class="list-row ${c.alarmOn?'selected':''}"><span class="idx">01</span><span class="val">07:00 起床</span><span class="right">${c.alarmOn?'ON':'OFF'}</span></div>
+      <div class="list-row"><span class="idx">02</span><span class="val">22:00 晚安</span><span class="right">ON</span></div>
+      <div style="font-size:8px;color:rgba(255,255,255,0.4);padding:8px">F1 开关闹钟 · 真机：到点响铃</div>
+    </div>`;
+  } else if (c.tab==='dday'){
+    m.innerHTML += `<div style="padding:14px 8px;text-align:center">
+      <div class="mid-num" style="color:#fca5a5">距目标纪念日</div>
+      <div class="big-num" style="font-size:38px;color:#fff">${dayLeft>0?dayLeft:0}</div>
+      <div style="font-size:9px;color:rgba(255,255,255,0.55)">天 · 倒计时</div>
+    </div>`;
+  }
+}
+function clockKey(k){
+  const c=PS.clock;
+  if (c.tab==='clock'){
+    if (k==='Enter'){ c.style=(c.style+1)%2; render(); }
+  } else if (c.tab==='sw'){
+    if (k==='Enter'){ c.sw.on=!c.sw.on; if(!c.sw.on){ c.sw.ms=0; c.sw.laps=[]; } render(); }
+    else if (k==='Escape'){ c.sw.on=false; }
+  } else if (c.tab==='cd'){
+    if (k==='Enter'){ c.cd.on=!c.cd.on; render(); }
+  } else if (c.tab==='alarm'){
+    if (k==='Enter'){ c.alarmOn=!c.alarmOn; render(); }
+  }
+  if (k==='Escape') exitMode();
+}
+function clk_style(){ const c=PS.clock; if(c.tab==='clock'){ c.style=(c.style+1)%2; toast(c.style?'表盘样式':'数字样式'); } else { c.tab='clock'; render(); } }
+function clk_sw(){ PS.clock.tab='sw'; PS.clock.sw.on=false; render(); }
+function clk_cd(){ PS.clock.tab='cd'; render(); }
+function clk_alarm(){ PS.clock.tab='alarm'; render(); }
+function clk_dday(){ PS.clock.tab='dday'; render(); }
+function clk_menu(){
+  setModal('时钟菜单','当前子功能：'+['时钟','秒表','倒计时','闹钟','纪念日'][['clock','sw','cd','alarm','dday'].indexOf(PS.clock.tab)],[
+    {t:'设倒计时 5:00', fn:()=>{PS.clock.cd.total=300; PS.clock.cd.left=300; PS.clock.cd.on=false; closeModal();}},
+    {t:'12/24h 切换', fn:()=>{PS.clock.h24=!PS.clock.h24; closeModal(); render();}},
+    {t:'关闭', cls:'primary', fn:closeModal},
+  ]);
+}
+function clk_h24(){ PS.clock.h24=!PS.clock.h24; toast(PS.clock.h24?'24 小时制':'12 小时制'); }
+function clk_set(){
+  setModal('设定倒计时','选择倒计时时长',[
+    {t:'1:00', fn:()=>{ PS.clock.cd.total=60; PS.clock.cd.left=60; PS.clock.cd.on=false; closeModal(); }},
+    {t:'5:00', fn:()=>{ PS.clock.cd.total=300; PS.clock.cd.left=300; PS.clock.cd.on=false; closeModal(); }},
+    {t:'10:00', fn:()=>{ PS.clock.cd.total=600; PS.clock.cd.left=600; PS.clock.cd.on=false; closeModal(); }},
+    {t:'取消', cls:'primary', fn:closeModal},
+  ]);
+}
+function clk_edit(){
+  setModal('编辑闹钟','07:00 起床 · '+(PS.clock.alarmOn?'开':'关'),[
+    {t:'切换开关', fn:()=>{ PS.clock.alarmOn=!PS.clock.alarmOn; closeModal(); render(); }},
+    {t:'关闭', cls:'primary', fn:closeModal},
+  ]);
+}
+function clk_export(){ toast('秒表记录已导出 sw.txt ✓'); }
+function clk_reset(){ PS.clock.sw.ms=0; PS.clock.sw.laps=[]; render(); }
+
+/* ============================================================
+ * NOTES 记事
+ * ============================================================ */
+function renderNotes(m){
+  const p=PS.notes;
+  if (p.view>=0){
+    const n=p.list[p.view];
+    m.innerHTML = `<div class="card"><div class="card-head"><span>${n.t}</span><span class="sub">${p.view+1}/${p.list.length}</span></div>
+      <div class="card-body" style="height:calc(100% - 24px);overflow:hidden">${n.b}<br><br>（真机：折行滚动显示全文）</div></div>`;
+  } else {
+    m.innerHTML = `<div class="list-title"><span>记事本</span><span class="hint">${p.list.length} 篇</span></div>
+      <div class="list">${p.list.map((n,i)=>`
+        <div class="list-row ${i===S.cur?'selected':''}">
+          <span class="idx">${String(i+1).padStart(2,'0')}</span>
+          <span class="val">${n.t} · ${n.b.slice(0,8)}</span>
+        </div>`).join('')}</div>`;
+  }
+}
+function notesKey(k){
+  const p=PS.notes;
+  if (p.view>=0){
+    if (k==='ArrowUp'){ p.view=Math.max(0,p.view-1); render(); }
+    else if (k==='ArrowDown'){ p.view=Math.min(p.list.length-1,p.view+1); render(); }
+    else if (k==='Enter'||k==='Escape'){ p.view=-1; render(); }
+  } else {
+    if (k==='ArrowUp'){ S.cur=Math.max(0,S.cur-1); render(); }
+    else if (k==='ArrowDown'){ S.cur=Math.min(p.list.length-1,S.cur+1); render(); }
+    else if (k==='Enter'){ p.view=S.cur; render(); }
+    else if (k==='Escape'){ exitMode(); }
+  }
+}
+function note_view(){ PS.notes.view = PS.notes.view>=0?PS.notes.view:S.cur; render(); }
+function note_new(){
+  S.sub='input'; S.input='';
+  setModal('新建记事','输入标题（真机：屏幕字符表）',[
+    {t:'新建示例', fn:()=>{ PS.notes.list.push({t:'2026-09-25', b:'今天在操场拍了很多照片。'}); S.cur=PS.notes.list.length-1; closeModal(); render(); }},
+    {t:'取消', cls:'primary', fn:closeModal},
+  ]);
+}
+function note_edit(){ if(PS.notes.view>=0){ PS.notes.list[PS.notes.view].b += '（已编辑）'; toast('已编辑并保存'); } else toast('先进入查看再编辑'); }
+function note_del(){
+  const p=PS.notes;
+  setModal('删除确认','删除《'+p.list[p.view>=0?p.view:S.cur].t+'》？<br>此操作不可恢复',[
+    {t:'删除', cls:'danger', fn:()=>{ p.list.splice(p.view>=0?p.view:S.cur,1); if(p.view>=0)p.view=-1; if(S.cur>=p.list.length)S.cur=0; closeModal(); render(); }},
+    {t:'取消', cls:'primary', fn:closeModal},
+  ]);
+}
+function note_next(){ const p=PS.notes; if(p.view>=0){ p.view=Math.min(p.list.length-1,p.view+1); render(); } }
+function note_menu(){ setModal('记事菜单','排序：日期倒序<br>字数：'+PS.notes.list.join('').length+' 字',[
+  {t:'导出到TF卡', fn:()=>{ toast('notes.txt 已导出 ✓'); closeModal(); }},
+  {t:'关闭', cls:'primary', fn:closeModal},
+]); }
+function note_sort(){ toast('排序：日期倒序'); }
+function note_words(){ toast('全部笔记共 '+PS.notes.list.join('').length+' 字'); }
+function note_export(){ toast('notes.txt 已导出 ✓'); }
+function note_prev(){ const p=PS.notes; if(p.view>=0){ p.view=Math.max(0,p.view-1); render(); } }
+
+/* ============================================================
+ * CALC 计算器（安全四则解析器，无 eval）
+ * ============================================================ */
+function calcParse(src){
+  let i=0; const s=src;
+  function skip(){ while(i<s.length && s[i]===' ') i++; }
+  function num(){
+    skip(); let st=i;
+    while(i<s.length && /[0-9.]/.test(s[i])) i++;
+    if (st===i) throw 0;
+    return parseFloat(s.slice(st,i));
+  }
+  function factor(){
+    skip();
+    if (s[i]==='('){ i++; const v=expr(); skip(); if(s[i]===')') i++; return v; }
+    if (s[i]==='-'){ i++; return -factor(); }
+    let v=num();
+    skip(); while(s[i]==='%'){ i++; v/=100; skip(); }
+    return v;
+  }
+  function term(){
+    let v=factor(); skip();
+    while(s[i]==='*'||s[i]==='/'){
+      const op=s[i]; i++;
+      const r=factor(); skip();
+      v = op==='*' ? v*r : (r===0?NaN:v/r);
+    }
+    return v;
+  }
+  function expr(){
+    let v=term(); skip();
+    while(s[i]==='+'||s[i]==='-'){
+      const op=s[i]; i++;
+      const r=term(); skip();
+      v = op==='+' ? v+r : v-r;
+    }
+    return v;
+  }
+  return expr();
+}
+function renderCalc(m){
+  const c=PS.calc;
+  m.innerHTML = `
+    <div class="calc-display"><div class="expr">${c.expr||' '}</div><div id="calc-res">${c.last}</div></div>
+    <div class="calc-grid">
+      ${['7','8','9','÷','4','5','6','×','1','2','3','−','0','.','%','='].map((k,i)=>
+        `<div class="calc-key ${'÷×−'.includes(k)?'op':''}" data-k="${k}">${k}</div>`).join('')}
+    </div>
+    <div style="padding:2px 8px;font-size:8px;color:rgba(255,255,255,0.4)">键盘直接输入数字和 + - * / ( ) · Enter 计算 · 历史 ${c.hist.length} 条</div>`;
+}
+function calcKey(k){
+  if (/^[0-9.+\-*/()%]$/.test(k)){ PS.calc.expr += k==='-'?k:(k==='*'?'*':(k==='/'?'/':k)); render(); }
+  else if (k==='Enter'){ calcEq(); }
+  else if (k==='Backspace'){ PS.calc.expr=PS.calc.expr.slice(0,-1); render(); }
+  else if (k==='Escape'){ exitMode(); }
+}
+function calcEq(){
+  const c=PS.calc; if(!c.expr) return;
+  try{
+    const r=calcParse(c.expr.replace(/×/g,'*').replace(/÷/g,'/').replace(/−/g,'-'));
+    c.last = (Math.round(r*1e8)/1e8).toString();
+    c.hist.unshift(c.expr+' = '+c.last);
+    if (c.hist.length>10) c.hist.pop();
+  }catch(e){ c.last='Error'; }
+  c.expr=''; render();
+}
+function calc_clear(){ PS.calc.expr=''; PS.calc.last='0'; render(); }
+function calc_back(){ PS.calc.expr=PS.calc.expr.slice(0,-1); render(); }
+function calc_sci(){ PS.calc.sci=!PS.calc.sci; toast(PS.calc.sci?'科学模式：√ ^ 已启用':'科学模式关闭'); }
+function calc_base(){ PS.calc.base = PS.calc.base===10?16:(PS.calc.base===16?2:10); toast('进制：'+['?','2','10','16'][PS.calc.base===10?2:(PS.calc.base===16?3:1)]); }
+function calc_hist(){ setModal('计算历史', PS.calc.hist.length?PS.calc.hist.map(h=>'· '+h).join('<br>'):'（空）',[{t:'关闭',cls:'primary',fn:closeModal}]); }
+function calc_menu(){ setModal('计算器菜单','四则 + 科学 + 进制转换 + 历史',[
+  {t:'上次结果', fn:()=>{ PS.calc.expr=PS.calc.last; closeModal(); render(); }},
+  {t:'关闭', cls:'primary', fn:closeModal},
+]); }
+function calc_pct(){ if(PS.calc.expr) PS.calc.expr += '/100'; render(); }
+function calc_pow(){ PS.calc.expr += '^2'; PS.calc.expr = PS.calc.expr.replace(/\^2$/,'*'+PS.calc.last); render(); }
+function calc_sqrt(){ toast('√ 请直接输入 sqrt 不支持（真机：科学页有 √ 键）'); }
+function calc_last(){ PS.calc.expr=PS.calc.last; render(); }
+
+/* ============================================================
+ * PRGM 程序（Memoria Script）
+ * ============================================================ */
+/* ============================================================
+ * PRGM 编程模式 —— BASIC（.bas）+ 保留 .ms 脚本
+ *   列表 → 编辑（字符条 + 键盘直输）→ 运行（JS 版 BASIC 引擎 + 画布）
+ * ============================================================ */
+const BASIC_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 . ,\"()=+-*/<>?!_:;%";
+
+/* ---------- JS 版 BASIC 引擎（与真机行为一致：无 FOR/数组，PRINT 分号混合输出） ---------- */
+async function basicRun(src, out, canvas, askNum){
+  const lines = {};
+  src.split('\n').forEach(l=>{
+    const t = l.trim(); if(!t) return;
+    const mm = t.match(/^(\d+)\s*(.*)$/);
+    if (mm) lines[parseInt(mm[1])] = mm[2];
+  });
+  const nums = Object.keys(lines).map(Number).sort((a,b)=>a-b);
+  if (!nums.length){ out('(空程序)\n'); return; }
+
+  const vars = {}; let gstack = []; let cur = nums[0]; let running = true; let steps = 0;
+  const MAX = 100000; let fg = '#ffffff';
+  const ctx = canvas ? canvas.getContext('2d') : null;
+  if (ctx){ ctx.clearRect(0,0,320,192); ctx.font='8px monospace'; }
+
+  const evalExpr = e => {
+    e = e.trim();
+    if (!e) return 0;
+    if (!bal(e)) { out('错误：括号不配对\n'); return 0; }
+    if (e[0]==='-') return -evalExpr(e.slice(1));
+    if (/^[+-]?\d*\.?\d+$/.test(e)) return parseFloat(e);
+    const op = e.indexOf('('), cp = e.lastIndexOf(')');
+    if (op>=0 && cp>op && e.slice(cp+1).trim()===''){
+      const fn = e.slice(0,op).trim().toUpperCase();
+      const arg = e.slice(op+1,cp).trim();
+      if (fn==='RND') return Math.random();
+      if (fn==='POW'){ const ps = splitArgs(arg); if(ps.length>=2) return Math.pow(evalExpr(ps[0]), evalExpr(ps[1])); }
+      const M = {SIN:Math.sin,COS:Math.cos,TAN:Math.tan,ABS:Math.abs,SQR:Math.sqrt,INT:Math.floor,LOG:Math.log,LOG10:Math.log10,EXP:Math.exp};
+      if (M[fn] && arg) return M[fn](evalExpr(arg));
+    }
+    const low = e.toLowerCase();
+    if (low in vars) return vars[low];
+    for (let i=e.length-1;i>=0;i--){
+      if ((e[i]==='+'||e[i]==='-') && i>0 && e[i-1]!=='(')
+        return evalExpr(e.slice(0,i)) + (e[i]==='+'?1:-1)*evalExpr(e.slice(i+1));
+    }
+    for (let i=e.length-1;i>=0;i--){
+      if (e[i]==='*'||e[i]==='/'){
+        const l=evalExpr(e.slice(0,i)), r=evalExpr(e.slice(i+1));
+        if (e[i]==='*') return l*r;
+        return Math.abs(r)<1e-12 ? 0 : l/r;
+      }
+    }
+    if (e[0]==='(' && e[e.length-1]===')') return evalExpr(e.slice(1,-1));
+    out('错误：无法识别表达式 '+e+'\n'); return 0;
+  };
+  const bal = e => { let c=0; for(const ch of e){ if(ch==='(')c++; else if(ch===')')c--; if(c<0)return false; } return c===0; };
+  const splitArgs = t => { const r=[]; let cur='', inq=false;
+    for(let i=0;i<t.length;i++){ const ch=t[i];
+      if(ch==='"') inq=!inq;
+      if(ch===',' && !inq){ r.push(cur); cur=''; } else cur+=ch; }
+    r.push(cur); return r.map(x=>x.trim()); };
+  const fmt = v => Number.isInteger(v) ? String(v) : String(Math.round(v*10000)/10000);
+
+  const exec = async line => {
+    const u = line.trim().toUpperCase();
+    if (u.startsWith('PRINT')) {
+      const rest = line.trim().slice(5); let outL='', cur='', inq=false;
+      const flush=()=>{ const t=cur.trim(); cur='';
+        if(!t) return;
+        if(t[0]==='"' && t[t.length-1]==='"') outL += t.slice(1,-1);
+        else outL += fmt(evalExpr(t)); };
+      for(let i=0;i<rest.length;i++){ const ch=rest[i];
+        if(ch==='"') inq=!inq;
+        if((ch===';'||ch===',') && !inq) flush(); else cur+=ch; }
+      flush(); out(outL+'\n');
+    } else if (u.startsWith('LET')) {
+      const rest = line.trim().slice(3); const eq = rest.indexOf('=');
+      if (eq<0) return;
+      vars[rest.slice(0,eq).trim().toLowerCase()] = evalExpr(rest.slice(eq+1));
+    } else if (u.startsWith('INPUT')) {
+      const v = await askNum('? ');
+      vars[line.trim().slice(5).trim().toLowerCase()] = v;
+    } else if (u.startsWith('GOTO')) { cur = Math.floor(evalExpr(line.trim().slice(4))); }
+    else if (u.startsWith('GOSUB')) { gstack.push(cur); cur = Math.floor(evalExpr(line.trim().slice(5))); }
+    else if (u.startsWith('RETURN')) { if(!gstack.length){ out('错误：RETURN 没有 GOSUB\n'); running=false; return; } cur = gstack.pop(); }
+    else if (u.startsWith('IF')) {
+      const ti = u.indexOf('THEN');
+      if (ti<0){ out('语法错误 IF 缺 THEN\n'); return; }
+      if (evalCond(line.trim().slice(2,ti))) {
+        const body = line.trim().slice(ti+4).trim();
+        if (/^\d+$/.test(body)) cur = parseInt(body); else await exec(body);
+      }
+    } else if (u.startsWith('SYSTEM')) {
+      const a = parseArgs(line.trim().slice(6));
+      if (a[0] && a[0].s && a[0].s.toUpperCase()==='REBOOT') out('SYSTEM: 重启（模拟）\n');
+      else out('SYSTEM: '+((a[0]&&a[0].s)||'?')+'\n');
+    } else if (u.startsWith('END')) { running=false; return; }
+    else {
+      /* 扩展命令（真机由宿主注入：屏幕/WiFi/GPIO） */
+      const head = u.split(/\s/)[0];
+      const C = {TEXT:1,RECT:1,FILL:1,CLEAR:1,COLOR:1,PIXEL:1,LINE:1,CIRCLE:1,WIFI:1,SLEEP:1,GPIOOUT:1,UART:1,BLE:1};
+      if (!C[head]) { out('未知命令: '+line+'\n'); return; }
+      const a = parseArgs(line.trim().slice(head.length));
+      const n = i => i<1 || !a[i] ? 0 : evalExpr(a[i]);
+      if (head==='TEXT' && a[2] && a[2].s && ctx) ctx.fillStyle=fg, ctx.fillText(a[2].s, n(0), n(1)+8);
+      else if (head==='RECT' && ctx){ ctx.strokeStyle=fg; ctx.strokeRect(n(0), n(1), n(2), n(3)); }
+      else if (head==='FILL' && ctx){ ctx.fillStyle=fg; ctx.fillRect(n(0), n(1), n(2), n(3)); }
+      else if (head==='CLEAR' && ctx){ ctx.clearRect(0,0,480,280); }
+      else if (head==='COLOR'){ fg = 'rgb('+Math.floor(n(0))+','+Math.floor(n(1))+','+Math.floor(n(2))+')'; }
+      else if (head==='PIXEL' && ctx){ ctx.fillStyle=fg; ctx.fillRect(n(0), n(1), 1, 1); }
+      else if (head==='LINE' && ctx){ ctx.strokeStyle=fg; ctx.beginPath(); ctx.moveTo(n(0),n(1)); ctx.lineTo(n(2),n(3)); ctx.stroke(); }
+      else if (head==='CIRCLE' && ctx){ ctx.strokeStyle=fg; ctx.beginPath(); ctx.arc(n(0),n(1),Math.abs(n(2)),0,7); ctx.stroke(); }
+      else if (head==='WIFI'){ out('WIFI 连接中…（模拟）\n'); }
+      else if (head==='SLEEP'){ const ms=Math.floor(n(0)); await new Promise(r=>setTimeout(r,ms)); }
+      else out(head+'（模拟）\n');
+    }
+  };
+  const evalCond = c => {
+    c=c.trim();
+    let op=null, pos=-1;
+    ['>=','<=','<>','>','<','='].forEach(o=>{ const p=c.indexOf(o); if(p>=0 && (pos<0||p<pos)){ pos=p; op=o; } });
+    if(!op) return false;
+    const l=evalExpr(c.slice(0,pos)), r=evalExpr(c.slice(pos+op.length));
+    if(op==='=') return l===r; if(op==='>') return l>r; if(op==='<') return l<r;
+    if(op==='>=') return l>=r; if(op==='<=') return l<=r; if(op==='<>') return l!==r;
+    return false;
+  };
+  const parseArgs = t => splitArgs(t).map(x=>{
+    if (x.length>=2 && x[0]==='"' && x[x.length-1]==='"') return {s:x.slice(1,-1)};
+    return {v:evalExpr(x)};
+  });
+
+  while (running && steps++ < MAX){
+    if (steps > MAX){ out('[保护] 运行超过 '+MAX+' 步，已强制终止\n'); break; }
+    if (!(cur in lines)){ const nx = nums.find(v=>v>cur); if (nx===undefined) break; cur = nx; continue; }
+    await exec(lines[cur]);
+    if (running){ const nx = nums.find(v=>v>cur); if (nx===undefined) running=false; else cur = nx; }
+    await new Promise(r=>setTimeout(r,60));
+  }
+  out('[exit 0]\n');
+}
+
+function renderPrgm(m){
+  const p=PS.prgm;
+  if (S.sub==='chat') return renderChat(m);
+  if (S.sub==='run'){
+    m.innerHTML = `<div class="basic-run">
+      <canvas class="basic-canvas" id="basic-canvas" width="480" height="280"></canvas>
+      <div class="basic-out" id="prgm-out"></div>
+    </div>`;
+    return;
+  }
+  if (S.sub==='edit'){
+    const rows = p.editLines;
+    const start = Math.max(0, S.cur-9);
+    m.innerHTML = `<div class="list-title"><span>编辑 ${p.editing}</span><span class="hint">Esc 保存返回</span></div>
+      <div class="edit-list">${rows.slice(start, start+11).map((r,i)=>{
+        const gi = start+i;
+        return `<div class="edit-row ${gi===S.cur?'selected':''}"><span class="ln">${r[0]}</span><span class="code">${(r[1]||'').replace(/</g,'&lt;')}</span></div>`;
+      }).join('')}</div>
+      ${IME.mode==='CN' ? imeBarHTML() : `<div class="char-bar"><div class="char-row">${
+        Array.from({length:40},(_,i)=>{
+          const ci=(i+p.charSel)%BASIC_CHARS.length;
+          return `<span class="char-cell ${ci===p.charSel?'sel':''}">${BASIC_CHARS[ci]}</span>`;
+        }).join('')
+      }</div><div class="char-tip">←→ 选字 · Enter 插入 · 字母键直输 · ↑↓ 切行 · Back 退格 · F1 中文</div></div>`}`;
+    return;
+  }
+  if (S.sub==='src'){
+    const src=p.list[p.idx].src;
+    m.innerHTML = `<div class="card"><div class="card-head"><span>${p.list[p.idx].n} 源码</span><span class="sub">${p.list[p.idx].sz}</span></div>
+      <div class="card-body" style="white-space:pre-wrap;height:calc(100% - 24px);overflow:hidden;color:#a7f3d0">${src.replace(/</g,'&lt;')}</div></div>`;
+    return;
+  }
+  m.innerHTML = `<div class="list-title"><span>程序</span><span class="hint">/mem_fat/scripts</span></div>
+    <div class="list">${p.list.map((x,i)=>`
+      <div class="list-row ${i===S.cur?'selected':''}">
+        <span class="idx">${String(i+1).padStart(2,'0')}</span>
+        <span class="val">${x.n}</span>
+        <span class="right">${x.type==='bas'?'[BASIC]':'[ms]'} ${x.sz}</span>
+      </div>`).join('')}</div>
+    <div style="padding:4px 8px;font-size:8px;color:rgba(255,255,255,0.4)">BASIC 行号编程 · .ms 隐藏保留（Memoria Script）</div>`;
+}
+function prgmKey(k){
+  const p=PS.prgm;
+  if (S.sub==='chat') return chatKey(k);
+  if (S.sub==='run'){
+    if (k==='Escape'){ S.sub=null; render(); }
+    return;
+  }
+  if (S.sub==='edit'){
+    if (k==='Escape'){ prgm_save_edit(); S.sub=null; S.cur=p.idx; render(); return; }
+    /* 中文输入法模式：全拼联想 */
+    if (IME.mode==='CN'){
+      if (/^[a-z]$/.test(k)){ if (IME.py.length<8) IME.py+=k; IME.sel=0; render(); return; }
+      if (/^[1-9]$/.test(k)){ const cs=imeCands(); const c=cs[parseInt(k)-1]; if(c){ imeInsert(c); IME.py=''; } render(); return; }
+      if (k==='Backspace'){ if (IME.py){ IME.py=IME.py.slice(0,-1); render(); } return; }
+      if (k===' '||k==='Enter'){ const cs=imeCands(); if (cs.length){ imeInsert(cs[IME.sel]||cs[0]); IME.py=''; } render(); return; }
+      if (k==='ArrowLeft'||k==='ArrowRight'){ const cs=imeCands(); if (cs.length){ IME.sel=(IME.sel+(k==='ArrowLeft'?-1:1)+cs.length)%cs.length; render(); } return; }
+      return;   /* 中文模式：其他键忽略 */
+    }
+    if (k==='Enter'){ const last=p.editLines[S.cur][0]||0; p.editLines.splice(S.cur+1,0,[last+10,'']); S.cur++; render(); return; }
+    if (k==='Backspace'){ const ln=p.editLines[S.cur]; if (ln[1].length) ln[1]=ln[1].slice(0,-1); render(); return; }
+    if (k==='ArrowUp'){ S.cur=Math.max(0,S.cur-1); render(); return; }
+    if (k==='ArrowDown'){ S.cur=Math.min(p.editLines.length-1,S.cur+1); render(); return; }
+    if (k==='ArrowLeft'){ p.charSel=(p.charSel+BASIC_CHARS.length-1)%BASIC_CHARS.length; render(); return; }
+    if (k==='ArrowRight'){ p.charSel=(p.charSel+1)%BASIC_CHARS.length; render(); return; }
+    if (/^[A-Za-z0-9 .,"()=+\-*/<>?!_:;%]$/.test(k)){ const ln=p.editLines[S.cur]; if(ln[1].length<96) ln[1]+=k; render(); return; }
+    return;
+  }
+  if (S.sub==='src'){ if(k==='Enter'||k==='Escape'){ S.sub=null; render(); } return; }
+  if (k==='ArrowUp'){ S.cur=Math.max(0,S.cur-1); render(); }
+  else if (k==='ArrowDown'){ S.cur=Math.min(p.list.length-1,S.cur+1); render(); }
+  else if (k==='Enter'){
+    if (p.list[S.cur].type==='bas') prgm_edit(); else { S.sub='src'; render(); }
+  }
+  else if (k==='Escape'){ exitMode(); }
+}
+function prgm_save_edit(){
+  const p=PS.prgm;
+  const src = p.editLines.map(r=>r[0]+' '+r[1]).join('\n')+ (p.editLines.length?'\n':'');
+  const it = p.list.find(x=>x.n===p.editing);
+  if (it){ it.src=src; it.sz=(src.length/1024).toFixed(1)+'K'; }
+}
+function prgm_run(){
+  const p=PS.prgm; const it=p.list[p.idx];
+  if (it.n==='CHAT.bas'){ S.sub='chat'; render(); return; }
+  S.sub='run'; render();
+  const outEl=()=>$('prgm-out'), cv=$('basic-canvas');
+  const out=t=>{ const el=outEl(); if(!el) return; const keep=el.textContent.split('\n').slice(-9).join('\n'); el.textContent=(keep?keep+'\n':'')+t; };
+  p.out='';
+  if (it.type==='bas'){
+    let askMode=false;
+    basicRun(it.src, out, cv, async pr=>{
+      return new Promise(res=>{
+        askMode=true;
+        setModal('BASIC INPUT', '<div style="font-size:10px;color:#a7f3d0">'+pr+'</div><input id="bas-input" type="number" style="width:110px;margin:6px 0;padding:4px;border:1px solid #333;border-radius:4px;background:#0b0a18;color:#fff;font-size:12px;text-align:center" value="0">', [
+          {t:'确定', cls:'primary', fn:()=>{ const v=parseFloat(($('bas-input')||{}).value||0); askMode=false; closeModal(); res(v); }},
+        ]);
+      });
+    });
+  } else {
+    const outs = { hello:'hello, memoria!\n1\n2\n3\ndone ✓', fortune:'千里之行，始于足下\n温故而知新\n不积跬步，无以至千里' };
+    const lines = (outs[it.n.replace(/\.ms$/,'')]||'(无输出)').split('\n');
+    let n=0; clearInterval(S._runT);
+    S._runT = setInterval(()=>{
+      if (n>=lines.length){ clearInterval(S._runT); out('[exit 0]'); return; }
+      out(lines[n]); n++;
+    }, 400);
+  }
+}
+function prgm_edit(){
+  const p=PS.prgm; const it=p.list[p.idx];
+  p.editing=it.n; p.editLines=[]; S.cur=0;
+  it.src.split('\n').forEach(l=>{
+    const mm=l.trim().match(/^(\d+)\s*(.*)$/);
+    if(mm) p.editLines.push([parseInt(mm[1]), mm[2]||'']);
+  });
+  if (!p.editLines.length) p.editLines.push([10,'']);
+  S.sub='edit'; render();
+}
+function prgm_new(){
+  setModal('新建程序','BASIC 行号程序（自动编号 progN.bas）',[
+    {t:'新建 BASIC', cls:'primary', fn:()=>{ closeModal();
+      let n=1; while(PS.prgm.list.find(x=>x.n==='prog'+n+'.bas')) n++;
+      PS.prgm.list.push({n:'prog'+n+'.bas', sz:'0.0K', type:'bas', src:'10 PRINT "HELLO"\n20 END\n'});
+      PS.prgm.idx=PS.prgm.list.length-1; prgm_edit(); }},
+    {t:'新建 .ms', fn:()=>{ closeModal();
+      PS.prgm.list.push({n:'demo.ms', sz:'0.1K', type:'ms', src:'print("hello, memoria!")'});
+      render(); }},
+    {t:'取消', fn:closeModal},
+  ]);
+}
+function prgm_del(){
+  setModal('删除确认','删除 '+PS.prgm.list[S.cur].n+'？',[
+    {t:'删除', cls:'danger', fn:()=>{ PS.prgm.list.splice(S.cur,1); if(S.cur>=PS.prgm.list.length)S.cur=0; closeModal(); render(); }},
+    {t:'取消', cls:'primary', fn:closeModal},
+  ]);
+}
+function prgm_ren(){ toast('已重命名（真机：字符表输入）'); }
+function prgm_menu(){ setModal('程序菜单','BASIC + Memoria Script 双引擎<br>BASIC：PRINT/LET/INPUT/IF/GOTO…<br>.ms：隐藏保留的脚本引擎',[
+  {t:'语法检查', fn:()=>{ toast('语法 OK ✓'); closeModal(); }},
+  {t:'关闭', cls:'primary', fn:closeModal},
+]); }
+
+/* ============================================================
+ * STORE 软件商店（在线软件 / 已安装 / 软件源）
+ * ============================================================ */
+function renderStore(m){
+  const p=PS.store;
+  if (p.page===2){
+    m.innerHTML = `<div class="list-title"><span>软件源</span><span class="hint">F2 官方源</span></div>
+      <div class="store-src">当前源：<b>${p.source}</b><br><br>
+      换源方式：<br>· 在 TF 卡根目录建 <b>store_url.txt</b>，首行写源地址<br>
+      · 开机优先读取，改文本即可换源<br>
+      · 与真机逻辑一致（NVS mirror + TF 覆盖）</div>`;
+    return;
+  }
+  if (p.page===1){
+    const inst = PS.prgm.list.filter(x=>x.type==='bas');
+    m.innerHTML = `<div class="list-title"><span>已安装应用</span><span class="hint">${inst.length} 个 · 卸载=删文件</span></div>
+      <div class="store-page">${inst.length?inst.map((x,i)=>`
+        <div class="store-row ${i===S.cur?'selected':''}"><span class="nm">${x.n}</span><span class="sub">${x.sz}</span></div>`).join('')
+      :'<div style="padding:10px;font-size:9px;color:rgba(255,255,255,.4)">还没有安装应用<br>去「在线软件」安装一个吧</div>'}</div>`;
+    return;
+  }
+  m.innerHTML = `<div class="list-title"><span>在线软件</span><span class="hint">${p.online.length} 个 · 源 ${p.source.split('/')[2]}</span></div>
+    <div class="store-page">${p.online.map((x,i)=>{
+      const inst = PS.prgm.list.some(y=>y.n===x.n);
+      return `<div class="store-row ${i===S.cur?'selected':''}"><span class="nm">${x.n}</span><span class="sub">v${x.v} ${x.sz}</span>${inst?'<span class="ok">✓已装</span>':''}</div>`;
+    }).join('')}</div>
+    <div style="padding:4px 8px;font-size:8px;color:rgba(255,255,255,0.4)">下载 + CRC32 校验 + 写入 /mem_fat/scripts</div>`;
+}
+function storeKey(k){
+  const p=PS.store;
+  if (k==='ArrowLeft'){ p.page=(p.page+2)%3; S.cur=0; render(); return; }
+  if (k==='ArrowRight'){ p.page=(p.page+1)%3; S.cur=0; render(); return; }
+  const n = p.page===0 ? p.online.length : (p.page===1 ? PS.prgm.list.filter(x=>x.type==='bas').length : 0);
+  if (k==='ArrowUp'){ S.cur=Math.max(0,S.cur-1); render(); }
+  else if (k==='ArrowDown'){ S.cur=Math.min(n-1,S.cur+1); render(); }
+  else if (k==='Enter'){
+    if (p.page===0) store_ins();
+    else if (p.page===1) setModal('应用信息','已安装应用：'+PS.prgm.list.filter(x=>x.type==='bas')[S.cur].n+'<br>位置：/mem_fat/scripts',[{t:'关闭',cls:'primary',fn:closeModal}]);
+    else toast('源地址见上方（TF 卡 store_url.txt 可换）');
+  }
+  else if (k==='Escape'){ exitMode(); }
+}
+function store_ins(){
+  const p=PS.store; const x=p.online[S.cur];
+  if (PS.prgm.list.some(y=>y.n===x.n)){ toast(x.n+' 已安装'); return; }
+  const demo = {
+    'hello.bas':{src:'10 PRINT "HELLO FROM STORE!"\n20 PRINT "INSTALLED OK"\n30 END\n'},
+    'draw.bas':{src:'10 CLEAR\n20 COLOR 255,0,0\n30 FILL 20,20,60,40\n40 COLOR 0,255,0\n50 RECT 100,60,80,50\n60 COLOR 0,0,255\n70 TEXT 140,120,"STORE DRAW"\n80 END\n'},
+    'guess.bas':{src:'10 X = INT(RND()*6)+1\n20 PRINT "掷骰子..."\n30 PRINT "点数 = ";X\n40 END\n'},
+  }[x.n] || {src:'10 PRINT "APPLICATION"\n20 END\n'};
+  PS.prgm.list.push({n:x.n, sz:x.sz, type:'bas', src:demo.src});
+  PS.store.installed.push(x.n);
+  toast('安装完成：'+x.n+'（已写入 scripts）');
+  render();
+}
+function store_ref(){ toast('已从源刷新列表 ✓'); render(); }
+function store_inst(){ PS.store.page=1; S.cur=0; render(); }
+function store_unins(){
+  const inst = PS.prgm.list.filter(x=>x.type==='bas');
+  if (!inst.length){ toast('没有已安装应用'); return; }
+  const it = inst[S.cur];
+  setModal('卸载确认','卸载 '+it.n+'？',[
+    {t:'卸载', cls:'danger', fn:()=>{ PS.prgm.list = PS.prgm.list.filter(x=>x!==it); PS.store.installed=PS.store.installed.filter(x=>x!==it.n); closeModal(); render(); }},
+    {t:'取消', cls:'primary', fn:closeModal},
+  ]);
+}
+function store_src(){ PS.store.page=2; S.cur=0; render(); }
+function store_menu(){ setModal('软件商店','在线安装 · 卸载管理 · 换源<br>换源：TF 卡 store_url.txt 首行<br>默认：'+PS.store.source,[
+  {t:'切官方源', fn:()=>{ PS.store.source='https://github.com/memoria-os/packages'; toast('已切官方源'); closeModal(); }},
+  {t:'关闭', cls:'primary', fn:closeModal},
+]); }
+
+/* ============================================================
+ * SETUP 设置（卡西欧：左右键循环切换选项值）
+ * ============================================================ */
+function renderSetup(m){
+  const p=PS.setup; const g=p.groups[p.group];
+  m.innerHTML = `<div class="list-title"><span>${g.g}</span><span class="hint">${p.group+1}/${p.groups.length} 组 · ←→ 切换值</span></div>
+    <div class="list">${g.items.map((it,i)=>`
+      <div class="set-row ${i===S.cur?'selected':''}">
+        <span class="k">${it.k}</span>
+        <span class="v">${it.v[it.i]}</span>
+      </div>`).join('')}</div>
+    <div style="padding:4px 8px;font-size:8px;color:rgba(255,255,255,0.4)">确认后写 config 持久化（真机 NVS）</div>`;
+}
+function setupKey(k){
+  const p=PS.setup; const g=p.groups[p.group]; const it=g.items[S.cur];
+  if (k==='ArrowUp'){ S.cur=Math.max(0,S.cur-1); render(); }
+  else if (k==='ArrowDown'){ S.cur=Math.min(g.items.length-1,S.cur+1); render(); }
+  else if (k==='ArrowLeft'){ it.i=(it.i-1+it.v.length)%it.v.length; render(); }
+  else if (k==='ArrowRight'){ it.i=(it.i+1)%it.v.length; render(); }
+  else if (k==='Enter'){ it.i=(it.i+1)%it.v.length; render(); }
+  else if (k==='Escape'){ exitMode(); }
+}
+function setup_pg(){ PS.setup.group=Math.max(0,PS.setup.group-1); S.cur=0; render(); }
+function setup_ng(){ PS.setup.group=Math.min(PS.setup.groups.length-1,PS.setup.group+1); S.cur=0; render(); }
+function setup_def(){ const g=PS.setup.groups[PS.setup.group]; g.items.forEach(it=>it.i=0); render(); toast('当前组已重置默认'); }
+function setup_save(){ toast('设置已保存（真机：写 NVS）· 软件源见 STORE'); }
+function setup_menu(){ setModal('设置菜单','所有选项确认后即时持久化（NVS config）',[
+  {t:'保存全部', fn:()=>{ toast('配置已保存 ✓'); closeModal(); }},
+  {t:'关闭', cls:'primary', fn:closeModal},
+]); }
+
+/* ============================================================
+ * FMEM 文件管理
+ * ============================================================ */
+function buildFmem(){
+  const tree = {
+    'mem_fat': { folders:['photos','notes','audio','scripts'], files:['update.log','config.ini','play.m3u'] },
+    'photos': { folders:[], files:['IMG_0001.jpg','IMG_0002.jpg','IMG_0003.jpg','IMG_0004.jpg','IMG_0005.jpg','IMG_0006.jpg'] },
+    'notes': { folders:[], files:['note_01.txt','note_02.txt','note_03.txt'] },
+    'audio': { folders:[], files:['01_meet.wav','02_sunny.wav','03_luck.wav','04_balloon.wav','05_night.wav'] },
+    'scripts': { folders:[], files:['hello.ms','countdown.ms','fortune.ms','demo.ms'] },
+  };
+  return tree;
+}
+const FMEM_TREE = buildFmem();
+function fmemList(dir){
+  const node = FMEM_TREE[dir] || {folders:[],files:[]};
+  return [...node.folders.map(f=>({n:f,isDir:true})), ...node.files.map(f=>({n:f,isDir:false}))];
+}
+function renderFmem(m){
+  const f=PS.fmem;
+  if (S.sub==='view'){
+    m.innerHTML = `<div class="card"><div class="card-head"><span>${f.view||''}</span><span class="sub">文本预览</span></div>
+      <div class="card-body" style="height:calc(100% - 24px);overflow:hidden">${'# '+f.view+'<br>（真机：读取文件内容折行显示）<br><br>2026-09-25 09:41  ·  32 KB'}</div></div>`;
+    return;
+  }
+  const pathStr = '/'+f.path.join('/');
+  const items = fmemList(f.path[f.path.length-1]);
+  m.innerHTML = `<div class="list-title"><span>${pathStr}</span><span class="hint">${items.length} 项</span></div>
+    <div style="padding:3px 8px;display:flex;gap:6px;align-items:center">
+      <span style="font-size:7px;color:rgba(255,255,255,0.5)">已用</span>
+      <div class="bar-outer" style="flex:1"><div class="bar-inner" style="width:64%"></div></div>
+      <span style="font-size:7px;color:rgba(255,255,255,0.5)">6.1MB</span>
+    </div>
+    <div class="list">${items.map((it,i)=>`
+      <div class="list-row ${i===S.cur?'selected':''}">
+        <span class="idx">${it.isDir?'▸':'·'}</span>
+        <span class="val">${it.n}</span>
+        <span class="right">${it.isDir?'目录':'文件'}</span>
+      </div>`).join('')}</div>`;
+}
+function fmemKey(k){
+  const f=PS.fmem;
+  const items = fmemList(f.path[f.path.length-1]);
+  if (k==='ArrowUp'){ S.cur=Math.max(0,S.cur-1); render(); }
+  else if (k==='ArrowDown'){ S.cur=Math.min(items.length-1,S.cur+1); render(); }
+  else if (k==='Enter'){
+    const it=items[S.cur]; if(!it) return;
+    if (it.isDir){ f.path.push(it.n); S.cur=0; render(); }
+    else { f.view=it.n; S.sub='view'; render(); }
+  }
+  else if (k==='Escape'){
+    if (S.sub==='view'){ S.sub=null; render(); }
+    else if (f.path.length>1){ f.path.pop(); S.cur=0; render(); }
+    else exitMode();
+  }
+}
+function fmem_open(){ const f=PS.fmem; const items=fmemList(f.path[f.path.length-1]); const it=items[S.cur]; if(it){ if(it.isDir){ f.path.push(it.n); S.cur=0; render(); } else { f.view=it.n; S.sub='view'; render(); } } }
+function fmem_copy(){ toast('已复制到剪贴板（真机：同目录副本）'); }
+function fmem_move(){ toast('移动目标：请选择目录（真机：文件系统 API）'); }
+function fmem_del(){
+  const f=PS.fmem; const items=fmemList(f.path[f.path.length-1]); const it=items[S.cur];
+  setModal('删除确认','删除 '+it.n+' ？',[
+    {t:'删除', cls:'danger', fn:()=>{ const node=FMEM_TREE[f.path[f.path.length-1]]; const arr=it.isDir?node.folders:node.files; const i=arr.indexOf(it.n); if(i>=0)arr.splice(i,1); closeModal(); render(); }},
+    {t:'取消', cls:'primary', fn:closeModal},
+  ]);
+}
+function fmem_info(){
+  const f=PS.fmem; const items=fmemList(f.path[f.path.length-1]); const it=items[S.cur];
+  setModal('文件信息', `${it.n}<br>大小 ${it.isDir?'—':'32 KB'}<br>修改 2026-09-25 09:41<br>路径 ${'/'+f.path.join('/')}`, [{t:'关闭',cls:'primary',fn:closeModal}]);
+}
+function fmem_menu(){ setModal('文件菜单','新建文件夹 · 重命名 · 存储校验',[
+  {t:'存储校验', fn:()=>{ toast('CRC32 校验通过 ✓'); closeModal(); }},
+  {t:'关闭', cls:'primary', fn:closeModal},
+]); }
+
+/* ============================================================
+ * SYS 系统
+ * ============================================================ */
+function renderSys(m){
+  const s=PS.sys;
+  if (S.sub==='net') return renderNet(m);
+  const heap = 62 - (Date.now()/1000 % 8 | 0); // 模拟实时堆占用
+  if (s.selfTest){
+    const steps=['屏幕测试 ✓','音频测试 ✓','TF 卡读写 ✓','WiFi 模块 ✓'];
+    const n = s.selfTest;
+    m.innerHTML = `<div class="card"><div class="card-head"><span>硬件自检</span><span class="sub">${n}/4</span></div>
+      <div class="card-body">${steps.slice(0,n).join('<br>')}${n<4?'<br>… 检测中':''}</div></div>`;
+    return;
+  }
+  m.innerHTML = `
+    <div class="list-title"><span>系统状态</span><span class="hint">Memoria OS 1.1.1</span></div>
+    <div style="padding:6px 10px;font-size:9px;line-height:1.9;color:rgba(255,255,255,0.75)">
+      固件：v1.1.1 · 编译 2026-10-06 · hotfix（崩溃修复+BLE）<br>
+      硬件：ESP32-S3 N16R8 · 16MB Flash<br>
+      <span style="display:flex;align-items:center;gap:6px;margin-top:3px">堆内存
+        <span class="bar-outer" style="flex:1"><span class="bar-inner" style="width:${heap}%"></span></span>
+        <span style="color:#a7f3d0">${heap}%</span></span>
+      电池：3.92V · 82% · 未充电<br>
+      运行时间：${Math.floor(Date.now()/1000/60/60)%24}h ${Math.floor(Date.now()/1000/60)%60}m
+    </div>`;
+}
+function sysKey(k){
+  const s=PS.sys;
+  if (S.sub==='net') return netKey(k);
+  if (s.selfTest){
+    if (k==='Enter'||k==='Escape'){
+      if (s.selfTest>=4){ setModal('自检报告','全部 4 项通过 ✓',[{t:'好',cls:'primary',fn:()=>{s.selfTest=null;closeModal();render();}}]); }
+      s.selfTest=null; render();
+    }
+    return;
+  }
+  if (k==='n'||k==='N'){ S.sub='net'; render(); return; }
+  if (k==='Escape') exitMode();
+}
+function sys_info(){ setModal('系统信息','Memoria OS v1.1.1<br>ESP-IDF v6.1<br>编译 2026-10-06<br>硬件 ESP32-S3',[{t:'关闭',cls:'primary',fn:closeModal}]); }
+function sys_mem(){ toast('堆 62% · PSRAM 45% · 碎片 3%'); }
+function sys_test(){ PS.sys.selfTest=1; render(); let n=1; clearInterval(S._testT);
+  S._testT=setInterval(()=>{ n++; PS.sys.selfTest=n; render(); if(n>=4){ clearInterval(S._testT); PS.sys.selfTest=4; render(); } }, 700);
+}
+function sys_init(){
+  setModal('恢复出厂','将重置所有系统设置<br>不会删除 TF 卡里的照片和音乐',[
+    {t:'继续', fn:()=>{ setModal('二次确认','确定恢复出厂设置？',[
+      {t:'确认重置', cls:'danger', fn:()=>{ closeModal(); setModal('已完成','所有设置已恢复出厂 ✓',[{t:'好',cls:'primary',fn:()=>{closeModal(); exitMode();}}]); }},
+      {t:'取消', cls:'primary', fn:closeModal},
+    ]); }},
+    {t:'取消', cls:'primary', fn:closeModal},
+  ]);
+}
+function sys_about(){ setModal('关于','Memoria OS<br>基于 ESP32-S3 的自主掌机操作系统<br>版本 1.1.1',[{t:'知道了',cls:'primary',fn:closeModal}]); }
+function sys_menu(){ setModal('系统菜单','初始化 · 日志 · 备份 · 网络管理',[
+  {t:'网络管理', fn:()=>{ closeModal(); S.sub='net'; render(); }},
+  {t:'导出日志', fn:()=>{ toast('sys.log 已导出 ✓'); closeModal(); }},
+  {t:'关闭', cls:'primary', fn:closeModal},
+]); }
+function sys_ver(){ toast('v1.1.1 (2026-10-06)'); }
+function sys_restart(){ setModal('重启','确认重启设备？',[
+  {t:'重启', fn:()=>{ S.mode='menu'; S.app=null; S.sel=0; S.modal=null; PS.sys.selfTest=null; closeModal(); render(); }},
+  {t:'取消', cls:'primary', fn:closeModal},
+]); }
+function sys_boot(){ toast('启动序列 16 步 · 完成'); }
+function sys_log(){ toast('sys.log 已导出 ✓'); }
+function sys_backup(){ toast('配置已备份 config.ini ✓'); }
+
+/* ============================================================
+ * 网络管理页（对齐 SYS 第 6 tab · 三子页：WiFi 扫描 / 编辑连网 / 热点+蓝牙）
+ * ============================================================ */
+const NET_TABS = ['WiFi 扫描','编辑连网','热点 · 蓝牙'];
+function renderNet(m){
+  const n=PS.net; const t=n.tab;
+  const tabs = `<div class="net-tabs">${NET_TABS.map((x,i)=>`<span class="${i===t?'on':''}" data-act="net-tab" data-tab="${i}" style="cursor:pointer">${x}</span>`).join('')}</div>`;
+  if (t===0){
+    m.innerHTML = tabs + `<div style="padding:4px 8px;font-size:8px;color:rgba(255,255,255,.5)">扫描 ${n.aps.length*8} 个 AP · 点击行连接/断开 · ←→ 切页</div>
+      ${n.aps.map((a,i)=>{ const cn = a.n===n.conn;
+        return `<div class="net-row ${i===n.cur?'sel':''}" data-act="net-pick" data-i="${i}" style="cursor:pointer"><span>${a.n}</span>${cn?'<span class="conn">已连接</span>':'<span class="sig">'+'●'.repeat(a.sig)+' '+(-40-a.sig*10)+'dBm</span>'}</div>`; }).join('')}
+      <div style="padding:6px 8px;font-size:7.5px;color:rgba(255,255,255,.4)">已存：HomeWiFi · 自动重连开 · IP ${n.ip}</div>`;
+  } else if (t===1){
+    m.innerHTML = tabs + `<div style="padding:4px 8px;font-size:8px;color:rgba(255,255,255,.5)">点击网络 → 输入密码连接</div>
+      ${n.aps.map((a,i)=>`<div class="net-row ${i===n.cur?'sel':''}" data-act="net-pick" data-i="${i}" style="cursor:pointer"><span>${a.n}</span>${a.n===n.conn?'<span class="conn">当前</span>':'<span class="sig">点击配密</span>'}</div>`).join('')}`;
+  } else {
+    m.innerHTML = tabs + `<div style="padding:4px 8px;font-size:8px;color:rgba(255,255,255,.55)">热点 AP</div>
+      <div class="net-row ${n.cur===0?'sel':''}" data-act="net-pick" data-i="0" style="cursor:pointer"><span class="k">热点开关</span><span class="v">${n.apOn?'开':'关'} · 点击切换</span></div>
+      <div class="net-row"><span class="k">SSID</span><span class="v">${n.apSsid}</span></div>
+      <div class="net-row"><span class="k">密码</span><span class="v">${n.apPass}</span></div>
+      <div class="net-row"><span class="k">本机 IP</span><span class="v">${n.ip}</span></div>
+      <div style="padding:6px 8px;font-size:8px;color:rgba(255,255,255,.55)">蓝牙 BLE</div>
+      <div class="net-row ${n.cur===4?'sel':''}" data-act="net-pick" data-i="4" style="cursor:pointer"><span class="k">蓝牙开关</span><span class="v">${n.bleOn?'开':'关'} · 点击切换</span></div>
+      <div class="net-row"><span class="k">设备名</span><span class="v">${n.bleName}</span></div>
+      <div class="net-row"><span class="k">MAC</span><span class="v">${n.mac}</span></div>
+      <div style="padding:6px 8px;font-size:7.5px;color:rgba(255,255,255,.4)">配置写 NVS 持久化 · 真机：键盘/摇杆同操作</div>`;
+  }
+}
+function netKey(k){
+  const n=PS.net;
+  if (k==='ArrowLeft'){ n.tab=(n.tab+2)%3; n.cur=0; render(); }
+  else if (k==='ArrowRight'){ n.tab=(n.tab+1)%3; n.cur=0; render(); }
+  else if (k==='ArrowUp'){ n.cur=Math.max(0,n.cur-1); render(); }
+  else if (k==='ArrowDown'){ n.cur=Math.min((n.tab<2?n.aps.length-1:4),n.cur+1); render(); }
+  else if (k==='Enter'){
+    if (n.tab===0){
+      const a=n.aps[n.cur]; if(!a) return;
+      if (a.n===n.conn){ n.conn=''; toast('已断开 '+a.n); }
+      else if (a.n==='Memoria-AP'){ toast('这是本机热点，无法直连'); }
+      else { n.conn=a.n; toast('已连接 '+a.n+' · IP '+n.ip); }
+      render();
+    } else if (n.tab===1){
+      const a=n.aps[n.cur]; if(!a||a.n===n.conn) return;
+      setModal('连接 '+a.n, '<div style="font-size:10px;color:#a7f3d0;margin-bottom:5px">WiFi 密码（4 位以上）</div><input id="net-pw" type="text" style="width:130px;padding:5px;border:1px solid #333;border-radius:4px;background:#0b0a18;color:#fff;font-size:12px;text-align:center" value="12345678">', [
+        {t:'连接', cls:'primary', fn:()=>{ closeModal(); n.conn=a.n; toast('已连接 '+a.n+' · IP '+n.ip); render(); }},
+        {t:'取消', fn:closeModal},
+      ]);
+    } else {
+      if (n.cur===0){ n.apOn=!n.apOn; toast('热点'+(n.apOn?'开':'关')+' · '+n.apSsid); }
+      else if (n.cur===4){ n.bleOn=!n.bleOn; toast('蓝牙'+(n.bleOn?'开':'关')+' · '+n.bleName); }
+      else toast('只读项（真机：编辑页修改）');
+      render();
+    }
+  }
+  else if (k==='Escape'){ S.sub=null; render(); }
+}
+
+/* ============================================================
+ * CHAT App（原生模拟 · 对齐 chat.bas v2：登录/注册/房间/文字+语音）
+ * 伪服务器 CHAT_SRV 对齐 JSON 双协议（ping/reg/login/send/get/voice）
+ * ============================================================ */
+const CHAT_SRV = {
+  users:{}, seq:0,
+  remote:true,
+  base:'http://127.0.0.1:8333/chat/api.php',
+  rooms:{ lobby:[
+    {id:1, u:'她', t:'那个 BASIC 程序我当故事看完了'},
+    {id:2, u:'她', t:'行号就是页码对吧'},
+    {id:3, u:'她', t:'GOTO 会提醒“跳来跳去，故事会乱”'},
+    {id:4, u:'她', t:'下一封信讲 FOR 循环，像翻页'},
+    {id:1001, u:'她', t:'语音#', v:true},
+  ]},
+  api(a, p, cb){
+    if (this.remote){
+      const q = 'a='+a+(p ? '&'+p.toString() : '');
+      fetch(this.base+'?'+q, {cache:'no-store'}).then(r=>r.text()).then(t=>{ if (cb) cb(t); })
+        .catch(()=>{ toast('服务器不可达，已切本地演示'); this.remote=false; if (cb) cb(this._local(a,p)); });
+    } else if (cb) cb(this._local(a,p));
+  },
+  _local(a, p){
+    const u=p.get('u')||'', pw=p.get('p')||'', rm=p.get('room')||'lobby';
+    if (a==='ping') return 'pong chat v1';
+    if (a==='reg'){ if (this.users[u]) return 'err 用户名已存在'; this.users[u]=pw; return 'ok '+u; }
+    if (a==='login'){ if (!(u in this.users)) return 'err 用户名不存在'; if (this.users[u]!==pw) return 'err 密码错误'; if (!this.rooms[rm]) this.rooms[rm]=[]; return 'ok '+u; }
+    if (a==='send'){ const b=decodeURIComponent(p.get('body')||''); if(!b) return 'err empty'; if(!this.rooms[rm]) this.rooms[rm]=[]; const id=++this.seq+2000; this.rooms[rm].push({id,u,t:b}); return 'ok '+id; }
+    if (a==='voice'){ if(!this.rooms[rm]) this.rooms[rm]=[]; const id=++this.seq+2000; this.rooms[rm].push({id,u,t:'语音#',v:true}); return 'ok '+id; }
+    if (a==='get'){ const after=parseInt(p.get('after')||'0'); const arr=this.rooms[rm]||[]; const fresh=arr.filter(x=>x.id>after); return 'ok\n'+fresh.map(x=>x.id+'|'+x.u+'|'+(x.v?'v':'t')+'|'+x.t).join('\n'); }
+    return 'err noapi';
+  },
+};
+function chatReset(scene){ const c=PS.chat; c.scene=scene; c.sel=0; c.input=''; c.prompt=''; if (scene==='room') chatStartAuto(); render(); }
+function chatLogout(){ const c=PS.chat; if (chatTimer) clearInterval(chatTimer); chatTimer=null; c.u=''; c.p=''; c.room='lobby'; c.msgs=[]; c.lm=0; c._reg=false; c.scene='auth'; c.sel=0; c.input=''; c.prompt=''; toast('已退出，重新登录可进其他房间'); render(); }
+let chatTimer = null;
+function chatStartAuto(){ if (chatTimer) clearInterval(chatTimer); chatTimer = setInterval(chatAuto, 10000); }
+function chatAuto(){
+  const c=PS.chat;
+  if (!c.u || c.scene!=='room') return;
+  CHAT_SRV.api('get', new URLSearchParams('u='+c.u+'&p='+c.p+'&room='+c.room+'&after='+c.lm), r=>{
+    if (!r.startsWith('ok')) return;
+    const lines = r.slice(3).split('\n').filter(x=>x);
+    if (!lines.length) return;
+    const scEl=document.querySelector('#chat-scroll');
+    const atBottom = !scEl || (scEl.scrollHeight-scEl.scrollTop-scEl.clientHeight<40);
+    const keep = scEl ? scEl.scrollTop : 0;
+    lines.forEach(l=>{ const f=l.split('|'); if (f.length>=4){ const id=parseInt(f[0]); if (id>c.lm) c.lm=id; c.msgs.push({id,u:f[1],t:f.slice(3).join('|'),v:f[2]==='v',vid:id}); } });
+    render();
+    const e2=document.querySelector('#chat-scroll');
+    if (e2) e2.scrollTop = atBottom ? e2.scrollHeight : keep;
+  });
+}
+function chatSet(scene, prompt){ const c=PS.chat; c.scene=scene; c.prompt=prompt; c.input=''; c.sel=0; render(); }
+const GUI_IC = {
+  wifi: '<svg class="gui-ico" viewBox="0 0 24 24"><path d="M2.5 9a16 16 0 0 1 19 0M5.5 12.5a11 11 0 0 1 13 0M8.5 16a6 6 0 0 1 7 0"/><circle cx="12" cy="19" r="1.2" fill="currentColor" stroke="none"/></svg>',
+  srv: '<svg class="gui-ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="1.5"/><rect x="3" y="13" width="18" height="7" rx="1.5"/><path d="M6.5 7.5h.01M6.5 16.5h.01M10 7.5h7M10 16.5h7"/></svg>',
+  send: '<svg class="gui-ico" viewBox="0 0 24 24"><path d="M3 11l18-7-7 18-3-8z"/></svg>',
+  mic: '<svg class="gui-ico" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>',
+  play: '<svg class="gui-ico" viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></svg>',
+  refr: '<svg class="gui-ico" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v4h-4"/></svg>',
+  exit: '<svg class="gui-ico" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7M8 12h13"/></svg>',
+  ok: '<svg class="gui-ico" viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg>',
+  chat: '<svg class="gui-ico" viewBox="0 0 24 24"><path d="M4 5h16v11H10l-5 4z"/><path d="M8 9h8M8 12h5"/></svg>',
+};
+function renderChat(m){
+  const c=PS.chat; const n=PS.net;
+  const head=(t,sub,ok)=>`<div class="chat-head"><b>${GUI_IC.chat} ${t}</b>${sub?`<span class="sub">${sub}</span>`:''}${ok?`<span class="ok">${ok}</span>`:''}</div>`;
+  if (c.scene==='boot'){
+    m.innerHTML = `<div class="chat-wrap">
+      ${head('CHAT for Memoria OS','v2 · 文字+语音')}
+      <div style="flex:1;overflow:hidden;padding:8px;display:flex;flex-direction:column;gap:6px;justify-content:center">
+        <div class="stat-chip">${GUI_IC.wifi}<span>WiFi <b>${n.conn||'（未连接）'}</b></span></div>
+        <div class="stat-chip">${GUI_IC.srv}<span>服务器 ${CHAT_SRV.remote?'<b style="color:#34d399">已连 · pong chat v1</b>':'本地演示'}</span></div>
+      </div>
+      <div style="padding:6px 8px;display:flex;gap:6px">
+        <div class="gbtn primary" style="flex:2" data-act="chat-enter">${GUI_IC.chat} 进入聊天</div>
+        <div class="gbtn ghost" style="flex:1" data-act="chat-exit">${GUI_IC.exit} 返回</div>
+      </div>
+    </div>`;
+    return;
+  }
+  if (c.scene==='auth'){
+    const items=[['登录','1'],['注册','2'],['退出','0']];
+    m.innerHTML = `<div class="chat-wrap">
+      ${head('CHAT · 账号')}
+      <div style="flex:1;overflow:hidden;padding:10px;display:flex;flex-direction:column;gap:7px">
+        ${items.map((x,i)=>`<div class="chat-authcard ${i===c.sel?'sel':''}" data-act="${i===0?'chat-login':i===1?'chat-reg':'chat-exit'}">
+          <span class="no">${x[1]}</span><span>${x[0]}</span><span class="arr">${i===c.sel?'▶':''}</span></div>`).join('')}
+      </div>
+      <div class="chat-menu"><span>↑↓ 选择</span><span class="on">点击或 Enter 确认</span></div>
+    </div>`;
+    return;
+  }
+  if (c.scene==='input'){
+    const hint = c.prompt==='房间'?'回车=lobby（Ctrl 切中英）':(c.prompt==='密码'?'4 位以上':'Ctrl 切中英，数字 1-9 选字');
+    const ic = imeCands();
+    const imeRow = `<div style="padding:2px 6px;display:flex;align-items:center;gap:6px;font-size:9px;color:#fff;background:rgba(10,8,24,.97);border-top:1px solid rgba(250,204,21,.55);min-height:24px">
+      <span style="color:#fde68a;font-weight:700">${IME.mode==='CN'?'中':'EN'}</span>
+      <span style="color:#fde68a;font-weight:700">${IME.py}</span>
+      ${ic.length ? ic.map((x,i)=>`<span style="padding:1px 5px;border-radius:4px;white-space:nowrap;${i===IME.sel?'background:rgba(250,204,21,.35);box-shadow:inset 0 0 0 1px rgba(250,204,21,.75)':''}">${i+1}.${x}</span>`).join('') : '<span style="color:rgba(255,255,255,.4)">输入拼音…</span>'}
+    </div>`;
+    m.innerHTML = `<div class="chat-wrap">
+      ${head('CHAT · '+c.prompt, hint)}
+      <div class="chat-input" style="padding:6px 8px;font-size:11px;min-height:20px"><span class="lb">${c.prompt}:</span><span class="in cur" style="font-size:11px">${c.input||' '}</span></div>
+      ${imeRow}
+      <div style="flex:1"></div>
+      <div style="padding:5px 6px;display:flex;gap:4px">
+        <div class="gbtn primary" style="flex:1" data-act="chat-send">${GUI_IC.ok} 确定</div>
+        <div class="gbtn" style="flex:1" data-act="chat-back">⌫ 删除</div>
+        <div class="gbtn" style="flex:1" data-act="chat-ime">${IME.mode==='CN'?'中':'EN'}</div>
+        <div class="gbtn danger" style="flex:1" data-act="chat-cancel">${GUI_IC.exit} 取消</div>
+      </div>
+    </div>`;
+    return;
+  }
+  if (c.scene==='busy'){
+    m.innerHTML = `<div class="chat-wrap">
+      ${head('CHAT · '+c.prompt)}
+      <div style="flex:1;display:flex;align-items:center;justify-content:center;font-size:9px;color:rgba(255,255,255,.4)">… ${c.prompt} 中（真机走 HTTP 请求）…</div>
+    </div>`;
+    return;
+  }
+  const msgs=c.msgs;
+  m.innerHTML = `<div class="chat-wrap">
+    ${head('# '+c.room, c.u+' · 语音可用', '在线 2')}
+    <div class="chat-scroll" id="chat-scroll" style="flex:1;overflow-y:auto;overscroll-behavior:contain;padding:8px;display:flex;flex-direction:column;gap:2px">
+      ${msgs.map(x=>`<div class="chat-row ${x.u===c.u?'me':''}">
+        <span class="nm">${x.u===c.u?'我':x.u}</span>
+        ${x.v?`<div class="chat-bubble b-v" data-act="chat-play-v" data-vid="${x.vid||x.id}">${GUI_IC.play} 语音#${x.vid||x.id} · 点击播放</div>`
+             :`<div class="chat-bubble ${x.u===c.u?'b-me':'b-she'}">${x.t}</div>`}
+      </div>`).join('')}
+    </div>
+    <div style="padding:5px 6px;display:flex;gap:4px">
+      <div class="gbtn primary" style="flex:1" data-act="chat-m1">${GUI_IC.send} 发言</div>
+      <div class="gbtn" style="flex:1" data-act="chat-m2">${GUI_IC.refr} 刷新</div>
+      <div class="gbtn" style="flex:1" data-act="chat-m3">${GUI_IC.play} 听语音</div>
+      <div class="gbtn" style="flex:1" data-act="chat-m4">${GUI_IC.mic} 发语音</div>
+      <div class="gbtn danger" style="flex:0.7" data-act="chat-m0">${GUI_IC.exit}</div>
+    </div>
+  </div>`;
+  const scEl = m.querySelector('#chat-scroll');
+  if (scEl) scEl.scrollTop = scEl.scrollHeight;  // 新消息自动滚到底
+}
+/* GUI 点击动作（配合全局 data-act 委托） */
+function chatF1(){ chatFn(0); } function chatF2(){ chatFn(1); }
+function chatF3(){ chatFn(2); } function chatF4(){ chatFn(3); } function chatF6(){ chatFn(5); }
+function guiAct(el){
+  const a=el.dataset.act, c=PS.chat, n=PS.net;
+  if (a==='chat-enter') chatReset('auth');
+  else if (a==='chat-login') chatSet('input','用户名');
+  else if (a==='chat-reg') chatSet('input','注册名');
+  else if (a==='chat-exit'){ exitMode(); }
+  else if (a==='chat-m0'){ chatLogout(); }
+  else if (a==='chat-send') chatSubmit();
+  else if (a==='chat-back'){ if (c.scene==='input'){ c.input=c.input.slice(0,-1); render(); } }
+  else if (a==='chat-cancel'){ if (c.scene==='input'){ c.scene='auth'; render(); } }
+  else if (a==='chat-ime'){ imeToggle(); }
+  else if (a==='chat-m1') chatSet('input','发言');
+  else if (a==='chat-m2') chatRefresh();
+  else if (a==='chat-m3') chatPlayVoice();
+  else if (a==='chat-m4') chatRecordVoice();
+  else if (a==='chat-play-v') chatPlayVoice(parseInt(el.dataset.vid)||0);
+  else if (a==='net-tab'){ n.tab=parseInt(el.dataset.tab)||0; n.cur=0; render(); }
+  else if (a==='net-pick'){ n.cur=parseInt(el.dataset.i)||0; netKey('Enter'); }
+  else if (a==='desk-open'){
+    const i=parseInt(el.dataset.sel)||0; S.sel=i;
+    if (DESK.edit) return;
+    const layer=deskLayer(); const c=layer[i];
+    if (c.t==='a'){ const mo=MODES.find(x=>x.id===c.id); if (mo) enterMode(mo.id); }
+    else if (c.t==='d'){ deskEnterFolder(i); render(); }
+  }
+}
+document.addEventListener('click', (e)=>{
+  const kEl = e.target.closest('[data-k]');
+  if (kEl){ document.dispatchEvent(new KeyboardEvent('keydown',{key:kEl.dataset.k,bubbles:true,cancelable:true})); return; }
+  const aEl = e.target.closest('[data-act]');
+  if (aEl) guiAct(aEl);
+});
+function chatKey(k){
+  const c=PS.chat;
+  if (c.scene==='boot'){ if (k==='Enter') chatReset('auth'); else if (k==='Escape'){ S.sub=null; render(); } return; }
+  if (c.scene==='auth'){
+    if (k==='ArrowUp'){ c.sel=(c.sel+2)%3; render(); }
+    else if (k==='ArrowDown'){ c.sel=(c.sel+1)%3; render(); }
+    else if (k==='1'){ chatSet('input','用户名'); }
+    else if (k==='2'){ chatSet('input','注册名'); }
+    else if (k==='0'){ S.sub=null; render(); }
+    else if (k==='Enter'){ if (c.sel===0) chatSet('input','用户名'); else if (c.sel===1) chatSet('input','注册名'); else { S.sub=null; render(); } }
+    else if (k==='Escape'){ S.sub=null; render(); }
+    return;
+  }
+  if (c.scene==='input'){
+    if (k==='ctrl'){ imeToggle(); return; }
+    if (IME.mode==='CN'){
+      if (/^[a-z]$/.test(k)){ IME.py += k; IME.sel=0; render(); return; }
+      if (/^[1-9]$/.test(k)){ const cs=imeCands(); const cc=cs[parseInt(k)-1]; if (cc){ imeInsert(cc); IME.py=''; IME.sel=0; } render(); return; }
+      if (k===' '||k==='Enter'){ const cs=imeCands(); if (cs.length){ imeInsert(cs[IME.sel]||cs[0]); IME.py=''; IME.sel=0; render(); } else chatSubmit(); return; }
+      if (k==='Backspace'){ if (IME.py){ IME.py=IME.py.slice(0,-1); render(); } else { c.input=c.input.slice(0,-1); render(); } return; }
+      if (k==='ArrowLeft'){ IME.sel=(IME.sel-1+5)%5; render(); return; }
+      if (k==='ArrowRight'){ IME.sel=(IME.sel+1)%5; render(); return; }
+      return;
+    }
+    if (k==='Backspace'){ c.input=c.input.slice(0,-1); render(); }
+    else if (k==='Escape'){ c.scene='auth'; render(); }
+    else if (k==='Enter'){ chatSubmit(); }
+    else if (/^[A-Za-z0-9 .,!?_@#-]$/.test(k)){ if (c.input.length<40) c.input+=k; render(); }
+    return;
+  }
+  if (c.scene==='busy'){ if (k==='Enter'||k==='Escape'){ chatReset('room'); } return; }
+  if (k==='ArrowUp'||k==='ArrowDown'){
+    const scEl = document.querySelector('#chat-scroll');
+    if (scEl) scEl.scrollTop += k==='ArrowUp' ? -30 : 30;  // 摇杆上下翻消息
+    return;
+  }
+  if (k==='ArrowLeft'){ c.sel=(c.sel+4)%5; render(); }
+  else if (k==='ArrowRight'){ c.sel=(c.sel+1)%5; render(); }
+  else if (k==='1'){ chatSet('input','发言'); }
+  else if (k==='2'){ chatRefresh(); }
+  else if (k==='3'){ chatPlayVoice(); }
+  else if (k==='4'){ chatRecordVoice(); }
+  else if (k==='0'){ chatLogout(); }
+  else if (k==='Enter'){ if (c.sel===0) chatSet('input','发言'); else if (c.sel===1) chatRefresh(); else if (c.sel===2) chatPlayVoice(); else if (c.sel===3) chatRecordVoice(); else { chatLogout(); } }
+  else if (k==='Escape'){ chatLogout(); }
+}
+function chatSubmit(){
+  const c=PS.chat; const v=c.input.trim();
+  if (c.prompt==='用户名'||c.prompt==='注册名'){
+    const isReg = c.prompt==='注册名';
+    if (!v){ toast('用户名不能为空'); return; }
+    c.u=v; c._reg=isReg; chatSet('input','密码');
+  } else if (c.prompt==='密码'){
+    if (c._reg && v.length<4){ toast('密码至少 4 位'); return; }
+    c.p=v;
+    if (c._reg){
+      CHAT_SRV.api('reg', new URLSearchParams('u='+c.u+'&p='+c.p), r=>{
+        if (r.startsWith('ok')){ toast('注册成功，请登录'); c.scene='auth'; render(); }
+        else { toast(r); c.u=''; c.p=''; chatReset('auth'); }
+      });
+    } else chatSet('input','房间');
+  } else if (c.prompt==='房间'){
+    c.room = v || 'lobby';
+    CHAT_SRV.api('login', new URLSearchParams('u='+c.u+'&p='+c.p+'&room='+c.room), r=>{
+      if (r.startsWith('ok')){ c.lm=0; c.msgs=[]; render(); setTimeout(()=>chatRefresh(),300); }
+      else { toast(r); c.u=''; c.p=''; chatReset('auth'); }
+    });
+  } else if (c.prompt==='发言'){
+    if (!v){ toast('内容为空'); return; }
+    c.scene='busy'; c.prompt='发送'; render();
+    setTimeout(()=>{
+      CHAT_SRV.api('send', new URLSearchParams('u='+c.u+'&p='+c.p+'&room='+c.room+'&body='+encodeURIComponent(v)), r=>{
+        if (r.startsWith('ok')){
+          const id = parseInt(r.split(' ')[1])||0;
+          c.msgs.push({id, u:c.u, t:v, v:false, vid:id});
+          c.lm = Math.max(c.lm, id);
+          chatReset('room');
+        } else { toast(r); chatReset('room'); }
+      });
+    }, 400);
+  }
+}
+function chatRefresh(){
+  const c=PS.chat;
+  c.scene='busy'; c.prompt='刷新'; render();
+  setTimeout(()=>{
+    CHAT_SRV.api('get', new URLSearchParams('u='+c.u+'&p='+c.p+'&room='+c.room+'&after='+c.lm), r=>{
+      if (r.startsWith('ok')){
+        const lines = r.slice(3).split('\n').filter(x=>x);
+        lines.forEach(l=>{
+          const f=l.split('|');
+          if (f.length>=4){ const id=parseInt(f[0]); if (id>c.lm) c.lm=id; c.msgs.push({id, u:f[1], t:f.slice(3).join('|'), v:f[2]==='v', vid:id}); }
+        });
+        chatReset('room');
+      } else { toast(r); chatReset('room'); }
+    });
+  }, 350);
+}
+function chatPlayVoice(vid){
+  const c=PS.chat;
+  const lastV = vid ? c.msgs.find(x=>x.v && (x.vid||x.id)===vid) : [...c.msgs].reverse().find(x=>x.v);
+  if (!lastV){ toast('还没有语音'); return; }
+  c.vmid=lastV.vid||lastV.id;
+  c.scene='busy'; c.prompt='播放语音#'+c.vmid; render();
+  if (CHAT_SRV.remote){
+    const a = new Audio('http://127.0.0.1:8333/uploads/voice/v'+c.vmid+'.wav');
+    a.onerror = ()=>{ toast('语音文件未找到'); chatReset('room'); };
+    a.onplay = ()=>{ toast('正在播放语音#'+c.vmid+' …'); };
+    a.play().catch(()=>{ toast('语音文件未找到'); chatReset('room'); });
+    setTimeout(()=>{ if (a && !a.paused){ try{ a.pause(); }catch(e){} } chatReset('room'); }, 2000);
+  } else {
+    setTimeout(()=>{ toast('语音#'+c.vmid+' 播放完成（真机：PLAY /mem_fat/vr.wav）'); chatReset('room'); }, 900);
+  }
+}
+function chatRecordVoice(){
+  const c=PS.chat;
+  c.scene='busy'; c.prompt='录音 5 秒'; render();
+  setTimeout(()=>{
+    CHAT_SRV.api('voice', new URLSearchParams('u='+c.u+'&p='+c.p+'&room='+c.room+'&sec=5'), r=>{
+      if (r.startsWith('ok')){
+        const id = parseInt(r.split(' ')[1])||0;
+        c.msgs.push({id, u:c.u, t:'语音#', v:true, vid:id});
+        c.lm = Math.max(c.lm, id);
+        toast('已发送语音');
+        chatReset('room');
+      } else { toast(r); chatReset('room'); }
+    });
+  }, 900);
+}
+function chatFn(i){
+  const c=PS.chat;
+  if (c.scene!=='room') return;
+  if (i===0) chatSet('input','发言');
+  else if (i===1) chatRefresh();
+  else if (i===2) chatPlayVoice();
+  else if (i===3) chatRecordVoice();
+  else if (i===5){ chatLogout(); }
+}
+
+/* ============================================================
+ * 启动
+ * ============================================================ */
+document.addEventListener('keydown', (e)=>{
+  if (e.key === 'F1' || e.key === 'F2' || e.key === 'F3' || e.key === 'F4' || e.key === 'F5' || e.key === 'F6'){
+    e.preventDefault();
+    fnKey(parseInt(e.key[1]) - 1);
+  } else if (e.key === '1' || e.key === '2' || e.key === '3' || e.key === '4' || e.key === '5' || e.key === '6'){
+    // 数字键 = F1~F6；计算器 / CHAT（桌面或 PRGM 内）下数字留给应用
+    const chatActive = S.app === 'chat' || (S.app === 'prgm' && S.sub === 'chat');
+    if (S.mode === 'app' && S.app !== 'calc' && !chatActive){ fnKey(parseInt(e.key) - 1); }
+  }
+});
+/* ============================================================
+ * 外部遥控（first-look 外壳预览 / 掌机渲染图通过 iframe 驱动）
+ * 收到 { type:'memoria-key', key:'ArrowUp'|'Enter'|'a'|'1'... }
+ * 以 KeyboardEvent 派发到 document，复用全部按键处理逻辑
+ * ============================================================ */
+window.addEventListener('message', (ev)=>{
+  const d = ev.data || {};
+  if (!d || d.type !== 'memoria-key' || !d.key) return;
+  document.dispatchEvent(new KeyboardEvent('keydown', {
+    key: String(d.key), bubbles: true, cancelable: true,
+  }));
+});
+
+
+/* ============================================================
+ * 硬件键盘 stub —— 真机 6×10 键位（点击 → 复用键盘处理）
+ * ============================================================ */
+const KEYROWS = [
+  [['ON/OFF','sys','onoff'],['F1','fn','F1'],['F2','fn','F2'],['F3','fn','F3'],['F4','fn','F4'],['F5','fn','F5'],['F6','fn','F6'],['F7','fn','F7'],['背光','sys','bl'],['⌫','sys','Backspace']],
+  [['1','','1'],['2','','2'],['3','','3'],['4','','4'],['5','','5'],['6','','6'],['7','','7'],['8','','8'],['9','','9'],['0','','0']],
+  [['Q','-','q'],['W','_','w'],['E','','e'],['R','','r'],['T','','t'],['Y','','y'],['U','[','u'],['I',']','i'],['O','{','o'],['P','}','p']],
+  [['A','=','a'],['S','+','s'],['D','','d'],['F','','f'],['G','','g'],['H','','h'],['J','','j'],['K','','k'],['L','"','l'],[';',':',';']],
+  [['Shift','sys','Shift'],['Z','\\','z'],['X','|','x'],['C','','c'],['V','','v'],['B','','b'],['N','/','n'],['M','?','m'],[',','<',','],['.','>','.']],
+  [['Caps','sys','Caps'],['Ctrl','sys','ctrl'],['Vol−','sys','voldn'],['Vol+','sys','volup'],['Space','wide',' '],['←','nav','ArrowLeft'],['↑','nav','ArrowUp'],['↓','nav','ArrowDown'],['→','nav','ArrowRight'],['Enter','nav','Enter']],
+];
+function buildKbd(){
+  const el = $('kbdpanel');
+  if (!el) return;
+  el.innerHTML = KEYROWS.map(row=>'<div class="kbd-row">'+row.map(k=>{
+    const cls = k[1]==='wide' ? 'kbd-key wide' : 'kbd-key '+(k[1]||'');
+    let sub = '';
+    if (k[1]==='' && k[2] && k[2].length===1 && k[0]!==k[2] && !/^[A-Z]$/.test(k[0]))
+      sub = '<span class="sub">'+k[2]+'</span>';
+    return '<div class="'+cls+'" data-k="'+k[2]+'">'+sub+'<span class="main">'+k[0]+'</span></div>';
+  }).join('')+'</div>').join('');
+  el.querySelectorAll('.kbd-key').forEach(b=>{
+    b.addEventListener('pointerdown', ev=>{ ev.preventDefault(); kbdPress(b.dataset.k, b); });
+  });
+}
+function kbdPress(k, b){
+  if (k==='onoff'){ toast('ON/OFF · 真机电源键'); return; }
+  if (k==='bl'){ toast('背光 三档切换（0/128/255）'); return; }
+  if (k==='voldn'||k==='volup'){ toast(k==='voldn' ? '音量 −' : '音量 +'); return; }
+  if (k==='ctrl'){ toast('Ctrl 组合键预留'); return; }
+  if (k==='Caps'){ S.shift=!S.shift; return; }
+  if (k==='F1'){ imeToggle(); return; }
+  if (b){ b.classList.add('press'); setTimeout(()=>b.classList.remove('press'), 95); }
+  document.dispatchEvent(new KeyboardEvent('keydown',{key:k,bubbles:true,cancelable:true}));
+}
+
+/* ============================================================
+ * 拼音输入法前端模拟（与固件 ime/pinyin_dict 行为对齐）
+ * ============================================================ */
+const PYD = {
+  ni:'你 泥 妮 拟 腻 呢', wo:'我 沃 卧 握 涡', de:'的 得 地 德 灯', shi:'是 时 事 十 市 实 石 识',
+  ai:'爱 哎 艾 挨 碍', hao:'好 号 浩 豪 耗', zhong:'中 种 重 钟 忠 终', wen:'文 问 闻 温 纹',
+  shi2:'是 时 事 十 市 实', xue:'学 雪 血 穴', xi:'系 西 希 洗 细 喜', zhu:'主 助 住 注 祝 竹',
+  yi:'一 以 意 已 义 衣 亿 医', bu:'不 部 步 布 补 捕', you:'有 又 友 由 油 游 右', zai:'在 再 载 灾 栽',
+  ren:'人 任 认 仁 忍 韧', shang:'上 商 伤 赏 尚', xia:'下 夏 吓 虾 峡', da:'大 打 达 答 搭',
+  xiao:'小 笑 消 校 肖', le:'了 乐 勒 雷 累', zhe:'这 着 者 折 哲', na:'那 哪 拿 纳 娜',
+  ma:'吗 妈 马 麻 码', ne:'呢 讷 哪', ao:'奥 澳 傲 凹 熬', qing:'请 情 清 青 轻 亲',
+  tong:'同 通 痛 铜 童', shu:'书 数 树 属 输 术', dian:'点 电 典 店 垫', nao:'脑 闹 恼 瑙',
+  yin:'音 因 银 引 印 阴', yue:'乐 月 越 阅 约 悦', ge:'个 各 歌 哥 格 隔', men:'们 门 闷 扪',
+};
+let IME = { mode:'EN', py:'', sel:0 };
+
+function imeBarHTML(){
+  const cs = imeCands();
+  const inner = cs.length
+    ? cs.map((c,i)=>'<span class="cand '+(i===IME.sel?'sel':'')+'">'+(i+1)+'.'+c+'</span>').join('')
+    : '<span style="color:rgba(255,255,255,.4)">输入拼音…</span>';
+  return '<div class="ime-bar"><span class="tag">中</span><span class="py">'+IME.py+'</span>'+inner+'</div>';
+}
+function imeToggle(){
+  IME.mode = IME.mode==='EN' ? 'CN' : 'EN'; IME.py=''; IME.sel=0;
+  if (IME.mode==='CN') toast('中文输入 · 全拼联想');
+  else toast('英文输入');
+  render();
+}
+function imeCands(){
+  if (!IME.py) return [];
+  const hit = PYD[IME.py]; if (!hit) return [];
+  return hit.split(' ');
+}
+function imeInsert(c){
+  if (!c) return;
+  if (S.app==='prgm'){ const p = PS.prgm; const ln = p.editLines[S.cur]; if (ln && ln[1].length < 96) ln[1] += c; }
+  else if (S.app==='chat'){ if (PS.chat.input.length < 40) PS.chat.input += c; }
+}
+
+/* ============================================================
+ * 摇杆 stub：方向/按下/长按返回
+ * ============================================================ */
+(function(){
+  let t0=0, timer=null;
+  const st = $('stick');
+  if (!st) return;
+  st.querySelectorAll('.d').forEach(d=>{
+    d.addEventListener('pointerdown', ev=>{
+      ev.preventDefault(); const k = d.dataset.k;
+      if (k!=='Enter'){ kbdPress(k, d); return; }
+      t0 = Date.now();
+      timer = setTimeout(()=>{ document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); }, 850);
+    });
+    d.addEventListener('pointerup', ()=>{ clearTimeout(timer); if (Date.now()-t0 < 800 && d.dataset.k==='Enter') kbdPress('Enter', d); });
+    d.addEventListener('pointerleave', ()=>{ clearTimeout(timer); });
+  });
+})();
+
+function init(){
+  buildKbd();
+  render();
+  const sc = $('screen'); if (sc) sc.focus();
+  sc.addEventListener('click', ()=>sc.focus());
+}
+init();
+</script>
+</body>
+</html>

@@ -9,11 +9,13 @@
 extern "C" {
 #include "nvs_flash.h"
 #include "nvs.h"
+#include <dirent.h>
 }
 
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include <algorithm>
 
 namespace memoria {
 namespace modes {
@@ -50,9 +52,10 @@ const std::string& DesktopManager::folder_name(int fid) const {
 /* ============================================================
  *  编码 / 解码（NVS 字符串）
  *   每格一个条目，逗号分隔：
- *     _         空
- *     A:appid   应用
- *     D:2       文件夹 id 2
+ *     _            空
+ *     A:appid      系统模式应用
+ *     B:name.bas   BASIC APP 直启（TF 卡 /mem_fat/scripts）
+ *     D:2          文件夹 id 2
  * ============================================================ */
 std::string DesktopManager::_encode(const std::vector<Cell>& c) const {
     std::string out;
@@ -60,6 +63,7 @@ std::string DesktopManager::_encode(const std::vector<Cell>& c) const {
         if (i) out += ",";
         const Cell& cell = c[i];
         if (cell.type == CellType::App) { out += "A:"; out += cell.app_id; }
+        else if (cell.type == CellType::BasApp) { out += "B:"; out += cell.app_id; }
         else if (cell.type == CellType::Folder) {
             char buf[24];
             snprintf(buf, sizeof(buf), "D:%d", cell.folder_id);
@@ -83,6 +87,9 @@ bool DesktopManager::_decode(const std::string& s, std::vector<Cell>& out) {
                 else if (cur.size() >= 2 && cur[0] == 'A') {
                     cell.type = CellType::App;
                     cell.app_id = cur.substr(2);
+                } else if (cur.size() >= 2 && cur[0] == 'B') {
+                    cell.type = CellType::BasApp;
+                    cell.app_id = cur.substr(2);
                 } else if (cur.size() >= 2 && cur[0] == 'D') {
                     cell.type = CellType::Folder;
                     cell.folder_id = atoi(cur.substr(2).c_str());
@@ -105,35 +112,37 @@ void DesktopManager::load() {
     _loaded = true;
 
     nvs_handle_t h;
-    if (nvs_open(kNs, NVS_READWRITE, &h) != ESP_OK) return;
+    if (nvs_open(kNs, NVS_READWRITE, &h) == ESP_OK) {
+        size_t len = 0;
+        char buf[256];   /* 12 格 B: 长文件名可超 160（B:chat.bas=10+1/格） */
+        if (nvs_get_str(h, "root", nullptr, &len) == ESP_OK && len > 1 && len <= sizeof(buf)) {
+            if (nvs_get_str(h, "root", buf, &len) == ESP_OK)
+                _decode(std::string(buf, len - 1), _root);
+        }
+        if (nvs_get_u16(h, "seq", (uint16_t*)&_seq) == ESP_OK) { if (_seq < 1) _seq = 1; }
 
-    size_t len = 0;
-    char buf[160];
-    if (nvs_get_str(h, "root", nullptr, &len) == ESP_OK && len > 1 && len <= sizeof(buf)) {
-        if (nvs_get_str(h, "root", buf, &len) == ESP_OK)
-            _decode(std::string(buf, len - 1), _root);
-    }
-    if (nvs_get_u16(h, "seq", (uint16_t*)&_seq) == ESP_OK) { if (_seq < 1) _seq = 1; }
-
-    /* 读文件夹：遍历 seq 范围内可能存在的 key */
-    for (int i = 1; i <= _seq; i++) {
-        char key[16];
-        snprintf(key, sizeof(key), "f%d", i);
-        len = 0;
-        if (nvs_get_str(h, key, nullptr, &len) == ESP_OK && len > 1 && len <= sizeof(buf)) {
-            if (nvs_get_str(h, key, buf, &len) == ESP_OK) {
-                std::vector<Cell> fc;
-                _decode(std::string(buf, len - 1), fc);
-                _folders[i] = fc;
-                if (_folder_names.count(i) == 0)
-                    _folder_names[i] = "文件夹" + std::to_string(i);
+        /* 读文件夹：遍历 seq 范围内可能存在的 key */
+        for (int i = 1; i <= _seq; i++) {
+            char key[16];
+            snprintf(key, sizeof(key), "f%d", i);
+            len = 0;
+            if (nvs_get_str(h, key, nullptr, &len) == ESP_OK && len > 1 && len <= sizeof(buf)) {
+                if (nvs_get_str(h, key, buf, &len) == ESP_OK) {
+                    std::vector<Cell> fc;
+                    _decode(std::string(buf, len - 1), fc);
+                    _folders[i] = fc;
+                    if (_folder_names.count(i) == 0)
+                        _folder_names[i] = "文件夹" + std::to_string(i);
+                }
             }
         }
+        nvs_close(h);
     }
-    nvs_close(h);
+    /* NVS 打不开（未格式化/命名空间缺失）不提前退出，走下方保底，桌面绝不留空 */
 
     if (_root.empty()) {
         /* 首次：按注册顺序铺满应用 */
+        _root.resize(kCells);
         auto* mm = ModeManager::instance();
         for (size_t i = 0; i < kCells && i < (size_t)mm->count(); i++) {
             const ModeDesc* d = mm->get((int)i);
@@ -204,7 +213,8 @@ bool DesktopManager::create_folder(int idx) {
 void DesktopManager::move_pick(int idx) {
     auto* layer = _layer();
     if (idx < 0 || idx >= (int)layer->size()) return;
-    if ((*layer)[idx].type == CellType::App) _picked = idx;
+    CellType t = (*layer)[idx].type;
+    if (t == CellType::App || t == CellType::BasApp) _picked = idx;
 }
 
 void DesktopManager::move_drop(int idx) {
@@ -212,14 +222,14 @@ void DesktopManager::move_drop(int idx) {
     if (_picked < 0 || idx < 0 || idx >= (int)layer->size()) return;
     if (_picked == idx) { _picked = -1; return; }
     Cell moving = (*layer)[_picked];
-    if (moving.type != CellType::App) { _picked = -1; return; }
+    if (moving.type != CellType::App && moving.type != CellType::BasApp) { _picked = -1; return; }
 
     Cell& target = (*layer)[idx];
     if (target.type == CellType::Empty) {
         /* 移到空位：原格变空 */
         (*layer)[_picked] = Cell();
         target = moving;
-    } else if (target.type == CellType::App) {
+    } else if (target.type == CellType::App || target.type == CellType::BasApp) {
         /* 交换 */
         std::swap((*layer)[_picked], target);
     } else if (target.type == CellType::Folder) {
@@ -236,6 +246,77 @@ void DesktopManager::move_drop(int idx) {
     }
     _picked = -1;
     save();
+}
+
+/* ============================================================
+ *  APP 直启：扫描 TF 卡 .bas，未上桌面的自动上图标
+ *  装了即上图标（用户拍板）：根桌空位直放；满了收进
+ *  名为「BASIC」的文件夹（复用），再无则任意文件夹；全满丢弃。
+ * ============================================================ */
+void DesktopManager::scan_bas_apps() {
+    DIR* d = opendir("/mem_fat/scripts");
+    if (!d) return;
+
+    std::vector<std::string> found;
+    struct dirent* e;
+    while ((e = readdir(d)) != nullptr) {
+        std::string n = e->d_name;
+        if (n.size() > 4 && n.compare(n.size() - 4, 4, ".bas") == 0)
+            found.push_back(n);
+    }
+    closedir(d);
+    if (found.empty()) return;
+    std::sort(found.begin(), found.end());
+
+    /* has(n)：是否已上桌（根 + 所有文件夹） */
+    auto has = [&](const std::string& n) -> bool {
+        for (auto& c : _root)
+            if (c.type == CellType::BasApp && c.app_id == n) return true;
+        for (auto& kv : _folders)
+            for (auto& c : kv.second)
+                if (c.type == CellType::BasApp && c.app_id == n) return true;
+        return false;
+    };
+
+    bool changed = false;
+    for (auto& n : found) {
+        if (has(n)) continue;
+
+        /* 根桌第一个空位直放 */
+        int slot = -1;
+        for (int i = 0; i < (int)_root.size(); i++)
+            if (_root[i].type == CellType::Empty) { slot = i; break; }
+        if (slot >= 0) {
+            Cell c;
+            c.type = CellType::BasApp;
+            c.app_id = n;
+            _root[slot] = c;
+            changed = true;
+            continue;
+        }
+
+        /* 根桌满：优先「BASIC」文件夹，其次任意文件夹 */
+        int fid = -1;
+        for (auto& kv : _folder_names)
+            if (kv.second == "BASIC") { fid = kv.first; break; }
+        if (fid < 0)
+            for (auto& c : _root)
+                if (c.type == CellType::Folder) { fid = c.folder_id; break; }
+
+        auto fit = _folders.find(fid);
+        if (fit == _folders.end()) continue;   /* 全满且无文件夹：丢弃 */
+        for (auto& fc : fit->second) {
+            if (fc.type == CellType::Empty) {
+                Cell c;
+                c.type = CellType::BasApp;
+                c.app_id = n;
+                fc = c;
+                changed = true;
+                break;
+            }
+        }
+    }
+    if (changed) save();
 }
 
 } // namespace modes

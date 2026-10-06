@@ -131,9 +131,10 @@ esp_err_t AppLifecycle::start(const std::string& id, AppInstance** out) {
         }
     }
 
-    BaseType_t ok = xTaskCreate(app_task_entry, desc->id,
+    /* P1 双核：应用逻辑任务钉 core1（core0 留给系统/协议栈/UI，core1 不再闲坐） */
+    BaseType_t ok = xTaskCreatePinnedToCore(app_task_entry, desc->id,
                                 inst->stack_size, inst,
-                                inst->priority, &inst->task_handle);
+                                inst->priority, &inst->task_handle, 1);
     if (ok != pdPASS) {
         ESP_LOGE(TAG, "xTaskCreate '%s' failed", desc->id);
         if (desc->destroy) desc->destroy(inst);

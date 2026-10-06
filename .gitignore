@@ -11,6 +11,10 @@ tools/_*
 # 截图与临时目录
 _shots/
 
+# 内部协作与构建工作目录（AI 桥/看板/构建日志/一次性脚本，不入公开库）
+_internal/
+_build/
+
 # Python
 __pycache__/
 *.pyc
@@ -18,3 +22,7 @@ __pycache__/
 # 系统
 Thumbs.db
 Desktop.ini
+
+# 畅聊服务端：真实凭据与部署产物（旧 zip 含历史真实密码，一律不入库）
+changliao/server/config.local.php
+changliao/dist/

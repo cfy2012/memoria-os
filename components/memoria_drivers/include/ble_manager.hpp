@@ -47,6 +47,8 @@ private:
     static int _on_gap_event(ble_gap_event* ev, void* arg);
     static int _on_gatt_write(uint16_t conn_handle, uint16_t attr_handle,
                               ble_gatt_access_ctxt* ctxt, void* arg);
+    static int _on_gatt_access(uint16_t conn_handle, uint16_t attr_handle,
+                               ble_gatt_access_ctxt* ctxt, void* arg);
 
     bool       _connected = false;
     uint16_t   _conn_handle = 0;

@@ -2,7 +2,8 @@
  * @file wifi_manager.hpp
  * @brief WiFi STA 模式管理：连接 / NVS 存密码 / 断开事件回调
  *
- * 开机自动重连上次成功连接的 SSID（NVS 持久化）。
+ * 按需射频：boot 期零射频——esp_wifi_init/start 全部在 start_rf()，
+ * 由网络需求侧（WIFISTAT() / wifi 语句 / 设置页）触发，NVS 凭据自动重连。
  * WiFi STA + BLE 共存（CONFIG_ESP32_WIFI_SW_COEXIST_ENABLE=y）。
  */
 
@@ -30,7 +31,11 @@ struct ScanAp {
 class WifiManager {
 public:
     static WifiManager* instance();
-    esp_err_t init();
+    esp_err_t init();          /* 轻注册：netif/事件回调（不含射频） */
+
+    /* 按需射频（幂等）：esp_wifi_init + start + NVS 凭据自动重连 */
+    bool      rf_started() const { return _rf_started; }
+    esp_err_t start_rf();
 
     /* 手动连接（会保存到 NVS） */
     esp_err_t connect(const std::string& ssid, const std::string& password);
@@ -76,6 +81,7 @@ private:
                                   int32_t ev, void* data);
 
     bool        _connected = false;
+    bool        _rf_started = false;
     int         _rssi = 0;
     bool        _ap_active = false;
     std::string _current_ssid;

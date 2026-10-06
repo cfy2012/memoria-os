@@ -1,4 +1,4 @@
-10 sv$ = "http://ser.27047228666.ahostg.idc001.site/chat/api.php"
+10 sv$ = "http://ser270472228666.ahostxg.idc001.site/chat/api.php"
 100 color 100,150,255
 110 clear
 120 text 8,8,"CHAT for Memoria OS"

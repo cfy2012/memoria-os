@@ -312,9 +312,12 @@ private:
         /* ---- 连接 / 系统 ---- */
         _interp.add_cmd("WIFI", [](const std::vector<basic::BasicArg>& a) {
             if (a.size() < 2) return;
+            WifiManager::instance()->start_rf();   /* 按需射频：先起 RF 再连 */
             WifiManager::instance()->connect(a[0].str, a[1].str);
         });
         _interp.add_func("WIFISTAT", [](const std::vector<basic::BasicArg>&) -> double {
+            /* 按需射频：查询即触发 RF 启动（幂等） */
+            WifiManager::instance()->start_rf();
             return WifiManager::instance()->connected() ? 1.0 : 0.0;
         });
         _interp.add_func("GPIOIN", [](const std::vector<basic::BasicArg>& a) -> double {
@@ -341,7 +344,7 @@ private:
         _interp.set_input_str([this](const std::string& p) { return _basic_input_str(p); });
 
         /* ---- 网络 HTTP（明文；HTTPS 后补） ----
-         * HTTPGET "url", R$          → GET，响应体（上限 8KB）存入字符串变量 R$
+         * HTTPGET "url", R$          → GET，响应体（上限 1MB）存入字符串变量 R$
          * HTTPPOST "url", "body", R$ → POST（octet-stream 原样字节），响应体存 R$
          * HTTPUP "url", "path" [,R$] → POST 文件字节（≤2MB，octet-stream），响应体存 R$（可选）
          * HTTPDL "url", "path"       → GET 流式下载直写文件（不占内存），httpstat() 查结果
@@ -647,14 +650,14 @@ private:
             esp_http_client_fetch_headers(c);
             s_http_status.store(esp_http_client_get_status_code(c));
             char buf[512];
-            const size_t CAP = 8 * 1024;
+            const size_t CAP = 1 * 1024 * 1024;   /* 响应体上限 1MB（8MB PSRAM，增长自然落 PSRAM） */
             while (true) {
                 int n = esp_http_client_read(c, buf, sizeof(buf));
                 if (n <= 0) break;
                 if (sink) {
                     std::fwrite(buf, 1, (size_t)n, sink);
                 } else {
-                    if (_http_resp.size() + (size_t)n > CAP) { _run_out("HTTP: 响应超 8KB 截断"); break; }
+                    if (_http_resp.size() + (size_t)n > CAP) { _run_out("HTTP: 响应超 1MB 截断"); break; }
                     _http_resp.append(buf, (size_t)n);
                 }
             }

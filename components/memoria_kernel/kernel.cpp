@@ -153,17 +153,14 @@ esp_err_t Kernel::init() {
     /* 9. I2S 音频 */
     MEMORIA_CHECK(drivers::I2sAudio::instance()->init());
 
-    /* 10. WiFi STA（自动连保存的 SSID） */
+    /* 10. WiFi STA（按需射频：boot 期只注册管理器不开射频，WIFISTAT/wifi 语句触发 start_rf） */
     {
         esp_err_t ret = drivers::WifiManager::instance()->init();
-        ESP_LOGI(TAG, "WiFi: %s", esp_err_to_name(ret));
+        ESP_LOGI(TAG, "WiFi: %s (RF on-demand)", esp_err_to_name(ret));
     }
 
-    /* 11. BLE 外设 */
-    {
-        esp_err_t ret = drivers::BleManager::instance()->init();
-        ESP_LOGI(TAG, "BLE: %s", esp_err_to_name(ret));
-    }
+    /* 11. BLE 外设（按需启动：设置页蓝牙开关 / BLE 语句触发，boot 期不启动） */
+    ESP_LOGI(TAG, "BLE: on-demand (not started at boot)");
 
     /* 12. WindowManager */
     MEMORIA_CHECK(window::WindowManager::instance()->init());
@@ -243,6 +240,10 @@ esp_err_t Kernel::init() {
 
     _ready.store(true);
     ESP_LOGI(TAG, "========== Boot complete ==========");
+
+    /* 背光：boot 期全灭（power init duty=0），boot complete 拉回全亮
+     * （boot 期已零射频无大电流峰，拉亮安全） */
+    drivers::Power::instance()->set_backlight(255);
     return ESP_OK;
 }
 

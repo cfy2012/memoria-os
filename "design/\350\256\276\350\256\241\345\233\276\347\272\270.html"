@@ -55,7 +55,7 @@
       <circle cx="125.1" cy="335.2" r="31" fill="#3d4453" stroke="#222" stroke-width="2"/>
       <circle cx="125.1" cy="335.2" r="9" fill="#222"/>
       <text x="125.1" y="505.1" fill="#232936" font-size="13" text-anchor="middle" font-weight="700">摇杆</text>
-      <text x="125.1" y="554.6" fill="#6a7284" font-size="11" text-anchor="middle">孔径 直径20mm</text>
+      <text x="125.1" y="554.6" fill="#6a7284" font-size="11" text-anchor="middle">孔径 直径16mm（v8 定版，旧 Ø20 作废）</text>
       <circle cx="189.9" cy="29.3" r="4" fill="#232936"/>
       <text x="189.9" y="14" fill="#232936" font-size="11" text-anchor="middle">麦克风孔 直径2.6</text>
       <rect x="196.1" y="47.8" width="139" height="87" rx="6" fill="none" stroke="#2e7d32" stroke-width="1.8" stroke-dasharray="6 4"/>

@@ -5,6 +5,8 @@
 
 #include "wifi_manager.hpp"
 #include "rtc_clock.hpp"
+#include "power.hpp"
+#include "ble_manager.hpp"
 
 extern "C" {
 #include <esp_wifi.h>
@@ -36,44 +38,37 @@ WifiManager* WifiManager::instance() {
 }
 
 esp_err_t WifiManager::init() {
+    /* 按需射频：boot 期零射频。esp_wifi_init（驱动+缓冲区，内部 RAM 大头）与
+     * esp_wifi_start（phy 上电校准，全系统最大电流峰）全部移入 start_rf()，
+     * 由网络需求侧触发。boot 期系统稳定、功耗谷、无 BOD 击穿风险。 */
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
     esp_netif_create_default_wifi_sta();
-
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
     ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
                     &_wifi_event_handler, this, nullptr));
     ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
                     &_ip_event_handler, this, nullptr));
 
+    ESP_LOGI(TAG, "WiFi manager registered (RF on-demand, boot 期不开射频)");
+    return ESP_OK;
+}
+
+esp_err_t WifiManager::start_rf() {
+    if (_rf_started) return ESP_OK;
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-
-    /* 尝试读取 NVS 保存的凭据并自动连接 */
-    nvs_handle_t h;
-    if (nvs_open(NVS_NS, NVS_READONLY, &h) == ESP_OK) {
-        char ssid[33] = {}, pass[65] = {};
-        size_t l1 = sizeof(ssid), l2 = sizeof(pass);
-        if (nvs_get_str(h, KEY_SSID, ssid, &l1) == ESP_OK && ssid[0] != 0) {
-            nvs_get_str(h, KEY_PASS, pass, &l2);
-            ESP_LOGI(TAG, "auto-connect saved SSID: %s", ssid);
-            /* 不能直接在 init() 里调用 connect()（会循环初始化），改用启动后 xTaskCreate 延迟 */
-            static char s_ssid[33] = {}, s_pass[65] = {};
-            std::strncpy(s_ssid, ssid, 32);
-            std::strncpy(s_pass, pass, 64);
-            BaseType_t ok = xTaskCreate([](void*) {
-                vTaskDelay(pdMS_TO_TICKS(1000));
-                WifiManager::instance()->connect(s_ssid, s_pass);
-            }, "wifi_auto", 4096, nullptr, 3, nullptr);
-            (void)ok;
-        }
-        nvs_close(h);
-    }
-
     ESP_ERROR_CHECK(esp_wifi_start());
-    ESP_LOGI(TAG, "WiFi STA init OK");
+    _rf_started = true;
+    ESP_LOGI(TAG, "WiFi RF started (on-demand)");
+
+    /* 有保存凭据则自动重连（reconnect 不写 NVS） */
+    esp_err_t r = reconnect();
+    if (r != ESP_OK && r != ESP_ERR_NOT_FOUND) {
+        ESP_LOGW(TAG, "auto reconnect: %s", esp_err_to_name(r));
+    }
     return ESP_OK;
 }
 
