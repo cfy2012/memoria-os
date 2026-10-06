@@ -12,5 +12,5 @@
 
 /* ---------- 系统元信息 ---------- */
 #define MEMORIA_OS_NAME        "Memoria OS"
-#define MEMORIA_OS_VERSION     "1.0.0"
+#define MEMORIA_OS_VERSION     "1.2.1"
 #define MEMORIA_BIRTHDAY_MMDD  1225   /* MMDD 格式：12 月 25 日 */

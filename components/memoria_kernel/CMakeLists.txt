@@ -18,6 +18,8 @@ idf_component_register(
         modes/notes_mode.cpp
         modes/calc_mode.cpp
         modes/prgm_mode.cpp
+        modes/basic_host.cpp
+        modes/app_mode.cpp
         modes/store_mode.cpp
         modes/setup_mode.cpp
         modes/fmem_mode.cpp
@@ -36,10 +38,12 @@ idf_component_register(
         esp_driver_ledc
         esp_driver_i2c
         esp_driver_rmt
+        esp_http_client
         memoria_drivers
         memoria_window
         memoria_fs
         memoria_package
         memoria_script
         memoria_basic
+        memoria_math
 )

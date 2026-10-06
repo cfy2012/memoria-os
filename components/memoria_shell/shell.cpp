@@ -14,16 +14,22 @@
 #include "wifi_manager.hpp"
 #include "ble_manager.hpp"
 #include "sdcard.hpp"
+#include "power.hpp"
 #include "i2s_audio.hpp"
 #include "kernel.hpp"   /* reboot */
 #include "evaluator.hpp"
 #include "package_manager.hpp"
 #include "ota_updater.hpp"
+#include "math_solver.hpp"
 
 extern "C" {
 #include <esp_log.h>
 #include <esp_system.h>
+#include <esp_app_desc.h>
+#include "rom/ets_sys.h"   /* ets_get_cpu_frequency（v6 无 esp_clk.h） */
 #include <esp_heap_caps.h>
+#include <esp_timer.h>
+#include <driver/temperature_sensor.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <dirent.h>
@@ -44,16 +50,39 @@ namespace memoria { namespace script { int run_file(const std::string& path); } 
 namespace memoria {
 namespace shell {
 
-static void _print_help() {
+static void _print_help(bool safe) {
+    if (safe) {
+        std::fprintf(stdout,
+            "help                 show this help\n"
+            "info                 system info (version, uptime, heap)\n"
+            "sys                  full system status (cpu/temp/load/mem/rf/battery)\n"
+            "top                  per-task CPU usage table\n"
+            "battery              battery level + voltage\n"
+            "backlight <0-255>    set LCD backlight (no arg = show)\n"
+            "wifi                 wifi status (ssid, rssi)\n"
+            "ble                  BLE adv status, connected count\n"
+            "sd                   SD card mount status\n"
+            "sd mount             retry TF card mount\n"
+            "sd format            ERASE ALL DATA on TF card and re-mount\n"
+            "reboot               restart ESP32\n"
+            "quit                 exit shell\n"
+            "(no TF card: desktop runs normally, SD features show 'insert card')\n");
+        return;
+    }
     std::fprintf(stdout,
         "memoria> help                 show this help\n"
         "memoria> info                 system info (memoria version, uptime, build)\n"
+        "memoria> sys                  full system status (cpu/temp/load/mem/rf/battery)\n"
+        "memoria> top                  per-task CPU usage table\n"
         "memoria> battery              battery level + voltage\n"
         "memoria> wifi                 wifi status (ssid, rssi)\n"
         "memoria> ble                  BLE adv status, connected count\n"
-        "memoria> sd                   SD card total/free bytes\n"
+        "memoria> sd                   SD card mount status\n"
+        "memoria> sd mount             retry TF card mount\n"
+        "memoria> sd format            ERASE ALL DATA on TF card and re-mount\n"
         "memoria> scripts              list all scripts in /mem_fat/scripts\n"
         "memoria> script <name>        run a .msp script from /mem_fat/scripts\n"
+        "memoria> solve <expr>         solve equations (3x+5=20 | x^2-5x+6=0 | 2x+y=5,x-y=1)\n"
         "memoria> pkg_update           check + download packages now\n"
         "memoria> pkg_mirror <url>     set package manifest URL (persistent)\n"
         "memoria> pkg_cfg              show current package config\n"
@@ -82,19 +111,126 @@ static std::vector<std::string> split_args(const std::string& line) {
 
 Shell::Shell() {}
 
-int Shell::execute(const std::string& line) {
+int Shell::execute(const std::string& line, bool safe) {
     auto args = split_args(line);
     if (args.empty() || args[0].empty()) return 0;
     const std::string& cmd = args[0];
 
-    if (cmd == "help") { _print_help(); return 0; }
+    if (cmd == "help") { _print_help(safe); return 0; }
 
     if (cmd == "info") {
-        std::fprintf(stdout, "memoria os v1.0.0 (ESP32-S3)\n");
+        std::fprintf(stdout, "memoria os v1.2.1 (ESP32-S3)\n");
         std::fprintf(stdout, "uptime_ms = %lu\n", (unsigned long)(esp_timer_get_time() / 1000));
         std::fprintf(stdout, "free_heap = %lu B\n", (unsigned long)esp_get_free_heap_size());
         std::fprintf(stdout, "psram     = %lu B free\n",
                      (unsigned long)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+        return 0;
+    }
+
+    if (cmd == "sys") {
+        /* 全系统状态一览：芯片/温度/双核负载/内存/射频/存储/电池（一次看全） */
+        static temperature_sensor_handle_t s_ts = nullptr;   /* lazy 安装：首次 sys 调用 */
+        float celsius = -273.15f;
+        if (!s_ts) {
+            temperature_sensor_config_t tcfg = TEMPERATURE_SENSOR_CONFIG_DEFAULT(10, 80);
+            if (temperature_sensor_install(&tcfg, &s_ts) == ESP_OK)
+                temperature_sensor_enable(s_ts);
+        }
+        if (s_ts) temperature_sensor_get_celsius(s_ts, &celsius);
+
+        /* 双核负载：run time stats 反推（开机以来平均，近似值——idle 时间占总时间的补） */
+        UBaseType_t n = uxTaskGetNumberOfTasks();
+        TaskStatus_t* st = (TaskStatus_t*)std::malloc((size_t)n * sizeof(TaskStatus_t));
+        uint32_t total_rt = 0, idle0 = 0, idle1 = 0;
+        double ld_total = -1, ld_c0 = -1, ld_c1 = -1;
+        if (st) {
+            UBaseType_t got = uxTaskGetSystemState(st, n, &total_rt);
+            if (got > 0 && total_rt > 0) {
+                for (UBaseType_t i = 0; i < got; i++) {
+                    if (!std::strcmp(st[i].pcTaskName, "IDLE0")) idle0 = st[i].ulRunTimeCounter;
+                    else if (!std::strcmp(st[i].pcTaskName, "IDLE1")) idle1 = st[i].ulRunTimeCounter;
+                }
+                ld_total = 100.0 * (1.0 - (double)(idle0 + idle1) / (double)total_rt);
+                ld_c0 = 100.0 - 200.0 * (double)idle0 / (double)total_rt;   /* 假设两核均摊总时基 */
+                ld_c1 = 100.0 - 200.0 * (double)idle1 / (double)total_rt;
+            }
+            std::free(st);
+        }
+
+        const esp_app_desc_t* ad = esp_app_get_description();
+        std::fprintf(stdout, "==== Memoria OS System ====\n");
+        std::fprintf(stdout, "version  : %s  uptime %lu s\n", ad->version,
+                     (unsigned long)(esp_timer_get_time() / 1000000ULL));
+        std::fprintf(stdout, "cpu      : %lu MHz  temp %.1f C\n",
+                     (unsigned long)ets_get_cpu_frequency(), celsius);
+        if (ld_total >= 0)
+            std::fprintf(stdout, "load     : total %.0f%%  core0 ~%.0f%%  core1 ~%.0f%% (boot avg)\n",
+                         ld_total, ld_c0, ld_c1);
+        std::fprintf(stdout, "tasks    : %u\n", (unsigned)uxTaskGetNumberOfTasks());
+        std::fprintf(stdout, "heap int : %lu KB free (largest %lu, min-ever %lu)\n",
+                     (unsigned long)heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024,
+                     (unsigned long)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL),
+                     (unsigned long)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL));
+        std::fprintf(stdout, "psram    : %lu KB free\n",
+                     (unsigned long)heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024);
+        {
+            auto* w = drivers::WifiManager::instance();
+            std::fprintf(stdout, "wifi     : rf=%s conn=%s\n",
+                         w->rf_started() ? "on" : "off", w->connected() ? "yes" : "no");
+        }
+        {
+            auto* b = drivers::BleManager::instance();
+            std::fprintf(stdout, "ble      : conn=%s\n", b->connected() ? "yes" : "no");
+        }
+        std::fprintf(stdout, "sd       : %s\n",
+                     drivers::SdCard::instance()->is_mounted() ? "mounted" : "not mounted");
+        {
+            auto* bt = drivers::BatteryAdc::instance();
+            std::fprintf(stdout, "battery  : %d%%  %.2fV\n", bt->percent(), bt->voltage());
+        }
+        std::fprintf(stdout, "backlight: %u/255\n",
+                     (unsigned)drivers::Power::instance()->get_backlight());
+        return 0;
+    }
+
+    if (cmd == "top") {
+        /* 任务 CPU 占用表（开机以来平均）：名/核内占比/栈余量 */
+        UBaseType_t n = uxTaskGetNumberOfTasks();
+        TaskStatus_t* st = (TaskStatus_t*)std::malloc((size_t)n * sizeof(TaskStatus_t));
+        if (!st) { std::fprintf(stdout, "top: no memory\n"); return 0; }
+        uint32_t total_rt = 0;
+        UBaseType_t got = uxTaskGetSystemState(st, n, &total_rt);
+        if (got == 0 || total_rt == 0) {
+            std::fprintf(stdout, "top: no stats yet\n");
+            std::free(st);
+            return 0;
+        }
+        std::fprintf(stdout, "%-16s %6s %8s %s\n", "task", "cpu%", "stk/B", "state");
+        for (UBaseType_t i = 0; i < got; i++) {
+            if (st[i].ulRunTimeCounter == 0) continue;   /* 只列跑过的时间 */
+            std::fprintf(stdout, "%-16s %5.1f%% %8lu %s\n",
+                         st[i].pcTaskName,
+                         100.0 * (double)st[i].ulRunTimeCounter / (double)total_rt,
+                         (unsigned long)st[i].usStackHighWaterMark,
+                         st[i].eCurrentState == eRunning ? "run" :
+                         st[i].eCurrentState == eReady   ? "rdy" :
+                         st[i].eCurrentState == eBlocked ? "blk" : "sus");
+        }
+        std::free(st);
+        return 0;
+    }
+
+    if (cmd == "solve") {
+        /* 解方程（memoria_math / SOLVER-SPEC）：串口直验口。
+         * 解析器忽略空格，token 直接拼接即可；方程组逗号写在式子里 */
+        if (args.size() < 2) {
+            std::fprintf(stdout, "usage: solve 3x+5=20 | solve x^2-5x+6=0 | solve 2x+y=5,x-y=1\n");
+            return 0;
+        }
+        std::string expr;
+        for (size_t i = 1; i < args.size(); i++) expr += args[i];
+        auto r = math::solve_equations(expr);
+        std::fprintf(stdout, "%s\n", r.text().c_str());
         return 0;
     }
 
@@ -106,6 +242,21 @@ int Shell::execute(const std::string& line) {
         (void)chg;
         std::fprintf(stdout, "battery: %d%%  %.2fV  %s\n",
                      pct, v, chg ? "charging" : "discharging");
+        return 0;
+    }
+
+    if (cmd == "backlight") {
+        /* 串口直接调背光：BOD 观测 + 应急点亮（屏幕被误关时救场） */
+        auto* p = drivers::Power::instance();
+        if (args.size() >= 2) {
+            int v = std::atoi(args[1].c_str());
+            if (v < 0) v = 0;
+            if (v > 255) v = 255;
+            p->set_backlight(static_cast<uint8_t>(v));
+            p->touch_event();   /* 视为活动：重置 idle 计时防立刻又被压暗 */
+        }
+        std::fprintf(stdout, "backlight: %u / 255\n",
+                     (unsigned)p->get_backlight());
         return 0;
     }
 
@@ -124,8 +275,21 @@ int Shell::execute(const std::string& line) {
     }
 
     if (cmd == "sd") {
-        bool m = drivers::SdCard::instance()->present();
-        std::fprintf(stdout, "sd: mounted=%s\n", m ? "yes" : "no");
+        auto* s = drivers::SdCard::instance();
+        if (args.size() >= 2 && args[1] == "mount") {
+            esp_err_t e = s->init(false);   /* 手动挂载：非 quiet，出完整错误 */
+            if (e == ESP_OK) std::fprintf(stdout, "sd mount: OK, card mounted at %s\n", s->mount_point().c_str());
+            else             std::fprintf(stdout, "sd mount: failed (%s) - insert card or try 'sd format'\n", esp_err_to_name(e));
+            return 0;
+        }
+        if (args.size() >= 2 && args[1] == "format") {
+            std::fprintf(stdout, "sd format: erasing ALL data on TF card...\n");
+            esp_err_t e = s->reformat();
+            if (e == ESP_OK) std::fprintf(stdout, "sd format: OK, card re-mounted at %s\n", s->mount_point().c_str());
+            else             std::fprintf(stdout, "sd format: failed (%s)\n", esp_err_to_name(e));
+            return 0;
+        }
+        std::fprintf(stdout, "sd: mounted=%s\n", s->is_mounted() ? "yes" : "no");
         return 0;
     }
 
@@ -228,16 +392,30 @@ int Shell::execute(const std::string& line) {
 }
 
 void Shell::menu() {
-    std::fprintf(stdout, "\nMemoria Shell (type 'help')\n");
+    /* SAFE 模式：TF 卡未挂载时进应急态（提示符 safe>，sd mount 成功自动退出） */
+    bool safe = !drivers::SdCard::instance()->is_mounted();
+    if (safe)
+        std::fprintf(stdout, "\nSAFE MODE (no TF card). 'help' for commands.\n");
+    else
+        std::fprintf(stdout, "\nMemoria Shell (type 'help')\n");
     while (true) {
-        std::fprintf(stdout, "memoria> ");
+        std::fprintf(stdout, safe ? "safe> " : "memoria> ");
         std::fflush(stdout);
 
         std::string line;
         for (;;) {
             int c = std::getchar();
-            if (c == EOF || c == '\n') break;
-            if (c == '\r') continue;
+            if (c == '\n' || c == '\r') {
+                /* 终端发 CRLF 时吞掉配对符，否则残留的 \r/\n 会空转一轮
+                 * 再打一个 prompt（真机 "safe> safe> " 双提示符实录） */
+                int n = std::getchar();
+                if (n == '\n' || n == '\r') { /* 配对符已吞 */ }
+                else if (n != EOF) line += (char)n;
+                break;
+            }
+            /* 修复忙等：stdin 非阻塞时 getchar 立即返回 EOF，旧代码空转刷屏
+             * 并饿死 IDLE0（task_wdt 告警）——无数据时让出 CPU 喂狗 */
+            if (c == EOF) { vTaskDelay(pdMS_TO_TICKS(10)); continue; }
             line += (char)c;
         }
         /* 处理退格 */
@@ -245,7 +423,11 @@ void Shell::menu() {
         while ((bk = line.find('\b')) != std::string::npos)
             line = line.substr(0, bk) + line.substr(bk + 1);
 
-        if (execute(line) == 1) break;
+        if (execute(line, safe) == 1) break;
+        /* 关键：stdout 全缓冲时 execute 的输出不出 UART，敲 help 全被吞
+         *（真机实录）。每轮命令后强制刷出。 */
+        std::fflush(stdout);
+        safe = !drivers::SdCard::instance()->is_mounted();  /* sd mount 成功自动出 SAFE */
     }
 }
 

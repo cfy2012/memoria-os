@@ -8,9 +8,12 @@ idf_component_register(
         log
         esp_system
         heap
+        esp_app_format
+        esp_driver_tsens
         memoria_kernel
         memoria_fs
         memoria_drivers
         memoria_script
         memoria_package
+        memoria_math
 )

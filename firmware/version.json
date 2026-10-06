@@ -1,0 +1,6 @@
+{
+  "version": "1.2.1",
+  "url": "https://cdn.jsdelivr.net/gh/cfy2012/memoria-os@main/firmware/memoria_os_1.2.1.bin",
+  "changelog": "memoria_math 解方程求解器（一元一次/二次、二元/三元方程组）；CALC 键盘扩展 x/y/^/,；shell solve 命令；CPU 240MHz（boot 零射频前提）；RND 升级 esp_random 硬件物理噪音真随机；修复 I2C 键盘总线 trans_queue_depth 踩 IDF 实验异步路径导致的开机 panic",
+  "major": "false"
+}

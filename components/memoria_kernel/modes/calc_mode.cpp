@@ -2,11 +2,13 @@
  * @file calc_mode.cpp
  * @brief CALC 计算器模式
  *
- * 按键网格（4×5）+ 自写四则表达式解析器（无 eval，安全）。
- * 摇杆移动按键光标，Enter 按下；支持 7 8 9 ÷ 4 5 6 × 1 2 3 − 0 . % + 与 = C ⌫。
+ * 按键网格（4×6）+ 自写四则表达式解析器（无 eval，安全）。
+ * 摇杆移动按键光标，Enter 按下；支持 7 8 9 ÷ 4 5 6 × 1 2 3 − 0 . % + 与
+ * x y ^ ,（解方程入口：式子含 x/y/z 自动走 memoria_math 求解器）和 = C ⌫。
  */
 
 #include "mode_manager.hpp"
+#include "math_solver.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -35,18 +37,19 @@ public:
         ui->draw_text(6, 36, expr, COLOR_WHITE);
         ui->draw_text(6, 48, _result.c_str(), COLOR_YELLOW);
 
-        /* 按键网格 4 列 × 5 行：光标 _cur 0..19 */
-        static const char* keys[20] = {
+        /* 按键网格 4 列 × 6 行：光标 _cur 0..23 */
+        static const char* keys[24] = {
             "7", "8", "9", "÷",
             "4", "5", "6", "×",
             "1", "2", "3", "−",
             "0", ".", "%", "+",
+            "x", "y", "^", ",",
             "C", "⌫", "=", " ",
         };
         const int cols = 4;
         const int bw = (SCREEN_W - 12) / cols;   /* 77 */
         const int bh = 22;
-        for (int i = 0; i < 20; i++) {
+        for (int i = 0; i < 24; i++) {
             int x = 4 + (i % cols) * bw;
             int y = 62 + (i / cols) * (bh + 2);
             bool op = (i % 4 == 3);
@@ -59,9 +62,9 @@ public:
     bool mode_nav(const window::NavInput& ni) override {
         switch (ni.dir) {
             case window::NavEvent::NavUp:    _cur = _cur - 4 >= 0 ? _cur - 4 : _cur; break;
-            case window::NavEvent::NavDown:  _cur = _cur + 4 < 20 ? _cur + 4 : _cur; break;
-            case window::NavEvent::NavLeft:  _cur = (_cur - 1 + 20) % 20; break;
-            case window::NavEvent::NavRight: _cur = (_cur + 1) % 20; break;
+            case window::NavEvent::NavDown:  _cur = _cur + 4 < 24 ? _cur + 4 : _cur; break;
+            case window::NavEvent::NavLeft:  _cur = (_cur - 1 + 24) % 24; break;
+            case window::NavEvent::NavRight: _cur = (_cur + 1) % 24; break;
             case window::NavEvent::NavEnter: _press(_cur); break;
             default: return false;
         }
@@ -86,9 +89,10 @@ public:
 
 private:
     void _press(int i) {
-        static const char* keys[20] = {
+        static const char* keys[24] = {
             "7", "8", "9", "÷", "4", "5", "6", "×",
-            "1", "2", "3", "−", "0", ".", "%", "+", "C", "⌫", "=", " ",
+            "1", "2", "3", "−", "0", ".", "%", "+",
+            "x", "y", "^", ",", "C", "⌫", "=", " ",
         };
         const char* k = keys[i];
         if (!k || !*k || *k == ' ') return;
@@ -103,6 +107,21 @@ private:
 
     void _evaluate() {
         if (_expr.empty()) return;
+
+        /* 式子含未知数（x/y/z）→ 解方程路径（memoria_math，SOLVER-SPEC）；
+         * 纯四则走原解析器，互不干扰 */
+        bool has_var = false;
+        for (char ch : _expr)
+            if (ch == 'x' || ch == 'y' || ch == 'z') { has_var = true; break; }
+        if (has_var) {
+            auto r = math::solve_equations(_expr);
+            _result = r.text();
+            _hist.push_back(_expr + " → " + _result);
+            if (_hist.size() > 10) _hist.erase(_hist.begin());
+            _expr.clear();
+            return;
+        }
+
         double v = _parse();
         if (_parse_err) { _result = "Error"; _expr.clear(); return; }
         char buf[24];
