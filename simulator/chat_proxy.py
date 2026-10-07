@@ -13,10 +13,16 @@ PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8333
 
 
 class H(http.server.BaseHTTPRequestHandler):
-    def do_GET(self):
+    def _relay(self, body=None, ctype_in=None):
         try:
             u = UPSTREAM + self.path
-            req = urllib.request.Request(u, headers={'User-Agent': 'MemoriaSim/1.0'})
+            headers = {'User-Agent': 'MemoriaSim/1.0'}
+            if ctype_in:
+                headers['Content-Type'] = ctype_in
+            if body is not None:
+                req = urllib.request.Request(u, data=body, headers=headers, method=self.command)
+            else:
+                req = urllib.request.Request(u, headers=headers)
             with urllib.request.urlopen(req, timeout=15) as r:
                 data = r.read()
                 ctype = r.headers.get('Content-Type', 'application/octet-stream')
@@ -34,6 +40,14 @@ class H(http.server.BaseHTTPRequestHandler):
             self.send_header('Content-Length', str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+
+    def do_GET(self):
+        self._relay()
+
+    def do_POST(self):
+        ln = int(self.headers.get('Content-Length', 0) or 0)
+        body = self.rfile.read(ln) if ln > 0 else b''
+        self._relay(body, self.headers.get('Content-Type', 'application/octet-stream'))
 
     def log_message(self, *a):
         pass

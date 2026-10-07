@@ -26,3 +26,10 @@ Desktop.ini
 # 畅聊服务端：真实凭据与部署产物（旧 zip 含历史真实密码，一律不入库）
 changliao/server/config.local.php
 changliao/dist/
+
+# Office 锁文件 / 本地备份目录（旧版docx历史里已有，磁盘备份不入库）
+~$*
+docs/backup/
+
+# 编译产物 exe 一律走 GitHub Release，不入库
+*.exe

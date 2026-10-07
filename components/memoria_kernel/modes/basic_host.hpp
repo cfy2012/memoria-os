@@ -22,6 +22,13 @@
  *   lclr / lscr n               清空列表 / 滚动（+向下 -向上）
  *   btn x,y,w,h,"文字"          按钮（创建顺序编号 0..7）
  *   bsel i                      按钮焦点高亮
+ *   bkey(i)                     查询按钮 i 是否被"按下"（回车/摇杆确认，读后清零）
+ *   lbl id,x,y,"文本"[,style]   文本控件：id 化创建/更新（0 正常 1 反白 2 粗体）
+ *   llbl id,"新文本"[,style]    只改文本控件内容
+ *   lbld id                     删除文本控件
+ *   img id,x,y                  内置图标（0 电池 1 WiFi 2 音符 3 文件夹 4 齿轮 5 星 6 心 7 右箭头）
+ *   text x,y,"文本"[,style]     直绘文本（style 同上，颜色走 color）
+ *   after ms,line               非阻塞定时：ms 后跳转 line（一次性，阻塞语句期间不触发）
  *   inputat x,y,w,h             设定下一次 input a$ 的输入框位置（IME 条画框下）
  *   delay ms                    让出 CPU
  *   key()                       非阻塞取键事件
@@ -78,17 +85,21 @@ private:
     /* ---- 控件状态（BASIC 任务写 / 主循环读，_mtx 保护） ---- */
     struct Panel  { window::Rect r{}; std::string title; };
     struct Button { window::Rect r{}; std::string label; };
-    enum class Op : uint8_t { Text, Fill, Rect, Line, Circle };
+    struct Label  { int16_t id = 0, x = 0, y = 0; std::string text; uint32_t color = 0xFFFF; uint8_t style = 0; };
+    struct AfterTimer { uint32_t due_ms = 0; int line = 0; };   /* 一次性定时跳转 */
+    enum class Op : uint8_t { Text, Fill, Rect, Line, Circle, Icon };
     struct DrawOp {
         Op op = Op::Text;
         int16_t x = 0, y = 0, w = 0, h = 0, x1 = 0, y1 = 0;
         uint32_t color = 0;
+        uint8_t style = 0;        /* 文本样式：0 正常 1 反白 2 粗体 */
         std::string text;
     };
 
     void _interp_abort();                   /* _interp 存在时 request_abort */
     void _state_reset();                    /* 清控件状态（run 前 / CLEAR） */
     void _list_add(const std::string& text);
+    void _mark_btn_press();                 /* 确认键/摇杆按下 → 记入聚焦按钮 */
 
     /* 命令实现（BASIC 任务上下文） */
     void _cmd_win(const std::vector<basic::BasicArg>& a);
@@ -97,6 +108,13 @@ private:
     void _cmd_btn(const std::vector<basic::BasicArg>& a);
     void _cmd_bsel(const std::vector<basic::BasicArg>& a);
     void _cmd_draw_op(Op op, const std::vector<basic::BasicArg>& a);
+    void _cmd_lbl(const std::vector<basic::BasicArg>& a);
+    void _cmd_llbl(const std::vector<basic::BasicArg>& a);
+    void _cmd_lbld(const std::vector<basic::BasicArg>& a);
+    void _cmd_img(const std::vector<basic::BasicArg>& a);
+    void _cmd_after(const std::vector<basic::BasicArg>& a);
+    double _func_bkey(const std::vector<basic::BasicArg>& a);
+    int  _after_timer_check();              /* 解释器每行回调：到期返回跳转行号 */
     std::string _input_str(const std::string& prompt);
     void _http_exec(const std::string& raw, bool post);
     void _http_file(const std::string& raw, bool up);
@@ -120,6 +138,7 @@ private:
     std::vector<Panel>   _panels;
     std::vector<Button>  _btns;
     int      _btn_focus = -1;
+    uint8_t  _btn_press[8] = {};            /* 按钮按下标记（bkey(i) 读后清零） */
     window::Rect _list_r{};
     bool     _has_list = false;
     std::vector<std::string> _list_lines;   /* 已按宽换行的展示行 */
@@ -127,6 +146,8 @@ private:
     window::Rect _input_r{};
     bool     _has_input_r = false;
     std::vector<DrawOp> _ops;               /* 直接绘制语句重放表 */
+    std::vector<Label>  _labels;            /* lbl 文本控件（上限 16，按 id 更新） */
+    std::vector<AfterTimer> _after;         /* after 定时跳转（上限 8，BASIC 任务线程独用） */
     uint32_t _cur_color = 0xFFFF;           /* RGB565 白 */
 
     /* input a$ 会话（BASIC 任务等 / 主循环写） */

@@ -130,6 +130,11 @@ public:
             bool is_pkg = nm.size() > 4 && nm.substr(nm.size() - 4) == ".msp";
             if (is_pkg) {
                 remove((std::string("/mem_fat/scripts/") + nm).c_str());
+                /* 应用包解出的可运行 .bas / manifest / 资源目录一并清理 */
+                std::string base = nm.substr(0, nm.size() - 4);
+                remove((std::string("/mem_fat/scripts/") + base + ".bas").c_str());
+                remove((std::string("/mem_fat/scripts/") + base + ".json").c_str());
+                remove((std::string("/mem_fat/scripts/") + base).c_str());   /* FAT 无递归，目录空才删 */
                 _hint = "已卸载 " + nm;
             } else {
                 _hint = "非商店包不可卸载（" + nm + "）";
@@ -249,6 +254,62 @@ private:
         else _hint = _load_source();
     }
 
+    /* MBND 应用包解包（GLM 打包器 v2 规范，小端字节序）：
+     *   payload = 'MBND' + u16 N + [u16 name_len + name + u32 data_len]×N + 数据紧凑区
+     * 安全：条目名白名单 [A-Za-z0-9_.-]（拒空/./..，防路径穿越）；数据偏移越界拒绝。
+     * 落盘：app.bas → <pkg>.bas（可运行）、manifest.json → <pkg>.json、
+     *        其他资源 → <pkg>/<entry>（保存数据，不参与运行扫描）。 */
+    bool _unpack_mbnd(const std::string& payload, const std::string& pkg, std::string* err) {
+        const size_t ps = payload.size();
+        if (ps < 4 || payload[0] != 'M' || payload[1] != 'B' ||
+            payload[2] != 'N' || payload[3] != 'D') { *err = "非 MBND 包"; return false; }
+        size_t p = 4;
+        auto rd_u16 = [&](size_t o) -> uint16_t {
+            return (uint16_t)((uint8_t)payload[o] | ((uint8_t)payload[o + 1] << 8));
+        };
+        auto rd_u32 = [&](size_t o) -> uint32_t {
+            return (uint32_t)((uint8_t)payload[o] | ((uint8_t)payload[o + 1] << 8) |
+                              ((uint8_t)payload[o + 2] << 16) | ((uint8_t)payload[o + 3] << 24));
+        };
+        if (p + 2 > ps) { *err = "MBND 头损坏"; return false; }
+        uint16_t n = rd_u16(p); p += 2;
+        if (n == 0 || n > 32) { *err = "MBND 节数异常"; return false; }
+
+        struct Ent { std::string name; size_t off = 0, len = 0; };
+        std::vector<Ent> ents;
+        size_t data_off = 0;
+        for (int i = 0; i < n; i++) {
+            if (p + 2 > ps) { *err = "MBND 节表越界"; return false; }
+            uint16_t nl = rd_u16(p); p += 2;
+            if (p + nl > ps) { *err = "MBND 节名越界"; return false; }
+            std::string nm(payload.data() + p, nl); p += nl;
+            if (p + 4 > ps) { *err = "MBND 节长越界"; return false; }
+            uint32_t dl = rd_u32(p); p += 4;
+            bool ok = !nm.empty() && nm != "." && nm != "..";
+            for (char ch : nm) {
+                if (!(std::isalnum((unsigned char)ch) || ch == '_' || ch == '.' || ch == '-')) { ok = false; break; }
+            }
+            if (!ok) { *err = "MBND 条目名非法: " + nm; return false; }
+            ents.push_back({nm, data_off, dl});
+            data_off += dl;
+        }
+        if (p + data_off > ps) { *err = "MBND 数据越界"; return false; }
+
+        for (auto& e : ents) {
+            std::string target;
+            if (e.name == "app.bas")                target = "/mem_fat/scripts/" + pkg + ".bas";
+            else if (e.name == "manifest.json")     target = "/mem_fat/scripts/" + pkg + ".json";
+            else                                    target = "/mem_fat/scripts/" + pkg + "/" + e.name;
+            std::string dir = target.substr(0, target.rfind('/'));
+            if (!dir.empty()) mkdir(dir.c_str(), 0755);
+            FILE* f = std::fopen(target.c_str(), "wb");
+            if (!f) { *err = "写盘失败: " + target; return false; }
+            if (e.len) std::fwrite(payload.data() + p + e.off, 1, e.len, f);
+            std::fclose(f);
+        }
+        return true;
+    }
+
     void _install_sel() {
         if (_remote.empty()) return;
         if (!_online) { _hint = "WiFi 未连接"; return; }
@@ -273,7 +334,27 @@ private:
             if (actual != it.crc) { _hint = "CRC 校验失败 · 已丢弃"; return; }
         }
 
+        /* MBND 应用包判定：MSPACK 50B 头 + payload 前 4 字节 'MBND' → 解包落盘
+         * （旧 media 包向后兼容：非 MBND 走原路径直接保存） */
+        bool is_app = false;
+        if (data.size() >= 50 && std::memcmp(data.data(), "MSPACK", 6) == 0) {
+            uint32_t payload_size = 0;
+            std::memcpy(&payload_size, data.data() + 42, 4);
+            if (payload_size > 0 && payload_size <= data.size() - 50) {
+                const char* pl = data.data() + 50;
+                if (payload_size >= 4 && pl[0] == 'M' && pl[1] == 'B' && pl[2] == 'N' && pl[3] == 'D') {
+                    std::string err;
+                    if (!_unpack_mbnd(std::string(pl, payload_size), it.name, &err)) {
+                        _hint = "应用包解包失败: " + err;
+                        return;
+                    }
+                    is_app = true;
+                }
+            }
+        }
+
         std::string path = std::string("/mem_fat/scripts/") + it.name;
+        if (is_app) path += ".msp";   /* 应用包保留原包：兼容卸载/信息页/重装 */
         FILE* f = std::fopen(path.c_str(), "wb");
         if (!f) { _hint = "写入失败 · 检查 TF 卡"; return; }
         std::fwrite(data.data(), 1, data.size(), f);
@@ -281,7 +362,7 @@ private:
 
         it.installed = true;
         _scan_installed();
-        _hint = "安装完成 " + it.name;
+        _hint = "安装完成 " + it.name + (is_app ? "（应用）" : "");
     }
 
     void _uninstall_sel() {

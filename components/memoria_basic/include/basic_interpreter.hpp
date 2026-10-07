@@ -107,6 +107,11 @@ public:
     void request_abort() { _abort = true; }
     void set_step_hook(std::function<void()> fn) { _step_hook = std::move(fn); }
 
+    /* AFTER 非阻塞定时钩子（v1.3 固件 GUI 缺口④）：
+     * 宿主每行执行前回调一次；返回 >0 时解释器跳转到该行号继续执行，
+     * 返回 0 表示无到期定时器。宿主侧负责注册/到期判定（一次性语义）。 */
+    void set_timer_check(std::function<int()> fn) { _timer_check = std::move(fn); }
+
     /* 统计 */
     uint32_t steps_run() const { return _steps; }
 
@@ -196,6 +201,7 @@ private:
     uint32_t _max_steps = 0;            /* run() 步数上限（函数体内续用） */
     bool _abort = false;        /* 宿主强停标志（APP 模式返回键） */
     std::function<void()> _step_hook;  /* 每 4096 步让出回调（宿主注入） */
+    std::function<int()> _timer_check; /* AFTER 定时器检查（宿主注入，每行前回调） */
     uint32_t _steps = 0;
 
     BasicOutFn   _out;

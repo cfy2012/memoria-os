@@ -119,7 +119,7 @@ int Shell::execute(const std::string& line, bool safe) {
     if (cmd == "help") { _print_help(safe); return 0; }
 
     if (cmd == "info") {
-        std::fprintf(stdout, "memoria os v1.2.1 (ESP32-S3)\n");
+        std::fprintf(stdout, "memoria os v1.3.0 (ESP32-S3)\n");
         std::fprintf(stdout, "uptime_ms = %lu\n", (unsigned long)(esp_timer_get_time() / 1000));
         std::fprintf(stdout, "free_heap = %lu B\n", (unsigned long)esp_get_free_heap_size());
         std::fprintf(stdout, "psram     = %lu B free\n",
@@ -297,7 +297,7 @@ int Shell::execute(const std::string& line, bool safe) {
         /* readdir 列出 /mem_fat/scripts 目录 */
         std::string dir = "/mem_fat/scripts";
         DIR* d = opendir(dir.c_str());
-        if (!d) { std::fprintf(stdout, "scripts: cannot open %s\n", dir.c_str()); return 1; }
+        if (!d) { std::fprintf(stdout, "scripts: cannot open %s\n", dir.c_str()); return 0; }
         std::fprintf(stdout, "scripts:\n");
         struct dirent* e;
         while ((e = readdir(d)) != nullptr) {
@@ -315,10 +315,13 @@ int Shell::execute(const std::string& line, bool safe) {
         if (ok) for (char ch : name) {
             if (!(std::isalnum((unsigned char)ch) || ch == '_' || ch == '.' || ch == '-')) { ok = false; break; }
         }
-        if (!ok) { std::fprintf(stdout, "script: invalid name\n"); return 1; }
+        if (!ok) { std::fprintf(stdout, "script: invalid name\n"); return 0; }
         std::string path = "/mem_fat/scripts/" + name;
         std::fprintf(stdout, "running %s ...\n", path.c_str());
-        return script::run_file(path);
+        /* #86：失败码只打印不冒泡——execute 返回 1 会被主循环当作退出 shell */
+        int r = script::run_file(path);
+        if (r != 0) std::fprintf(stdout, "script: exited with code %d\n", r);
+        return 0;
     }
 
     if (cmd == "pkg_update") {
@@ -350,7 +353,10 @@ int Shell::execute(const std::string& line, bool safe) {
 
     if (cmd == "ota_firmware") {
         std::fprintf(stdout, "starting firmware OTA...\n");
-        return package::ota_firmware();
+        /* #86：OTA 失败码（1/2/3）只打印不冒泡；成功路径在 ota_firmware 内部直接 esp_restart */
+        int r = package::ota_firmware();
+        if (r != 0) std::fprintf(stdout, "ota: failed (code %d)\n", r);
+        return 0;
     }
 
     if (cmd == "rec") {

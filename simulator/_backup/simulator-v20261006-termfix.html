@@ -1487,7 +1487,7 @@ async function basicRun(src, out, canvas, askNum){
     else {
       /* 扩展命令（真机由宿主注入：屏幕/WiFi/GPIO） */
       const head = u.split(/\s/)[0];
-      const C = {TEXT:1,RECT:1,FILL:1,CLEAR:1,COLOR:1,PIXEL:1,LINE:1,CIRCLE:1,WIFI:1,SLEEP:1,WAIT:1,GPIOOUT:1,UART:1,BLE:1};
+      const C = {TEXT:1,RECT:1,FILL:1,CLEAR:1,COLOR:1,PIXEL:1,LINE:1,CIRCLE:1,WIFI:1,SLEEP:1,GPIOOUT:1,UART:1,BLE:1};
       if (!C[head]) { out('未知命令: '+line+'\n'); return; }
       const a = parseArgs(line.trim().slice(head.length));
       const n = i => i<1 || !a[i] ? 0 : evalExpr(a[i]);
@@ -1501,7 +1501,6 @@ async function basicRun(src, out, canvas, askNum){
       else if (head==='CIRCLE' && ctx){ ctx.strokeStyle=fg; ctx.beginPath(); ctx.arc(n(0),n(1),Math.abs(n(2)),0,7); ctx.stroke(); }
       else if (head==='WIFI'){ out('WIFI 连接中…（模拟）\n'); }
       else if (head==='SLEEP'){ const ms=Math.floor(n(0)); await new Promise(r=>setTimeout(r,ms)); }
-      else if (head==='WAIT'){ const ms=Math.floor(n(0)); await new Promise(r=>setTimeout(r,Math.max(1,Math.min(60000,ms)))); } /* PRGM 标准延时 wait(毫秒)，与真机 WAIT 一致 */
       else out(head+'（模拟）\n');
     }
   };

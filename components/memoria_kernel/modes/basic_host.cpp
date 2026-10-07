@@ -100,6 +100,23 @@ void BasicHost::install(basic::BasicInterpreter& interp) {
         if (ms > 60000) ms = 60000;
         vTaskDelay(pdMS_TO_TICKS(ms));
     });
+    /* WAIT：PRGM 模式标准延时（wait(毫秒)，教材 0x41.6）。
+       与 DELAY 同实现：vTaskDelay 按毫秒停。wait(150) / wait 150 均兼容 */
+    interp.add_cmd("WAIT",    [this](const std::vector<basic::BasicArg>& a) {
+        int ms = a.empty() ? 0 : (int)a[0].num;
+        if (ms < 1) ms = 1;
+        if (ms > 60000) ms = 60000;
+        vTaskDelay(pdMS_TO_TICKS(ms));
+    });
+    /* v1.3 GUI 缺口①⑤③②④：bkey / text 样式 / img / lbl 控件 / after */
+    interp.add_func("BKEY", [this](const std::vector<basic::BasicArg>& a) -> double {
+        return _func_bkey(a);
+    });
+    interp.add_cmd("LBL",    [this](auto& a) { _cmd_lbl(a); });
+    interp.add_cmd("LLBL",   [this](auto& a) { _cmd_llbl(a); });
+    interp.add_cmd("LBLD",   [this](auto& a) { _cmd_lbld(a); });
+    interp.add_cmd("IMG",    [this](auto& a) { _cmd_img(a); });
+    interp.add_cmd("AFTER",  [this](auto& a) { _cmd_after(a); });
 
     /* ---- key()：非阻塞键事件 ---- */
     interp.add_func("KEY", [this](const std::vector<basic::BasicArg>&) -> double {
@@ -194,14 +211,23 @@ uint8_t BasicHost::_ring_pop() {
 
 void BasicHost::feed_key(uint16_t key, bool pressed) {
     if (!pressed) return;
-    if (key == input::K_ENTER)     { _ring_push(13); return; }
+    if (key == input::K_ENTER)     { _ring_push(13); _mark_btn_press(); return; }
     if (key == input::K_BACKSPACE) { _ring_push(8);  return; }
     if (key == input::K_ESC)       { _ring_push(27); return; }
     if (key >= 0x20 && key <= 0x7E) _ring_push((uint8_t)key);
 }
 
 void BasicHost::feed_nav(int dir) {
-    if (dir >= 1 && dir <= 5) _ring_push((uint8_t)dir);
+    if (dir >= 1 && dir <= 5) {
+        _ring_push((uint8_t)dir);
+        if (dir == 5) _mark_btn_press();   /* 摇杆按下 = 确认聚焦按钮 */
+    }
+}
+
+void BasicHost::_mark_btn_press() {
+    std::lock_guard<std::mutex> lk(_mtx);
+    if (_btn_focus >= 0 && _btn_focus < 8 && _btn_focus < (int)_btns.size())
+        _btn_press[_btn_focus] = 1;
 }
 
 void BasicHost::feed_text(const char* utf8, size_t len) {
@@ -301,16 +327,106 @@ void BasicHost::_cmd_bsel(const std::vector<basic::BasicArg>& a) {
     if (i >= -1 && i < (int)_btns.size()) _btn_focus = i;
 }
 
+/* ---- v1.3 GUI 缺口：bkey / lbl / img / after ---- */
+double BasicHost::_func_bkey(const std::vector<basic::BasicArg>& a) {
+    if (a.empty() || a[0].is_string) return 0;
+    int i = (int)a[0].num;
+    std::lock_guard<std::mutex> lk(_mtx);
+    if (i < 0 || i >= 8) return 0;
+    uint8_t v = _btn_press[i];   /* 读后清零：轮询式事件，与 key() 同语义 */
+    _btn_press[i] = 0;
+    return v ? 1.0 : 0.0;
+}
+
+void BasicHost::_cmd_lbl(const std::vector<basic::BasicArg>& a) {
+    if (a.size() < 4 || a[0].is_string) return;
+    std::lock_guard<std::mutex> lk(_mtx);
+    Label l;
+    l.id  = (int16_t)(int)a[0].num;
+    l.x   = (int16_t)(int)a[1].num;
+    l.y   = (int16_t)(int)a[2].num;
+    l.text = a[3].str;
+    l.color = _cur_color;
+    if (a.size() >= 5 && !a[4].is_string)
+        l.style = (uint8_t)std::max(0, std::min(2, (int)a[4].num));
+    for (auto& e : _labels) { if (e.id == l.id) { e = l; return; } }   /* 同 id 覆盖 */
+    if (_labels.size() < 16) _labels.push_back(l);
+}
+
+void BasicHost::_cmd_llbl(const std::vector<basic::BasicArg>& a) {
+    if (a.size() < 2 || a[0].is_string) return;
+    std::lock_guard<std::mutex> lk(_mtx);
+    int id = (int)a[0].num;
+    for (auto& e : _labels) {
+        if (e.id == id) {
+            e.text = a[1].str;
+            if (a.size() >= 3 && !a[2].is_string)
+                e.style = (uint8_t)std::max(0, std::min(2, (int)a[2].num));
+            return;
+        }
+    }
+}
+
+void BasicHost::_cmd_lbld(const std::vector<basic::BasicArg>& a) {
+    if (a.empty() || a[0].is_string) return;
+    std::lock_guard<std::mutex> lk(_mtx);
+    int id = (int)a[0].num;
+    for (size_t i = 0; i < _labels.size(); i++) {
+        if (_labels[i].id == id) { _labels.erase(_labels.begin() + (long)i); return; }
+    }
+}
+
+void BasicHost::_cmd_img(const std::vector<basic::BasicArg>& a) {
+    if (a.size() < 3) return;
+    std::lock_guard<std::mutex> lk(_mtx);
+    DrawOp d;
+    d.op = Op::Icon;
+    d.color = _cur_color;
+    d.w  = (int16_t)(int)a[0].num;            /* 图标 id 0..7 */
+    d.x  = (int16_t)(int)a[1].num;
+    d.y  = (int16_t)(int)a[2].num;
+    if (d.w < 0 || d.w >= 8) return;
+    if (_ops.size() >= 64) _ops.erase(_ops.begin());
+    _ops.push_back(std::move(d));
+}
+
+void BasicHost::_cmd_after(const std::vector<basic::BasicArg>& a) {
+    if (a.size() < 2) return;
+    uint32_t ms = (uint32_t)std::max(1.0, std::min(3600000.0, a[0].num));  /* 1ms~1h */
+    int line = (int)a[1].num;
+    if (line < 0) return;
+    std::lock_guard<std::mutex> lk(_mtx);
+    if (_after.size() >= 8) _after.erase(_after.begin());   /* 满则丢最旧 */
+    _after.push_back({(uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS) + ms, line});
+}
+
+int BasicHost::_after_timer_check() {
+    uint32_t now = (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS);
+    std::lock_guard<std::mutex> lk(_mtx);
+    for (size_t i = 0; i < _after.size(); i++) {
+        if ((int32_t)(now - _after[i].due_ms) >= 0) {   /* 无符号回绕安全比较 */
+            int line = _after[i].line;
+            _after.erase(_after.begin() + (long)i);
+            return line;
+        }
+    }
+    return 0;
+}
+
 void BasicHost::_cmd_draw_op(Op op, const std::vector<basic::BasicArg>& a) {
     std::lock_guard<std::mutex> lk(_mtx);
     DrawOp d;
     d.op = op;
     d.color = _cur_color;
     switch (op) {
+        case Op::Icon: return;   /* IMG 走 _cmd_img，不属直绘语句 */
         case Op::Text:
             if (a.size() < 3) return;
             d.x = (int16_t)(int)a[0].num; d.y = (int16_t)(int)a[1].num;
             d.text = a[2].str;
+            /* v1.3：可选第 4 参文本样式（0 正常 / 1 反白 / 2 粗体） */
+            if (a.size() >= 4 && !a[3].is_string)
+                d.style = (uint8_t)std::max(0, std::min(2, (int)a[3].num));
             break;
         case Op::Fill: case Op::Rect: case Op::Line:
             if (a.size() < (op == Op::Line ? 4 : 4)) return;
@@ -336,11 +452,14 @@ void BasicHost::_state_reset() {
     _panels.clear();
     _btns.clear();
     _btn_focus = -1;
+    std::memset(_btn_press, 0, sizeof(_btn_press));
     _has_list = false;
     _list_lines.clear();
     _list_scroll = 0;
     _has_input_r = false;
     _ops.clear();
+    _labels.clear();
+    _after.clear();
     _cur_color = 0xFFFF;
 }
 
@@ -393,6 +512,155 @@ void BasicHost::_list_add(const std::string& text) {
 /* ============================================================
  *  渲染重放（主循环任务）
  * ============================================================ */
+/* 内置图标表：img id,x,y（16×16 点阵，'#' 亮，可替换/扩展）
+ *   0 电池  1 WiFi  2 音符  3 文件夹  4 齿轮  5 星  6 心  7 右箭头 */
+static const char* const ICON_BITMAPS[8][16] = {
+    {   /* 0 电池 */
+        "................",
+        "..############..",
+        ".##############.",
+        "###############.",
+        "#..............#",
+        "#..............#",
+        "#..............#",
+        "#..............#",
+        "#..............#",
+        "#..............#",
+        "#..............#",
+        "#..............#",
+        "###############.",
+        ".##############.",
+        "................",
+        "................",
+    },
+    {   /* 1 WiFi */
+        "................",
+        "................",
+        "....#......#....",
+        "....##....##....",
+        ".....######.....",
+        ".....######.....",
+        "......####......",
+        "......####......",
+        ".......##.......",
+        ".......##.......",
+        "................",
+        "................",
+        "................",
+        "................",
+        "................",
+        "................",
+    },
+    {   /* 2 音符 */
+        "................",
+        ".....######.....",
+        "....#####.......",
+        "...###..........",
+        "................",
+        ".......##.......",
+        ".......##.......",
+        ".......##.......",
+        ".......##.......",
+        ".......##.......",
+        ".......##.......",
+        ".......##.......",
+        "......#####.....",
+        "......#####.....",
+        "................",
+        "................",
+    },
+    {   /* 3 文件夹 */
+        "................",
+        "..####..........",
+        "..#####.........",
+        ".######.........",
+        "############....",
+        "############....",
+        "############....",
+        "############....",
+        "############....",
+        "############....",
+        "############....",
+        "############....",
+        "############....",
+        "############....",
+        "................",
+        "................",
+    },
+    {   /* 4 齿轮 */
+        "....########....",
+        "..############..",
+        ".###..####..###.",
+        ".####......####.",
+        "####........####",
+        "###..........###",
+        "###..........###",
+        "###....##....###",
+        "###..........###",
+        "###..........###",
+        "####........####",
+        ".####......####.",
+        ".###..####..###.",
+        "..############..",
+        "....########....",
+        "................",
+    },
+    {   /* 5 星 */
+        ".......##.......",
+        "......####......",
+        ".....######.....",
+        "....########....",
+        "...##########...",
+        "..############..",
+        ".##############.",
+        "###############.",
+        ".##############.",
+        "..############..",
+        "...##########...",
+        "....########....",
+        ".....######.....",
+        "......####......",
+        ".......##.......",
+        "................",
+    },
+    {   /* 6 心 */
+        "................",
+        ".###......###...",
+        "#####....#####..",
+        "######..######..",
+        "###############.",
+        "##############..",
+        ".############...",
+        "..##########....",
+        "...########.....",
+        "....######......",
+        ".....####.......",
+        "......##........",
+        "................",
+        "................",
+        "................",
+        "................",
+    },
+    {   /* 7 右箭头 */
+        "................",
+        ".......#........",
+        "......##........",
+        ".....###........",
+        "....####........",
+        "...#####........",
+        "..######........",
+        ".#######........",
+        "..######........",
+        "...#####........",
+        "....####........",
+        ".....###........",
+        "......##........",
+        ".......#........",
+        "................",
+        "................",
+    },
+};
+
 void BasicHost::render(window::UIRenderer* ui) {
     std::lock_guard<std::mutex> lk(_mtx);
     const int16_t OY = 16;   /* app 区 y=0 在状态栏下 */
@@ -434,11 +702,48 @@ void BasicHost::render(window::UIRenderer* ui) {
         }
     }
 
+    /* lbl 文本控件（控件层：面板之后、直绘之前；反白/粗体样式） */
+    for (auto& l : _labels) {
+        if (l.text.empty()) continue;
+        int tw = window::UIRenderer::text_width_utf8(l.text);
+        int x = l.x, y = (int16_t)(l.y + OY);
+        if (l.style == 1) {   /* 反白：当前色底 + 黑字 */
+            ui->fill_rect({(int16_t)x, (int16_t)y, (int16_t)tw, 16}, (uint16_t)l.color);
+            ui->draw_text_utf8(x, y, l.text, COLOR_BLACK);
+        } else {
+            ui->draw_text_utf8(x, y, l.text, (uint16_t)l.color);
+            if (l.style == 2) ui->draw_text_utf8((int16_t)(x + 1), y, l.text, (uint16_t)l.color);
+        }
+    }
+
     for (auto& d : _ops) {
         switch (d.op) {
-            case Op::Text:
-                ui->draw_text_utf8(d.x, (int16_t)(d.y + OY), d.text, (uint16_t)d.color);
+            case Op::Text: {
+                if (d.style == 1) {   /* 反白：当前色底 + 黑字 */
+                    int tw = window::UIRenderer::text_width_utf8(d.text);
+                    ui->fill_rect({d.x, (int16_t)(d.y + OY), (int16_t)tw, 16}, (uint16_t)d.color);
+                    ui->draw_text_utf8(d.x, (int16_t)(d.y + OY), d.text, COLOR_BLACK);
+                } else {
+                    ui->draw_text_utf8(d.x, (int16_t)(d.y + OY), d.text, (uint16_t)d.color);
+                    if (d.style == 2)   /* 粗体：x+1 重绘 */
+                        ui->draw_text_utf8((int16_t)(d.x + 1), (int16_t)(d.y + OY), d.text, (uint16_t)d.color);
+                }
                 break;
+            }
+            case Op::Icon: {   /* 内置图标点阵（16×16，前景=当前色） */
+                int id = d.w;
+                if (id >= 0 && id < 8) {
+                    for (int yy = 0; yy < 16; yy++) {
+                        const char* row = ICON_BITMAPS[id][yy];
+                        for (int xx = 0; xx < 16; xx++) {
+                            if (row[xx] == '#')
+                                ui->fill_rect({(int16_t)(d.x + xx), (int16_t)(d.y + OY + yy), 1, 1},
+                                              (uint16_t)d.color);
+                        }
+                    }
+                }
+                break;
+            }
             case Op::Fill:
                 ui->fill_rect({d.x, (int16_t)(d.y + OY), d.w, d.h}, (uint16_t)d.color);
                 break;
@@ -514,6 +819,7 @@ void BasicHost::task_body() {
     _interp = &interp;
     install(interp);
     interp.set_step_hook([] { vTaskDelay(1); });   /* 每 4096 步让出，防饿死 idle/WDT */
+    interp.set_timer_check([this]() { return _after_timer_check(); });   /* AFTER 定时跳转 */
 
     interp.clear_program();
     if (!interp.load_file(_path)) {

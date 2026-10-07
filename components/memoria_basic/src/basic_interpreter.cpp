@@ -1485,6 +1485,19 @@ void BasicInterpreter::execute_line(const std::string& line) {
 
 bool BasicInterpreter::dispatch_cmd(const std::string& line) {
     std::string t = trim_str(line);
+    /* 函数式语句规范化：wait(150) → WAIT 150（教材 0x41.6 写法；首个括号组须闭合于行尾才转换，
+       a(1)=5 赋值不会走到这里——裸赋值分支已先行拦截；引号内括号不闭合于行尾，不误转） */
+    {
+        size_t lp = t.find('(');
+        if (lp != std::string::npos && lp > 0 && t.back() == ')') {
+            int depth = 0; bool wrap = false;
+            for (size_t i = lp; i < t.size(); i++) {
+                if (t[i] == '(') depth++;
+                else if (t[i] == ')') { depth--; if (depth == 0) { wrap = (i == t.size() - 1); break; } }
+            }
+            if (wrap) t = trim_str(t.substr(0, lp) + " " + t.substr(lp + 1, t.size() - lp - 2));
+        }
+    }
     size_t sp = t.find_first_of(" \t");
     std::string head = upper_str(sp == std::string::npos ? t : t.substr(0, sp));
     auto eval_l = [this](const std::string& s) { return evaluate_expression(s); };
@@ -1546,6 +1559,11 @@ int BasicInterpreter::run(uint32_t max_steps) {
             return 1;
         }
         if (_step_hook && (_steps & 0xFFF) == 0) _step_hook();   /* 每 4096 步让出 CPU */
+        /* AFTER 非阻塞定时：宿主到期返回跳转行号 → 跳到该行继续（GOTO 语义） */
+        if (_timer_check) {
+            int tl = _timer_check();
+            if (tl > 0) { _current_line = tl; _jumped = true; continue; }
+        }
         auto it = _program.find(_current_line);
         if (it == _program.end()) {
             /* 目标行不存在（GOTO/GOSUB 悬空）：报错停止，不再静默就近跳转 */
