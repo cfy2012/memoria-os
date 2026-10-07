@@ -1,6 +1,6 @@
 {
-  "version": "1.3.0",
-  "url": "https://cdn.jsdelivr.net/gh/cfy2012/memoria-os@main/firmware/memoria_os_1.3.0.bin",
-  "changelog": "GUI 控件语句集（bkey 按钮 / lbl-llbl-lbld 标签 / img 图标 / after 定时跳转 / text-lbl 样式参数）；store 支持 MBND 应用包解包安装（app.bas+manifest+资源，卸载连带清理）；商店仅认 .msp 应用包；扩展语句函数式写法规范化（wait(150)/delay(100) 等带括号形式与教材一致）；shell 错误路径误退出导致 panic 重启修复（#86）",
+  "version": "1.4.0",
+  "url": "https://cdn.jsdelivr.net/gh/cfy2012/memoria-ota@main/firmware/memoria_os_1.4.0.bin",
+  "changelog": "系统设置网络管理界面（WiFi 扫描点选连接 / AP 热点自定义 / 蓝牙开关，按需射频 boot 零射频不破）；模拟器 PLAY/RECORD 语句与版本串同步至 v1.4.0",
   "major": "false"
 }

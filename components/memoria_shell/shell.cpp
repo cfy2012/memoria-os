@@ -60,6 +60,7 @@ static void _print_help(bool safe) {
             "battery              battery level + voltage\n"
             "backlight <0-255>    set LCD backlight (no arg = show)\n"
             "wifi                 wifi status (ssid, rssi)\n"
+            "wifi connect <s> <p> connect wifi now (serial lifeline, no keyboard needed)\n"
             "ble                  BLE adv status, connected count\n"
             "sd                   SD card mount status\n"
             "sd mount             retry TF card mount\n"
@@ -119,7 +120,7 @@ int Shell::execute(const std::string& line, bool safe) {
     if (cmd == "help") { _print_help(safe); return 0; }
 
     if (cmd == "info") {
-        std::fprintf(stdout, "memoria os v1.3.0 (ESP32-S3)\n");
+        std::fprintf(stdout, "memoria os v1.4.0 (ESP32-S3)\n");
         std::fprintf(stdout, "uptime_ms = %lu\n", (unsigned long)(esp_timer_get_time() / 1000));
         std::fprintf(stdout, "free_heap = %lu B\n", (unsigned long)esp_get_free_heap_size());
         std::fprintf(stdout, "psram     = %lu B free\n",
@@ -257,6 +258,23 @@ int Shell::execute(const std::string& line, bool safe) {
         }
         std::fprintf(stdout, "backlight: %u / 255\n",
                      (unsigned)p->get_backlight());
+        return 0;
+    }
+
+    if (cmd == "wifi" && args.size() >= 4 && args[1] == "connect") {
+        /* 串口连网：safe 救场场景 + 无键盘裸板唯一连网通道（v1.4.0） */
+        auto* w = drivers::WifiManager::instance();
+        std::fprintf(stdout, "wifi: start rf and connect \"%s\" ...\n", args[2].c_str());
+        std::fflush(stdout);
+        w->start_rf();
+        esp_err_t err = w->connect(args[2], args[3]);
+        for (int i = 0; i < 150 && !w->connected(); i++)
+            vTaskDelay(pdMS_TO_TICKS(100));
+        if (w->connected())
+            std::fprintf(stdout, "wifi: connected \"%s\" rssi=%ld dBm\n",
+                         w->saved_ssid().c_str(), (long)w->rssi());
+        else
+            std::fprintf(stdout, "wifi: connect failed (err=0x%x, timeout 15s)\n", (unsigned)err);
         return 0;
     }
 

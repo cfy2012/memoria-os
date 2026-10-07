@@ -614,6 +614,7 @@ const PS = {
         {k:'后台播放', v:['开','关'], i:0},
       ]},
       {g:'网络', items:[
+        {k:'网络管理', v:['进入 ▶'], i:0, act:'net'},
         {k:'WiFi', v:['开','关'], i:0},
         {k:'已存网络', v:['HomeWiFi'], i:0},
         {k:'自动OTA检查', v:['开','关'], i:1},
@@ -719,6 +720,7 @@ function renderFn(){
   if (S.mode==='app'){
     const mo = MODES.find(x=>x.id===S.app);
     if (S.app==='prgm' && S.sub==='chat'){ fns = ['发言','刷新','听语音','发语音','','退出']; }
+    else if (S.app==='setup' && S.sub==='net'){ fns = ['WiFi','热点','蓝牙','扫描','','返回']; }
     else if (mo && S.app!=='setup'){
       fns = mo.fn.slice();
     } else if (S.app==='setup'){
@@ -807,6 +809,11 @@ function exitMode(){
 function fnKey(i){
   if (S.mode!=='app') return;
   if (S.app==='prgm' && S.sub==='chat'){ chatFn(i); return; }
+  if (S.app==='setup' && S.sub==='net'){
+    const h=['net_tab0','net_tab1','net_tab2','net_scan','','net_back'];
+    const fn=h[i]; if (fn && window[fn]) window[fn]();
+    return;
+  }
   if (S.shift){ shiftFn(i); return; }
   const id = S.app;
   const handlers = {
@@ -1487,7 +1494,7 @@ async function basicRun(src, out, canvas, askNum){
     else {
       /* 扩展命令（真机由宿主注入：屏幕/WiFi/GPIO） */
       const head = u.split(/\s/)[0];
-      const C = {TEXT:1,RECT:1,FILL:1,CLEAR:1,COLOR:1,PIXEL:1,LINE:1,CIRCLE:1,WIFI:1,SLEEP:1,WAIT:1,GPIOOUT:1,UART:1,BLE:1};
+      const C = {TEXT:1,RECT:1,FILL:1,CLEAR:1,COLOR:1,PIXEL:1,LINE:1,CIRCLE:1,WIFI:1,SLEEP:1,WAIT:1,GPIOOUT:1,UART:1,BLE:1,PLAY:1,RECORD:1};
       if (!C[head]) { out('未知命令: '+line+'\n'); return; }
       const a = parseArgs(line.trim().slice(head.length));
       const n = i => i<1 || !a[i] ? 0 : evalExpr(a[i]);
@@ -1502,6 +1509,30 @@ async function basicRun(src, out, canvas, askNum){
       else if (head==='WIFI'){ out('WIFI 连接中…（模拟）\n'); }
       else if (head==='SLEEP'){ const ms=Math.floor(n(0)); await new Promise(r=>setTimeout(r,ms)); }
       else if (head==='WAIT'){ const ms=Math.floor(n(0)); await new Promise(r=>setTimeout(r,Math.max(1,Math.min(60000,ms)))); } /* PRGM 标准延时 wait(毫秒)，与真机 WAIT 一致 */
+      else if (head==='PLAY'){
+        /* 与真机 PLAY 同语义：按扩展名播放 TF 卡音频（.wav/.mp3/.m4a）。模拟器在本地已载入文件里按名字匹配 */
+        const path = (a[0] && a[0].s) ? a[0].s : '';
+        const name = path.split('/').pop().toLowerCase();
+        const buf = SND_BUFS[name];
+        if (buf && SND_BUFS[name]){
+          sndEnsure();
+          if (!SND){ out('PLAY '+path+'（模拟：浏览器无音频环境）\n'); }
+          else {
+            if (SND_SRC){ try{ SND_SRC.stop(); }catch(e){} SND_SRC=null; }
+            const src=SND.createBufferSource(); src.buffer=buf;
+            src.connect(SND_G); SND_LEN=buf.duration; SND_T0=sndNow(); SND_SRC=src; src.start(0);
+            out('PLAY '+path+'（模拟播放 '+Math.floor(buf.duration)+'s）\n');
+            src.onended=()=>{ if (SND_SRC===src) SND_SRC=null; };
+          }
+        } else {
+          out('PLAY '+path+'（模拟：本地未载入该音频，真机将读 TF 卡播放）\n');
+        }
+      }
+      else if (head==='RECORD'){
+        /* 与真机 RECORD 同语义：RECORD 路径[,秒]（模拟：不真录音，直接回报） */
+        const path = (a[0] && a[0].s) ? a[0].s : '/mem_fat/rec.wav';
+        out('RECORD '+path+'（模拟：录音完成）\n');
+      }
       else out(head+'（模拟）\n');
     }
   };
@@ -1749,22 +1780,24 @@ function store_menu(){ setModal('软件商店','在线安装 · 卸载管理 · 
  * SETUP 设置（卡西欧：左右键循环切换选项值）
  * ============================================================ */
 function renderSetup(m){
+  if (S.sub==='net') return renderNet(m);
   const p=PS.setup; const g=p.groups[p.group];
   m.innerHTML = `<div class="list-title"><span>${g.g}</span><span class="hint">${p.group+1}/${p.groups.length} 组 · ←→ 切换值</span></div>
     <div class="list">${g.items.map((it,i)=>`
       <div class="set-row ${i===S.cur?'selected':''}">
         <span class="k">${it.k}</span>
-        <span class="v">${it.v[it.i]}</span>
+        <span class="v" style="${it.act?'color:#6ee7ff;font-weight:700':''}">${it.v[it.i]}</span>
       </div>`).join('')}</div>
-    <div style="padding:4px 8px;font-size:8px;color:rgba(255,255,255,0.4)">确认后写 config 持久化（真机 NVS）</div>`;
+    <div style="padding:4px 8px;font-size:8px;color:rgba(255,255,255,0.4)">确认后写 config 持久化（真机 NVS）· 网络管理 Enter 进入</div>`;
 }
 function setupKey(k){
   const p=PS.setup; const g=p.groups[p.group]; const it=g.items[S.cur];
+  if (S.sub==='net') return netKey(k);
   if (k==='ArrowUp'){ S.cur=Math.max(0,S.cur-1); render(); }
   else if (k==='ArrowDown'){ S.cur=Math.min(g.items.length-1,S.cur+1); render(); }
   else if (k==='ArrowLeft'){ it.i=(it.i-1+it.v.length)%it.v.length; render(); }
   else if (k==='ArrowRight'){ it.i=(it.i+1)%it.v.length; render(); }
-  else if (k==='Enter'){ it.i=(it.i+1)%it.v.length; render(); }
+  else if (k==='Enter'){ if (it.act==='net'){ S.sub='net'; S.cur=0; render(); } else { it.i=(it.i+1)%it.v.length; render(); } }
   else if (k==='Escape'){ exitMode(); }
 }
 function setup_pg(){ PS.setup.group=Math.max(0,PS.setup.group-1); S.cur=0; render(); }
@@ -1868,9 +1901,9 @@ function renderSys(m){
   }
   m.innerHTML = `
     <div class="net-tabs"><span class="on">系统状态</span><span data-act="sys-term" style="cursor:pointer">Shell 终端</span></div>
-    <div class="list-title"><span>系统状态</span><span class="hint">Memoria OS v1.2.1</span></div>
+    <div class="list-title"><span>系统状态</span><span class="hint">Memoria OS v1.3.0</span></div>
     <div style="padding:6px 10px;font-size:9px;line-height:1.9;color:rgba(255,255,255,0.75)">
-      固件：v1.2.1 · 编译 2026-10-06 17:19 · 240MHz 转正<br>
+      固件：v1.3.0 · 编译 2026-10-06 17:19 · 240MHz 转正<br>
       硬件：ESP32-S3 N16R8 · 16MB Flash · 8MB PSRAM<br>
       CPU：240 MHz · 32.6℃ · 负载 4%（core0 7% / core1 2%）<br>
       <span style="display:flex;align-items:center;gap:6px;margin-top:3px">堆内存
@@ -1896,7 +1929,7 @@ function sysKey(k){
   if (k==='t'||k==='T'){ S.sub='term'; render(); return; }
   if (k==='Escape') exitMode();
 }
-function sys_info(){ setModal('系统信息','Memoria OS v1.2.1<br>ESP-IDF v6.1<br>编译 2026-10-06 17:19<br>CPU 240MHz · N16R8',[{t:'关闭',cls:'primary',fn:closeModal}]); }
+function sys_info(){ setModal('系统信息','Memoria OS v1.3.0<br>ESP-IDF v6.1<br>编译 2026-10-06 17:19<br>CPU 240MHz · N16R8',[{t:'关闭',cls:'primary',fn:closeModal}]); }
 function sys_mem(){ toast('堆 62% · PSRAM 45% · 碎片 3%'); }
 function sys_test(){ PS.sys.selfTest=1; render(); let n=1; clearInterval(S._testT);
   S._testT=setInterval(()=>{ n++; PS.sys.selfTest=n; render(); if(n>=4){ clearInterval(S._testT); PS.sys.selfTest=4; render(); } }, 700);
@@ -1910,13 +1943,13 @@ function sys_init(){
     {t:'取消', cls:'primary', fn:closeModal},
   ]);
 }
-function sys_about(){ setModal('关于','Memoria OS<br>基于 ESP32-S3 的自主掌机操作系统<br>版本 v1.2.1 · 240MHz',[{t:'知道了',cls:'primary',fn:closeModal}]); }
+function sys_about(){ setModal('关于','Memoria OS<br>基于 ESP32-S3 的自主掌机操作系统<br>版本 v1.3.0 · 240MHz',[{t:'知道了',cls:'primary',fn:closeModal}]); }
 function sys_menu(){ setModal('系统菜单','初始化 · 日志 · 备份 · 网络管理',[
   {t:'网络管理', fn:()=>{ closeModal(); S.sub='net'; render(); }},
   {t:'导出日志', fn:()=>{ toast('sys.log 已导出 ✓'); closeModal(); }},
   {t:'关闭', cls:'primary', fn:closeModal},
 ]); }
-function sys_ver(){ toast('v1.2.1 (2026-10-06) · 240MHz'); }
+function sys_ver(){ toast('v1.3.0 (2026-10-06) · 240MHz'); }
 function sys_restart(){ setModal('重启','确认重启设备？',[
   {t:'重启', fn:()=>{ S.mode='menu'; S.app=null; S.sel=0; S.modal=null; PS.sys.selfTest=null; closeModal(); render(); }},
   {t:'取消', cls:'primary', fn:closeModal},
@@ -1926,7 +1959,7 @@ function sys_log(){ toast('sys.log 已导出 ✓'); }
 function sys_backup(){ toast('配置已备份 config.ini ✓'); }
 
 /* ============================================================
- * Shell 终端（对齐真机 memoria_shell：memoria> REPL + 命令集 v1.2.1）
+ * Shell 终端（对齐真机 memoria_shell：memoria> REPL + 命令集 v1.3.0）
  * 命令：help info sys top solve battery backlight wifi ble sd
  *       scripts script pkg_cfg pkg_mirror ota_url ota_firmware rec clear exit
  * ============================================================ */
@@ -1934,7 +1967,7 @@ function termBoot(){
   const t=PS.term;
   if (t.lines.length) return;
   t.lines.push('==== Memoria OS Serial Terminal (COM5 115200) ====');
-  t.lines.push('Memoria OS v1.2.1 · ESP32-S3 N16R8 · 240MHz');
+  t.lines.push('Memoria OS v1.3.0 · ESP32-S3 N16R8 · 240MHz');
   t.lines.push('Commands to try: help  info  sys  top  solve  battery  wifi  sd  scripts');
   t.lines.push("Type 'exit' or press Esc to return. This window stays open.");
 }
@@ -1962,8 +1995,8 @@ function termExec(line){
   if (!line){ termOut(''); return; }
   const a=line.trim().split(/\s+/); const cmd=a[0].toLowerCase();
   if (cmd==='help'){ termOut('help                 show this help'); termOut('info                 system info (version, uptime, heap)'); termOut('sys                  full system status (cpu/temp/load/mem/rf/battery)'); termOut('top                  per-task CPU usage table'); termOut('solve                solve: 3x+5=20 | x^2-5x+6=0 | 2x+y=5,x-y=1'); termOut('battery              battery level and voltage'); termOut('backlight [0-255]    read / set backlight'); termOut('wifi                 wifi status (ssid, rssi)'); termOut('ble                  bluetooth status'); termOut('sd [mount|format]    TF card mount / format'); termOut('scripts              list BASIC scripts'); termOut('script <name>        run a script'); termOut('pkg_cfg              package mirror config'); termOut('pkg_mirror <url>     set package mirror'); termOut('ota_url <url>        set OTA firmware URL'); termOut('ota_firmware         start firmware OTA'); termOut('rec start|stop       start / stop recording'); termOut('clear                clear screen'); termOut('exit / quit          leave terminal'); return; }
-  if (cmd==='info'){ termOut('memoria os v1.2.1 (ESP32-S3)'); termOut('uptime_ms = '+Math.floor(Date.now()/1000)+'000'); termOut('free_heap = 165888 B'); termOut('psram     = 8024064 B free'); return; }
-  if (cmd==='sys'){ termOut('==== Memoria OS System ===='); termOut('version  : v1.2.1  uptime '+Math.floor(Date.now()/1000/60/60)%24+'h '+Math.floor(Date.now()/1000/60)%60+'m'); termOut('cpu      : 240 MHz  temp 32.6 C'); termOut('load     : total 4%  core0 7%  core1 2% (boot avg)'); termOut('tasks    : 14'); termOut('heap int : 162 KB free (largest 96, min-ever 24)'); termOut('psram    : 7836 KB free'); termOut('wifi     : rf=on conn=yes'); termOut('ble      : conn=no'); termOut('sd       : no card'); termOut('battery  : 82%  3.92V'); termOut('backlight: 255/255'); return; }
+  if (cmd==='info'){ termOut('memoria os v1.3.0 (ESP32-S3)'); termOut('uptime_ms = '+Math.floor(Date.now()/1000)+'000'); termOut('free_heap = 165888 B'); termOut('psram     = 8024064 B free'); return; }
+  if (cmd==='sys'){ termOut('==== Memoria OS System ===='); termOut('version  : v1.3.0  uptime '+Math.floor(Date.now()/1000/60/60)%24+'h '+Math.floor(Date.now()/1000/60)%60+'m'); termOut('cpu      : 240 MHz  temp 32.6 C'); termOut('load     : total 4%  core0 7%  core1 2% (boot avg)'); termOut('tasks    : 14'); termOut('heap int : 162 KB free (largest 96, min-ever 24)'); termOut('psram    : 7836 KB free'); termOut('wifi     : rf=on conn=yes'); termOut('ble      : conn=no'); termOut('sd       : no card'); termOut('battery  : 82%  3.92V'); termOut('backlight: 255/255'); return; }
   if (cmd==='top'){ termOut('task             cpu%    stk/B state'); termOut('IDLE0              0.1    1024  run'); termOut('IDLE1              0.1    1024  run'); termOut('main               0.2    2048  blk'); termOut('esp_timer          0.1     768  blk'); termOut('wifi               0.4    3072  blk'); termOut('lcd_flush          8.5    4096  run'); termOut('audio_i2s          1.2    3072  blk'); termOut('keyboard           0.8    2048  blk'); termOut('basapp             2.4    4096  run'); termOut('----'); termOut('TOTAL              13.8%'); return; }
   if (cmd==='solve'){ termOut(termSolve(a.slice(1).join(' '))); return; }
   if (cmd==='battery'){ termOut('battery: 82%  3.92V  未充电'); return; }
@@ -1979,7 +2012,7 @@ function termExec(line){
   if (cmd==='pkg_cfg'){ termOut('pkg: mirror=https://github.com/memoria-os/packages'); termOut('pkg: auto_update=on at 02:00'); return; }
   if (cmd==='pkg_mirror'){ if (!a[1]){ termOut('pkg_mirror: need url'); } else { termOut('pkg_mirror: set to '+a[1]); } return; }
   if (cmd==='ota_url'){ if (!a[1]){ termOut('ota_url: need url'); } else { termOut('ota_url: set to '+a[1]); } return; }
-  if (cmd==='ota_firmware'){ termOut('starting firmware OTA...'); setTimeout(()=>termOut('ota: v1.2.1 is the latest version'),600); return; }
+  if (cmd==='ota_firmware'){ termOut('starting firmware OTA...'); setTimeout(()=>termOut('ota: v1.3.0 is the latest version'),600); return; }
   if (cmd==='rec'){ if (a[1]==='start') termOut('rec: started (WAV 8kHz mono) ...'); else if (a[1]==='stop') termOut('rec: stopped, saved /mem_fat/rec.wav'); else termOut('rec: usage: rec start|stop'); return; }
   if (cmd==='clear'){ PS.term.lines=[]; return; }
   if (cmd==='exit'||cmd==='quit'){ S.sub=null; return; }
@@ -2124,6 +2157,12 @@ function netKey(k){
   }
   else if (k==='Escape'){ S.sub=null; render(); }
 }
+/* SETUP 网络管理页功能键（fn 行） */
+function net_tab0(){ const n=PS.net; n.tab=0; n.cur=0; render(); }
+function net_tab1(){ const n=PS.net; n.tab=1; n.cur=0; render(); }
+function net_tab2(){ const n=PS.net; n.tab=2; n.cur=0; render(); }
+function net_scan(){ const n=PS.net; n.tab=0; n.cur=0; toast('扫描到 '+n.aps.length+' 个 AP ✓'); render(); }
+function net_back(){ S.sub=null; render(); }
 
 /* ============================================================
  * CHAT App（原生模拟 · 对齐 chat.bas v2：登录/注册/房间/文字+语音）

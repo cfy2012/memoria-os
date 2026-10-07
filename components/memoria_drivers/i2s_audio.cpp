@@ -88,6 +88,76 @@ struct PlayCtx {
 };
 static PlayCtx s_ctx;
 
+/* ============================================================
+ * 音频保护链 AudioGuard：插在“解码 → I2S”之间，防音量开满/极端素材烧喇叭
+ *
+ * 背景：音量映射 volume/50 最高 2.0x（音量 100 = 满幅翻倍），旧代码用
+ * std::clamp 硬钳制 → 高样本被削成方波，方波灌音圈是烧喇叭主因；
+ * 且无直流/次声波防护、无长时间满功率保护（低音炮循环会持续拉高功率）。
+ *
+ * 三级保护（全部定点快实现，无三角函数，逐样本 float 处理）：
+ *   ① DC/次声波高通：一阶高通 fc≈12Hz，滤直流偏移与 <20Hz 次声波
+ *     （次声波听不见但音圈冲程巨大，是“低音炮”的隐形杀手）
+ *   ② 软限幅 soft-knee：|x|<=0.85 直通（不动音质），超过部分用代数
+ *     soft knee 平滑压回 1.0，杜绝硬削波 → 不产生方波
+ *   ③ 热量保护：RMS 功率包络 + 滞回增益衰减。持续高功率（音量开满）
+ *     约 2~3 秒内把输出增益缓降到 0.5，停止后缓慢恢复——等效“自动
+ *     压音量”，让功放/喇叭永远处于安全功率区
+ *
+ * 注意：左右声道共享状态（交错流顺序处理），对 DC/功率等宽带统计
+ * 等价于 2x 采样率单声道，效果正确且零额外开销。
+ * ============================================================ */
+struct AudioGuard {
+    static constexpr float kLimT     = 0.85f;   /* 软限幅阈值：峰值 -1.4dB 以内直通 */
+    static constexpr float kEnvK     = 4.0e-5f; /* RMS 包络平滑（~0.5s @44.1kHz） */
+    static constexpr float kAttackTh = 0.30f;   /* 功率 > -5.2dBFS 持续 → 触发降增益 */
+    static constexpr float kReleaseTh= 0.08f;   /* 功率 < -11dBFS → 缓慢恢复 */
+    static constexpr float kSafeGain = 0.5f;    /* 热量保护时输出增益 */
+    static constexpr float kHeatK    = 1.0e-5f; /* 增益爬坡（~2.3s 渐变，不突兀） */
+
+    float alpha = 0.0f;     /* 高通系数（按播放采样率算一次） */
+    float xprev = 0.0f, hp_prev = 0.0f;   /* 高通状态 */
+    float rms_env = 0.0f;   /* 输出功率包络 */
+    float heat_gain = 1.0f; /* 当前热量增益 */
+    float target = 1.0f;    /* 增益目标（滞回，防临界震荡） */
+
+    void init(uint32_t rate) {
+        /* 一阶 RC 高通：alpha = exp(-2π·fc/fs)，fc=12Hz；
+           rate 必为非零（play 前已探测），8k~96k 均有效 */
+        float fc_ratio = 75.3982f / static_cast<float>(rate);  /* 2π×12 */
+        alpha = (fc_ratio < 0.5f) ? (1.0f - fc_ratio) : 0.5f;  /* 一阶近似，防系数越界 */
+        xprev = hp_prev = 0.0f;
+        rms_env = 0.0f; heat_gain = 1.0f; target = 1.0f;
+    }
+
+    /* 单样本处理：x∈[-1,1]，vol 为当前音量倍率（0~2.0） */
+    inline float process(float x, float vol) {
+        /* ① DC/次声波高通 */
+        float hp = x - xprev + alpha * hp_prev;
+        xprev = x;
+        hp_prev = hp;
+        /* ② 音量（原逻辑保留：0~2.0 倍率由用户音量决定） */
+        float s = hp * vol;
+        /* ③ 软限幅：超过阈值平滑压回，绝不硬削 */
+        float ax = (s < 0.0f) ? -s : s;
+        if (ax > kLimT) {
+            float ex = ax - kLimT;
+            float r  = kLimT + (1.0f - kLimT) * (ex / (1.0f + ex));
+            s = (s < 0.0f) ? -r : r;
+        }
+        /* ④ 热量保护：功率包络 + 滞回目标 + 慢速爬坡 */
+        float p = s * s;
+        rms_env += kEnvK * (p - rms_env);
+        if (rms_env > kAttackTh) {
+            target = kSafeGain;
+        } else if (rms_env < kReleaseTh) {
+            target = 1.0f;
+        }
+        heat_gain += (target - heat_gain) * kHeatK;
+        return s * heat_gain;
+    }
+};
+
 /* 播放任务（文件级：只经全局 s_ctx 工作，无类状态依赖） */
 static void playback_task(void* arg);
 
@@ -469,18 +539,24 @@ static void playback_task(void* arg) {
 
     i2s_chan_handle_t tx = ctx.tx;
 
+    /* 音频保护链：按当前播放采样率初始化高通系数（解码 → I2S 前统一过保护） */
+    AudioGuard guard;
+    guard.init(ctx.rate);
+    float vol_cur = 1.0f;   /* 当前音量快照（读一次，循环内复用） */
+
     if (ctx.is_aac) {
         /* ---- M4A/AAC 流式解码分支（Helix） ---- */
         int16_t* pcm = ctx.aac_first_pcm;              /* 首帧输出缓冲（PSRAM） */
         if (ctx.aac_first_n > 0) {
             size_t nb = ctx.aac_first_n * sizeof(int16_t);
             if (!ctx.muted->load()) {
-                float vol = std::clamp<float>(static_cast<float>(ctx.volume->load()) / 50.0f, 0.0f, 2.0f);
+                vol_cur = std::clamp<float>(static_cast<float>(ctx.volume->load()) / 50.0f, 0.0f, 2.0f);
                 for (size_t i = 0; i < ctx.aac_first_n; i++) {
-                    int32_t v = static_cast<int32_t>(pcm[i]) * static_cast<int32_t>(vol);
-                    pcm[i] = static_cast<int16_t>(std::clamp<int32_t>(v, -32768, 32767));
+                    float s = guard.process(static_cast<float>(pcm[i]) / 32768.0f, vol_cur);
+                    pcm[i] = static_cast<int16_t>(std::clamp<int32_t>(static_cast<int32_t>(lrintf(s * 32767.0f)), -32768, 32767));
                 }
             } else {
+                for (size_t i = 0; i < ctx.aac_first_n; i++) guard.process(0.0f, 0.0f);  /* 静音也更新热量状态 */
                 std::memset(pcm, 0, nb);
             }
             size_t written = 0;
@@ -515,12 +591,13 @@ static void playback_task(void* arg) {
             AACGetLastFrameInfo(ctx.aac, &fi);
             uint32_t n = static_cast<uint32_t>(fi.outputSamps);
             if (!ctx.muted->load()) {
-                float vol = std::clamp<float>(static_cast<float>(ctx.volume->load()) / 50.0f, 0.0f, 2.0f);
+                vol_cur = std::clamp<float>(static_cast<float>(ctx.volume->load()) / 50.0f, 0.0f, 2.0f);
                 for (uint32_t i = 0; i < n; i++) {
-                    int32_t v = static_cast<int32_t>(pcm[i]) * static_cast<int32_t>(vol);
-                    pcm[i] = static_cast<int16_t>(std::clamp<int32_t>(v, -32768, 32767));
+                    float s = guard.process(static_cast<float>(pcm[i]) / 32768.0f, vol_cur);
+                    pcm[i] = static_cast<int16_t>(std::clamp<int32_t>(static_cast<int32_t>(lrintf(s * 32767.0f)), -32768, 32767));
                 }
             } else {
+                for (uint32_t i = 0; i < n; i++) guard.process(0.0f, 0.0f);
                 std::memset(pcm, 0, n * sizeof(int16_t));
             }
             size_t written = 0;
@@ -538,12 +615,13 @@ static void playback_task(void* arg) {
             size_t n0 = ctx.first_samples * sizeof(mp3d_sample_t);
             std::memcpy(buf, ctx.first_pcm, n0);
             if (!ctx.muted->load()) {
-                float vol = std::clamp<float>(static_cast<float>(ctx.volume->load()) / 50.0f, 0.0f, 2.0f);
+                vol_cur = std::clamp<float>(static_cast<float>(ctx.volume->load()) / 50.0f, 0.0f, 2.0f);
                 for (size_t i = 0; i < ctx.first_samples; i++) {
-                    int32_t v = static_cast<int32_t>(buf[i]) * static_cast<int32_t>(vol);
-                    buf[i] = static_cast<int16_t>(std::clamp<int32_t>(v, -32768, 32767));
+                    float s = guard.process(static_cast<float>(buf[i]) / 32768.0f, vol_cur);
+                    buf[i] = static_cast<int16_t>(std::clamp<int32_t>(static_cast<int32_t>(lrintf(s * 32767.0f)), -32768, 32767));
                 }
             } else {
+                for (size_t i = 0; i < ctx.first_samples; i++) guard.process(0.0f, 0.0f);
                 std::memset(buf, 0, n0);
             }
             size_t written = 0;
@@ -554,12 +632,13 @@ static void playback_task(void* arg) {
             if (got == 0) break;
             size_t n = got * sizeof(mp3d_sample_t);
             if (!ctx.muted->load()) {
-                float vol = std::clamp<float>(static_cast<float>(ctx.volume->load()) / 50.0f, 0.0f, 2.0f);
+                vol_cur = std::clamp<float>(static_cast<float>(ctx.volume->load()) / 50.0f, 0.0f, 2.0f);
                 for (size_t i = 0; i < got; i++) {
-                    int32_t v = static_cast<int32_t>(buf[i]) * static_cast<int32_t>(vol);
-                    buf[i] = static_cast<int16_t>(std::clamp<int32_t>(v, -32768, 32767));
+                    float s = guard.process(static_cast<float>(buf[i]) / 32768.0f, vol_cur);
+                    buf[i] = static_cast<int16_t>(std::clamp<int32_t>(static_cast<int32_t>(lrintf(s * 32767.0f)), -32768, 32767));
                 }
             } else {
+                for (size_t i = 0; i < got; i++) guard.process(0.0f, 0.0f);
                 std::memset(buf, 0, n);
             }
             size_t written = 0;
@@ -577,15 +656,17 @@ static void playback_task(void* arg) {
             if (n == 0) break;
 
             if (!ctx.muted->load()) {
-                float vol = std::clamp<float>(static_cast<float>(ctx.volume->load()) / 50.0f, 0.0f, 2.0f);
+                vol_cur = std::clamp<float>(static_cast<float>(ctx.volume->load()) / 50.0f, 0.0f, 2.0f);
                 int32_t samp_count = static_cast<int32_t>(n / 2);
                 int16_t* p = buf;
                 for (int32_t i = 0; i < samp_count; i++) {
-                    int32_t v = static_cast<int32_t>(*p) * static_cast<int32_t>(vol);
-                    *p = static_cast<int16_t>(std::clamp<int32_t>(v, -32768, 32767));
+                    float s = guard.process(static_cast<float>(*p) / 32768.0f, vol_cur);
+                    *p = static_cast<int16_t>(std::clamp<int32_t>(static_cast<int32_t>(lrintf(s * 32767.0f)), -32768, 32767));
                     p++;
                 }
             } else {
+                int32_t samp_count = static_cast<int32_t>(n / 2);
+                for (int32_t i = 0; i < samp_count; i++) guard.process(0.0f, 0.0f);
                 std::memset(buf, 0, n);
             }
 
