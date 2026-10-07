@@ -1,0 +1,15 @@
+{
+  "file": "Ngẫu Hứng.mp3",
+  "duration_s": 174.2,
+  "sample_rate": 44100,
+  "channels": 2,
+  "peak_dbfs": -2.7,
+  "rms_dbfs": -14.9,
+  "loudness_block95_dbfs": -3.3,
+  "dynamic_range_5_95_db": 9.7,
+  "hot_sec_pct": 0.0,
+  "clip_0dbfs_pct": 0.0,
+  "clip_099_pct": 0.0,
+  "clip_095_pct": 0.0,
+  "low_freq_ratio_pct": 1.8
+}

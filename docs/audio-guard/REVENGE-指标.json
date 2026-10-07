@@ -1,0 +1,15 @@
+{
+  "file": "REVENGE.mp3",
+  "duration_s": 152.0,
+  "sample_rate": 44100,
+  "channels": 2,
+  "peak_dbfs": 0.0,
+  "rms_dbfs": -9.1,
+  "loudness_block95_dbfs": 0.0,
+  "dynamic_range_5_95_db": 11.3,
+  "hot_sec_pct": 80.8,
+  "clip_0dbfs_pct": 0.403,
+  "clip_099_pct": 0.853,
+  "clip_095_pct": 1.399,
+  "low_freq_ratio_pct": 1.3
+}

@@ -1,0 +1,15 @@
+{
+  "file": "BATIDAO FUNK.mp3",
+  "duration_s": 173.1,
+  "sample_rate": 44100,
+  "channels": 2,
+  "peak_dbfs": 0.0,
+  "rms_dbfs": -7.2,
+  "loudness_block95_dbfs": 0.0,
+  "dynamic_range_5_95_db": 0.9,
+  "hot_sec_pct": 93.1,
+  "clip_0dbfs_pct": 0.044,
+  "clip_099_pct": 0.125,
+  "clip_095_pct": 0.777,
+  "low_freq_ratio_pct": 1.5
+}

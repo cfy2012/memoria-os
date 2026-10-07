@@ -1,0 +1,15 @@
+{
+  "file": "FREQUÊNCIA.mp3",
+  "duration_s": 177.2,
+  "sample_rate": 44100,
+  "channels": 2,
+  "peak_dbfs": 0.0,
+  "rms_dbfs": -6.4,
+  "loudness_block95_dbfs": 0.0,
+  "dynamic_range_5_95_db": 0.0,
+  "hot_sec_pct": 98.9,
+  "clip_0dbfs_pct": 5.856,
+  "clip_099_pct": 9.058,
+  "clip_095_pct": 12.035,
+  "low_freq_ratio_pct": 1.2
+}

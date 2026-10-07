@@ -1,0 +1,15 @@
+{
+  "file": "Marisama-ECLIPSER (Super Slowed).mp3",
+  "duration_s": 175.6,
+  "sample_rate": 44100,
+  "channels": 2,
+  "peak_dbfs": 0.0,
+  "rms_dbfs": -7.6,
+  "loudness_block95_dbfs": 0.0,
+  "dynamic_range_5_95_db": 4.1,
+  "hot_sec_pct": 86.9,
+  "clip_0dbfs_pct": 1.884,
+  "clip_099_pct": 3.056,
+  "clip_095_pct": 4.138,
+  "low_freq_ratio_pct": 2.4
+}

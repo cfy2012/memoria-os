@@ -1,0 +1,15 @@
+{
+  "file": "王浩-异客 (cover： 杨坤丨王赫野丨王睿卓) (Live).mp3",
+  "duration_s": 227.2,
+  "sample_rate": 44100,
+  "channels": 2,
+  "peak_dbfs": -0.2,
+  "rms_dbfs": -16.4,
+  "loudness_block95_dbfs": -0.3,
+  "dynamic_range_5_95_db": 45.4,
+  "hot_sec_pct": 15.4,
+  "clip_0dbfs_pct": 0.0,
+  "clip_099_pct": 0.0,
+  "clip_095_pct": 0.001,
+  "low_freq_ratio_pct": 1.3
+}

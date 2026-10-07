@@ -1,0 +1,15 @@
+{
+  "file": "MONTAGEM 486.mp3",
+  "duration_s": 158.8,
+  "sample_rate": 44100,
+  "channels": 2,
+  "peak_dbfs": 0.0,
+  "rms_dbfs": -10.8,
+  "loudness_block95_dbfs": 0.0,
+  "dynamic_range_5_95_db": 5.3,
+  "hot_sec_pct": 60.8,
+  "clip_0dbfs_pct": 0.003,
+  "clip_099_pct": 0.007,
+  "clip_095_pct": 0.045,
+  "low_freq_ratio_pct": 1.5
+}

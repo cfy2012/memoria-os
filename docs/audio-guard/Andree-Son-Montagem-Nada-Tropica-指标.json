@@ -1,0 +1,15 @@
+{
+  "file": "Andree Son-Montagem Nada Tropica.mp3",
+  "duration_s": 130.6,
+  "sample_rate": 44100,
+  "channels": 2,
+  "peak_dbfs": -0.6,
+  "rms_dbfs": -13.9,
+  "loudness_block95_dbfs": -1.0,
+  "dynamic_range_5_95_db": 4.7,
+  "hot_sec_pct": 0.0,
+  "clip_0dbfs_pct": 0.0,
+  "clip_099_pct": 0.0,
+  "clip_095_pct": 0.0,
+  "low_freq_ratio_pct": 3.1
+}

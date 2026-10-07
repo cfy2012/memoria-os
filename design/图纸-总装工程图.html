@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Memoria OS 外壳总装工程图 v1.0 · 重画板子专用</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23182030'/%3E%3Crect x='12' y='20' width='40' height='24' rx='4' fill='%23304060'/%3E%3Ctext x='32' y='37' font-size='14' text-anchor='middle' fill='%23ffd54a' font-family='sans-serif'%3EM%3C/text%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#0f1420; --panel:#161d2e; --panel2:#1b2438; --line:#2a3550;
+  --txt:#dde4f0; --dim:#8a95ad; --faint:#5b667d;
+  --blue:#5aa2f0; --green:#5fd08a; --amber:#f0b95a; --red:#f06a6a; --purple:#b07af0; --cyan:#5ad0d0;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--txt);font:14px/1.6 "Segoe UI","Microsoft YaHei",sans-serif;padding:24px 18px 60px}
+.wrap{max-width:1180px;margin:0 auto}
+header{border-bottom:2px solid var(--line);padding-bottom:14px;margin-bottom:20px}
+h1{font-size:22px;letter-spacing:1px}
+h1 .ver{color:var(--blue);font-size:13px;margin-left:8px}
+.sub{color:var(--dim);font-size:12.5px;margin-top:4px}
+.badges{margin-top:10px}
+.badge{display:inline-block;font-size:11px;padding:2px 10px;border-radius:20px;margin-right:6px;border:1px solid var(--line)}
+.badge.ok{color:var(--green);border-color:var(--green)}
+.badge.warn{color:var(--amber);border-color:var(--amber)}
+.badge.bad{color:var(--red);border-color:var(--red)}
+h2{font-size:16px;margin:30px 0 12px;padding-left:10px;border-left:4px solid var(--blue)}
+h2 .en{color:var(--faint);font-size:11px;margin-left:6px;letter-spacing:1px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
+.card h3{font-size:13.5px;color:var(--blue);margin-bottom:10px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+@media(max-width:900px){.grid3{grid-template-columns:1fr}}
+.view{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px;text-align:center}
+.view .cap{font-size:12px;color:var(--dim);margin-top:6px}
+svg text{font-family:"Segoe UI","Microsoft YaHei",sans-serif}
+.dim{fill:var(--blue);font-size:10px}
+.lab{fill:var(--dim);font-size:9.5px}
+table{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:8px}
+th{background:var(--panel2);color:var(--cyan);text-align:left;padding:6px 8px;border:1px solid var(--line);font-weight:600}
+td{padding:5px 8px;border:1px solid var(--line);vertical-align:top}
+td.m{font-family:Consolas,"Courier New",monospace;color:#cfe3ff}
+tr:nth-child(even) td{background:rgba(255,255,255,.02)}
+.warn-row td{background:rgba(240,106,106,.08)}
+.ok-row td{background:rgba(95,208,138,.06)}
+.note{font-size:12px;color:var(--dim);margin-top:8px;padding:8px 10px;background:rgba(90,162,240,.06);border-left:3px solid var(--blue);border-radius:0 6px 6px 0}
+.warn-note{background:rgba(240,106,106,.08);border-left-color:var(--red)}
+.ok-note{background:rgba(95,208,138,.08);border-left-color:var(--green)}
+.coord{font-family:Consolas,monospace;color:var(--purple)}
+.hl{color:var(--amber);font-weight:700}
+.stack{display:flex;flex-direction:column;gap:2px;max-width:340px;margin:10px auto}
+.layer{display:flex;align-items:center;border-radius:6px;padding:4px 10px;font-size:12px}
+.layer .nm{flex:1;font-weight:600}
+.layer .ht{font-family:Consolas,monospace;color:#fff}
+.l-fs{background:#2b3a52}
+.l-sc{background:#1f4a5a}
+.l-gap{background:#232c40;color:var(--dim)}
+.l-key{background:#4a3a1a}
+.l-pcb{background:#3d5a2a}
+.l-gap2{background:#232c40;color:var(--dim)}
+.l-bat{background:#5a2a2a}
+.l-bs{background:#2b3a52}
+.stack .arrow{text-align:center;font-size:12px;color:var(--dim);padding:2px 0}
+.legend{display:flex;flex-wrap:wrap;gap:8px 16px;font-size:11.5px;color:var(--dim);margin-top:8px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+@media print{body{background:#fff;color:#000}.card{break-inside:avoid}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Memoria OS 外壳总装工程图<span class="ver">v1.0 · 2026-10-01</span></h1>
+  <div class="sub">用途：重画 3D 外壳 / 洞洞板布局的**唯一尺寸依据**。数据来源：design/ 下 5 份图纸交叉核对 + 硬件讨论纪要。冲突项已标红，待实测项已标黄。</div>
+  <div class="badges">
+    <span class="badge ok">整机 110 × 160 × 20mm（定版）</span>
+    <span class="badge warn">3 项待实测（屏/摇杆/开关）</span>
+    <span class="badge bad">旧稿 40.1mm 已作废</span>
+  </div>
+</header>
+
+<!-- ========== 01 三视图 ========== -->
+<h2>01 三视图 <span class="en">THREE VIEWS · 单位 mm · 原点 = 前面板左上角，X 右 Y 下</span></h2>
+<div class="grid3">
+
+  <!-- 正面 -->
+  <div class="card">
+    <h3>正面（前面板，2.5mm 厚）</h3>
+    <div class="view">
+      <svg viewBox="0 0 220 320" width="100%">
+        <rect x="10" y="10" width="200" height="300" rx="8" fill="#1a2233" stroke="#3a4760" stroke-width="1.5"/>
+        <!-- 屏幕窗 86×58 @ (12,10)-(98,68) -->
+        <rect x="34" y="30" width="172" height="116" rx="4" fill="#0a0e18" stroke="#5aa2f0" stroke-width="1.5" stroke-dasharray="5,3"/>
+        <text x="120" y="92" text-anchor="middle" class="dim">屏幕开窗 86 × 58</text>
+        <text x="120" y="106" text-anchor="middle" class="lab">模组 56×84 从内卡入 · 视窗 70.8×48.5</text>
+        <!-- 麦克风孔 Ø2.6 @ (55,3) -->
+        <circle cx="120" cy="22" r="5.2" fill="#0a0e18" stroke="#5aa2f0" stroke-width="1.2"/>
+        <text x="120" y="12" text-anchor="middle" class="lab">麦克风 Ø2.6</text>
+        <!-- 摇杆孔 Ø20 @ (34,102) -->
+        <circle cx="68" cy="214" r="20" fill="#0a0e18" stroke="#5aa2f0" stroke-width="1.5"/>
+        <text x="68" y="212" text-anchor="middle" class="dim">摇杆孔 Ø20</text>
+        <text x="68" y="234" text-anchor="middle" class="lab">中心 (34,102)</text>
+        <!-- 键孔区 97×57 -->
+        <rect x="13" y="180" width="194" height="114" fill="none" stroke="#5fd08a" stroke-width="1" stroke-dasharray="4,3"/>
+        <text x="120" y="170" text-anchor="middle" class="dim">键盘孔区 97 × 57 · 60 键 · 中心距 10</text>
+        <!-- 键孔示意 (3×4) -->
+        <g fill="#0a0e18" stroke="#5fd08a" stroke-width="0.8">
+          <rect x="31" y="193" width="14.6" height="14.6"/><rect x="59" y="193" width="14.6" height="14.6"/><rect x="87" y="193" width="14.6" height="14.6"/>
+          <rect x="31" y="221" width="14.6" height="14.6"/><rect x="59" y="221" width="14.6" height="14.6"/><rect x="87" y="221" width="14.6" height="14.6"/>
+          <rect x="31" y="249" width="14.6" height="14.6"/><rect x="59" y="249" width="14.6" height="14.6"/><rect x="87" y="249" width="14.6" height="14.6"/>
+        </g>
+        <!-- 侧键孔 3× 8×22 -->
+        <rect x="8" y="124" width="6" height="44" fill="#0a0e18" stroke="#5aa2f0"/>
+        <rect x="8" y="184" width="6" height="44" fill="#0a0e18" stroke="#5aa2f0"/>
+        <rect x="8" y="244" width="6" height="44" fill="#0a0e18" stroke="#5aa2f0"/>
+        <text x="3" y="150" class="lab" transform="rotate(-90 8 150)">侧键 ×3 · 8×22</text>
+        <!-- 螺丝柱 -->
+        <circle cx="18" cy="18" r="6" fill="none" stroke="#b07af0"/><circle cx="202" cy="18" r="6" fill="none" stroke="#b07af0"/>
+        <circle cx="18" cy="302" r="6" fill="none" stroke="#b07af0"/><circle cx="202" cy="302" r="6" fill="none" stroke="#b07af0"/>
+        <text x="110" y="315" text-anchor="middle" class="lab">4 角 M2 螺丝柱 Ø3 · 高 14</text>
+      </svg>
+      <div class="cap">正面视图 · 前面板厚 2.5mm · 建议 3D 打印/亚克力</div>
+    </div>
+  </div>
+
+  <!-- 右侧剖 -->
+  <div class="card">
+    <h3>右侧剖视（层叠结构）</h3>
+    <div class="view">
+      <svg viewBox="0 0 220 340" width="100%">
+        <!-- 层条 -->
+        <rect x="30" y="20"  width="160" height="16" rx="3" fill="#2b3a52"/><text x="196" y="32" class="lab">前壳 2.5</text>
+        <rect x="30" y="38"  width="160" height="14" rx="3" fill="#1f4a5a"/><text x="196" y="48" class="lab">屏幕总成 3</text>
+        <rect x="30" y="54"  width="160" height="4"  fill="#232c40"/>
+        <rect x="30" y="60"  width="160" height="28" rx="3" fill="#4a3a1a"/><text x="196" y="77" class="lab">按键行程区 6</text>
+        <rect x="30" y="90"  width="160" height="8"  rx="2" fill="#3d5a2a"/><text x="196" y="96" class="lab">洞洞板 1.6</text>
+        <rect x="30" y="100" width="160" height="4"  fill="#232c40"/>
+        <rect x="30" y="106" width="160" height="20" rx="3" fill="#5a2a2a"/><text x="196" y="119" class="lab">电池 8</text>
+        <rect x="30" y="128" width="160" height="16" rx="3" fill="#2b3a52"/><text x="196" y="140" class="lab">后壳 2.5</text>
+        <!-- 总高标注 -->
+        <line x1="30" y1="20" x2="24" y2="20" stroke="#5aa2f0"/>
+        <line x1="30" y1="144" x2="24" y2="144" stroke="#5aa2f0"/>
+        <line x1="24" y1="20" x2="24" y2="144" stroke="#5aa2f0" stroke-dasharray="3,2"/>
+        <text x="20" y="86" fill="#5aa2f0" font-size="11" text-anchor="middle" transform="rotate(-90 20 86)">整机厚 20.6 ≈ 20</text>
+        <!-- 隔板标记 -->
+        <line x1="110" y1="54" x2="110" y2="58" stroke="#f0b95a" stroke-width="2"/>
+        <line x1="110" y1="100" x2="110" y2="104" stroke="#f0b95a" stroke-width="2"/>
+        <text x="110" y="52" text-anchor="middle" class="lab" fill="#f0b95a">▲ 可选隔板 1.6/层</text>
+        <text x="110" y="163" text-anchor="middle" class="lab" fill="#f0b95a">加隔板 → 总厚 20.6 + 3.2 = 23.8</text>
+      </svg>
+      <div class="cap">右侧剖视 · 屏幕区比键盘区高约 1.5mm</div>
+    </div>
+    <div class="note">层叠公式：2.5 + 3 + 6 + 1.6 + 8 + 2.5 = <span class="hl">20.6mm</span>。隔板（防按键顶屏 / 电池压板）每层 <span class="hl">+1.6mm</span>，双隔板 = 23.8mm。</div>
+  </div>
+
+  <!-- 背面 -->
+  <div class="card">
+    <h3>背面（后壳，2.5mm 厚）</h3>
+    <div class="view">
+      <svg viewBox="0 0 220 320" width="100%">
+        <rect x="10" y="10" width="200" height="300" rx="8" fill="#1a2233" stroke="#3a4760" stroke-width="1.5"/>
+        <!-- 电池凹槽 -->
+        <rect x="30" y="64" width="124" height="210" rx="4" fill="#2a1515" stroke="#f0b95a" stroke-dasharray="5,3"/>
+        <text x="92" y="176" text-anchor="middle" class="dim">电池凹槽 62 × 105 × 8.5</text>
+        <text x="92" y="190" text-anchor="middle" class="lab">软包 5000mAh · 62×105×8</text>
+        <!-- TF -->
+        <rect x="10" y="60" width="6" height="26" fill="#0a0e18" stroke="#5aa2f0"/>
+        <text x="24" y="78" class="lab">TF 16×13</text>
+        <!-- SD -->
+        <rect x="204" y="114" width="6" height="66" fill="#0a0e18" stroke="#5aa2f0"/>
+        <text x="176" y="152" class="lab" text-anchor="end">SD 27×33</text>
+        <!-- USB-C -->
+        <rect x="95" y="310" width="30" height="6" fill="#0a0e18" stroke="#5aa2f0"/>
+        <text x="110" y="302" text-anchor="middle" class="lab">USB-C 30×10</text>
+        <!-- 喇叭孔 -->
+        <circle cx="182" cy="82" r="2.5" fill="#0a0e18" stroke="#5aa2f0"/><circle cx="192" cy="82" r="2.5" fill="#0a0e18" stroke="#5aa2f0"/>
+        <circle cx="182" cy="92" r="2.5" fill="#0a0e18" stroke="#5aa2f0"/><circle cx="192" cy="92" r="2.5" fill="#0a0e18" stroke="#5aa2f0"/>
+        <text x="170" y="72" class="lab" text-anchor="middle">喇叭出声孔 2×2 · Ø2.5</text>
+        <circle cx="182" cy="87" r="28" fill="none" stroke="#f0b95a" stroke-dasharray="3,3"/>
+        <text x="196" y="112" class="lab">喇叭 Ø28（虚线）</text>
+        <!-- 螺丝柱 -->
+        <circle cx="18" cy="18" r="6" fill="none" stroke="#b07af0"/><circle cx="202" cy="18" r="6" fill="none" stroke="#b07af0"/>
+        <circle cx="18" cy="302" r="6" fill="none" stroke="#b07af0"/><circle cx="202" cy="302" r="6" fill="none" stroke="#b07af0"/>
+      </svg>
+      <div class="cap">背面视图 · 后壳左上角为原点（与正面同轴）</div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== 02 全部件尺寸总表 ========== -->
+<h2>02 全部件尺寸总表 <span class="en">BILL OF DIMENSIONS · 单位 mm · 状态：✓定版 / ⚠待实测 / ✗旧稿作废</span></h2>
+<div class="card">
+  <table>
+    <tr><th>部件</th><th>外形 / 安装尺寸</th><th>高度 / 厚度</th><th>位置（前面板原点）</th><th>状态</th></tr>
+    <tr class="ok-row"><td>整机外壳</td><td class="m">110 × 160</td><td class="m">20（前壳 2.5 + 内腔 15 + 后壳 2.5）</td><td class="m">—</td><td>✓ 定版</td></tr>
+    <tr><td>前壳（正面板）</td><td class="m">110 × 160</td><td class="m">2.5</td><td class="m">原点 (0,0)</td><td>✓ 定版</td></tr>
+    <tr><td>后壳（电池盖）</td><td class="m">110 × 160</td><td class="m">2.5</td><td class="m">同轴，左上角 (0,0)</td><td>✓ 定版</td></tr>
+    <tr><td>洞洞板</td><td class="m">100 × 150</td><td class="m">1.6</td><td class="m">装壳后角落 (5,5)</td><td>✓ 定版</td></tr>
+    <tr><td>屏幕 ILI9488 3.5″</td><td class="m">模组 PCB 56×84</td><td class="m">3（含排针 ≤8）</td><td class="m">卡入前壳开窗</td><td>⚠ 56×84 需实测（旧稿写 56×91）</td></tr>
+    <tr class="warn-row"><td>屏幕开窗（前壳）</td><td class="m">86 × 58</td><td class="m">—</td><td class="m">x 12-98，y 10-68</td><td>✗ 窗口比模组大 30×26，<b>必有边框/卡扣，或该值有误待实测</b></td></tr>
+    <tr><td>屏幕可视区</td><td class="m">70.8 × 48.5（480×320）</td><td class="m">—</td><td class="m">开窗中心 (55,39)</td><td>⚠ 旧稿值，实测为准</td></tr>
+    <tr><td>摇杆 KY-023</td><td class="m">PCB 26×34 / 手柄 Ø5</td><td class="m">机构 10，总高 32</td><td class="m">板面 (5-25, 4-24)</td><td>⚠ PCB 26×34 与图纸 20×20 冲突，待实测</td></tr>
+    <tr><td>摇杆孔（前壳）</td><td class="m">Ø20</td><td class="m">—</td><td class="m">中心 (34,102)</td><td>✓ 定版（杆帽穿出留 1mm）</td></tr>
+    <tr><td>麦克风孔</td><td class="m">Ø2.6</td><td class="m">—</td><td class="m">中心 (55,3)，顶边中央</td><td>✓ 定版</td></tr>
+    <tr><td>键盘区（60 键）</td><td class="m">97 × 57</td><td class="m">行程空间 6</td><td class="m">x 6.5-103.5，y 90-147</td><td>✓ 定版</td></tr>
+    <tr><td>侧键 ×3</td><td class="m">8 × 22（长键）</td><td class="m">2.5</td><td class="m">左缘 y 62-84 / 92-114 / 122-144</td><td>✓ 定版（牵长线进矩阵）</td></tr>
+    <tr><td>螺丝柱 ×4</td><td class="m">Ø3（M2）</td><td class="m">高 14（铜柱）</td><td class="m">(4,4) (106,4) (4,156) (106,156)</td><td>✓ 定版</td></tr>
+    <tr><td>电池（软包）</td><td class="m">62 × 105</td><td class="m">8（凹槽 8.5）</td><td class="m">后壳内 x 10-72，y 27-132</td><td>✓ 定版（6mm 薄款可省 2mm 厚）</td></tr>
+    <tr><td>TF 卡模块</td><td class="m">16 × 13</td><td class="m">3</td><td class="m">主板左缘，卡口朝左出壳</td><td>✓ 定版</td></tr>
+    <tr><td>SD 大卡槽</td><td class="m">27 × 33</td><td class="m">4</td><td class="m">主板右缘 (70-97, 52-85)，卡口朝右出壳</td><td>✓ 定版</td></tr>
+    <tr><td>USB-C 充电口</td><td class="m">30 × 10</td><td class="m">—</td><td class="m">后壳底部 x 40-70，y 155-160</td><td>✓ 定版（TP4056 引线延长）</td></tr>
+    <tr><td>喇叭</td><td class="m">Ø28</td><td class="m">5~10 + 腔 2~3</td><td class="m">主板右上 (275,182)@板系</td><td>⚠ 需确认是否 28 圆形（用户问过"线胶"方形）</td></tr>
+    <tr><td>喇叭出声孔</td><td class="m">2×2 孔阵，Ø2.5</td><td class="m">—</td><td class="m">后壳右上中心 (91,41)</td><td>✓ 定版（正对喇叭）</td></tr>
+    <tr><td>ESP32-S3 核心板</td><td class="m">45 × 28（S3-Zero 类 18×27）</td><td class="m">5（含排针）</td><td class="m">板面 (52-97, 4-32)</td><td>⚠ 45×28 与 S3-Zero 18×27 二选一，待定</td></tr>
+    <tr><td>功放 MAX98357A</td><td class="m">16 × 12</td><td class="m">4~5</td><td class="m">板面 (55-71, 36-48)</td><td>✓ 定版</td></tr>
+    <tr><td>麦克 INMP441</td><td class="m">12 × 14</td><td class="m">3</td><td class="m">板面 (76-88, 35-49)，拾音孔朝前</td><td>✓ 定版</td></tr>
+    <tr><td>TP4056 充电板</td><td class="m">26 × 17</td><td class="m">4</td><td class="m">板面 (5-31, 55-72)</td><td>✓ 定版</td></tr>
+    <tr><td>键盘背光灯带</td><td class="m">WS2812 灯带 ×2 条</td><td class="m">2.5</td><td class="m">键盘区上下缘（外壳上下留灯槽）</td><td>✓ 定版</td></tr>
+  </table>
+  <div class="warn-note note"><b>冲突汇总：</b>① 屏幕开窗 86×58 vs 模组 56×84——窗口过大，重画时按"模组实际尺寸 + 2mm 边框"重定；② 摇杆 PCB 26×34 vs 图纸 20×20——按实物实测；③ 核心板 45×28 vs S3-Zero 18×27——待核心板选型确认；④ 旧稿《外壳尺寸规划》整机 40.1mm 与 20mm 冲突，<b>作废</b>（那是 5 层独立舱方案，已弃）。</div>
+</div>
+
+<!-- ========== 03 按键明细（60 键） ========== -->
+<h2>03 按键 60 键明细 <span class="en">KEYBOARD · 行程 / 进程 / 大小全参数</span></h2>
+<div class="card">
+  <h3>单键层叠（正面 → 背面，重要！）</h3>
+  <div class="stack">
+    <div class="layer l-fs"><span class="nm">前面板 2.5mm</span><span class="ht">z 0 ~ 2.5</span></div>
+    <div class="layer l-key"><span class="nm">键帽 7×7×2.5（顶面与面板齐平，可略凸 0.5）</span><span class="ht">z 2.5 ~ 5</span></div>
+    <div class="layer l-gap"><span class="nm">键帽底 → 开关顶间隙 0.25（= 行程）</span><span class="ht">z 5 ~ 5.25</span></div>
+    <div class="layer l-key"><span class="nm">轻触开关 6×6 高 2.5（立在洞洞板上）</span><span class="ht">z 5.25 ~ 7.75</span></div>
+    <div class="layer l-pcb"><span class="nm">洞洞板 1.6mm</span><span class="ht">z 7.75 ~ 9.35</span></div>
+  </div>
+  <div class="note"><b>读法：</b>前面板表面 z=0。键帽穿过 7.3×7.3 键孔，顶面≈面板表面；底缘比面板内表面低 1mm（内视，不外露）。按下时键帽下行 <span class="hl">0.25mm</span>（开关行程）即触发。<b>按键行程空间 6mm</b> = 键帽下压空间 + 开关 2.5 + 公差，任何凸起件不得侵占。</div>
+
+  <table>
+    <tr><th>参数</th><th class="m">数值</th><th>说明</th></tr>
+    <tr><td>键帽（顶面）</td><td class="m">7 × 7 × 2.5</td><td>3D 打印件，顶面可与面板齐平或凸 0.5</td></tr>
+    <tr><td>键孔（前面板）</td><td class="m">7.3 × 7.3</td><td>键帽 + 0.3 间隙，60 个</td></tr>
+    <tr><td>轻触开关</td><td class="m">6 × 6，高 2.5</td><td>直插矮款，四脚对角距 2.54 或 5.08（买前对洞洞板孔距）</td></tr>
+    <tr><td>开关行程</td><td class="m">0.25</td><td>触发按程，轻触开关典型值</td></tr>
+    <tr><td>键帽有效进程</td><td class="m">0.25</td><td>按下到触发 = 开关行程（键帽不独立限位）</td></tr>
+    <tr><td>中心距</td><td class="m">10 × 10</td><td>列距 10，行距 10（≥9 可行）</td></tr>
+    <tr><td>键盘区域</td><td class="m">97 × 57</td><td>第 0 列中心 x=10，第 0 行中心 y=93.5</td></tr>
+    <tr><td>键帽中心坐标</td><td class="m">x = 10 + 10c（c=0..9）<br>y = 93.5 + 10r（r=0..5）</td><td>唯一公式，60 键全对</td></tr>
+    <tr><td>空格键</td><td class="m">键帽加宽 10</td><td>跨两孔（占 2 个键位，仍是 1 个开关）</td></tr>
+    <tr><td>行程空间（内部）</td><td class="m">6</td><td>面板内表面 → 洞洞板面，见层叠图</td></tr>
+    <tr><td>开关引脚</td><td class="m">—</td><td>5×10 矩阵 → 2× MCP23017（行 R0-R5，列 C0-C9）</td></tr>
+  </table>
+</div>
+
+<!-- ========== 04 关键孔位坐标 ========== -->
+<h2>04 关键孔位坐标表 <span class="en">CUTOUTS · 前面板原点 (0,0)</span></h2>
+<div class="card">
+  <table>
+    <tr><th>开孔</th><th>尺寸</th><th>位置（x, y）</th><th>备注</th></tr>
+    <tr><td>屏幕开窗</td><td class="m">86×58（待重定）</td><td class="m">12-98, 10-68</td><td>按模组实测重定，加 2mm 边框</td></tr>
+    <tr><td>摇杆孔</td><td class="m">Ø20</td><td class="m">中心 (34,102)</td><td>KY-023 杆帽穿出，留 1mm 活动</td></tr>
+    <tr><td>麦克风孔</td><td class="m">Ø2.6</td><td class="m">中心 (55,3)</td><td>正对 INMP441 拾音孔</td></tr>
+    <tr><td>侧键孔 ×3</td><td class="m">8×22</td><td class="m">左缘 y 62-84 / 92-114 / 122-144</td><td>电源 / 音量- / 音量+</td></tr>
+    <tr><td>键孔 ×60</td><td class="m">7.3×7.3</td><td class="m">区域 6.5-103.5, 90-147</td><td>坐标公式见 03 节</td></tr>
+    <tr><td>TF 卡口</td><td class="m">16×13</td><td class="m">左缘 x 0-2.5, y 30-46</td><td>后壳侧面开口</td></tr>
+    <tr><td>SD 大卡口</td><td class="m">27×33</td><td class="m">右缘 x 107.5, y 57-90</td><td>后壳侧面开口</td></tr>
+    <tr><td>USB-C</td><td class="m">30×10</td><td class="m">底部 40-70, 155-160</td><td>TP4056 引线延长</td></tr>
+    <tr><td>喇叭出声孔</td><td class="m">2×2 孔阵 Ø2.5</td><td class="m">后壳右上中心 (91,41)</td><td>正对喇叭 Ø28</td></tr>
+    <tr><td>螺丝柱 ×4</td><td class="m">Ø3 / M2</td><td class="m">(4,4) (106,4) (4,156) (106,156)</td><td>铜柱高 14，穿前壳+板</td></tr>
+  </table>
+  <div class="note">坐标全部以<b>前面板左上角为原点</b>（X 向右 0→110，Y 向下 0→160）。洞洞板装壳后其左上角落在 (5,5)——所有板面部件坐标 = 壳坐标 − 5。</div>
+</div>
+
+<!-- ========== 05 冲突与待实测 ========== -->
+<h2>05 冲突 &amp; 待实测清单 <span class="en">CONFLICTS &amp; TO-VERIFY · 重画前必须定死</span></h2>
+<div class="card">
+  <table>
+    <tr><th>#</th><th>问题</th><th>两套数据</th><th>处理</th></tr>
+    <tr class="warn-row"><td>1</td><td>整机厚度</td><td class="m">20.6（A 套 5 图）vs 40.1（B 套旧稿）</td><td>以 20 为准，B 稿作废（5 层独立舱方案已弃）</td></tr>
+    <tr class="warn-row"><td>2</td><td>屏幕开窗尺寸</td><td class="m">86×58（前板图）vs 模组 56×84</td><td>⚠ 实测模组后重定：开窗 = 模组外框 + 2mm</td></tr>
+    <tr class="warn-row"><td>3</td><td>摇杆 PCB</td><td class="m">26×34（规划）vs 20×20（洞洞板图）</td><td>⚠ KY-023 到手实测，改洞洞板图</td></tr>
+    <tr class="warn-row"><td>4</td><td>核心板</td><td class="m">45×28 vs S3-Zero 18×27</td><td>⚠ 定选型后改板图（S3-Zero 免自焊 RF 更优）</td></tr>
+    <tr class="warn-row"><td>5</td><td>喇叭形态</td><td class="m">Ø28 圆 vs 线胶方喇叭</td><td>⚠ 你问过方形"线胶"喇叭，定型号后改后壳孔位</td></tr>
+    <tr class="warn-row"><td>6</td><td>隔板</td><td class="m">不加 20.6 vs 加双隔板 23.8</td><td>⚠ 键盘顶屏风险 + 电池压板风险，建议键盘区加 1 块 1.6</td></tr>
+  </table>
+</div>
+
+<!-- ========== 06 123D 建模顺序 ========== -->
+<h2>06 123D Design 建模顺序 <span class="en">REBUILD ORDER · 按此画不返工</span></h2>
+<div class="card">
+  <table>
+    <tr><th>步</th><th>动作</th><th>123D 操作</th><th>尺寸</th></tr>
+    <tr><td>1</td><td>后壳主体</td><td>Box</td><td class="m">110 × 160 × 2.5</td></tr>
+    <tr><td>2</td><td>后壳内腔</td><td>Sketch → Rectangle → Extrude Remove</td><td class="m">内缩 2.5 壁厚，挖深 2</td></tr>
+    <tr><td>3</td><td>电池凹槽</td><td>Sketch → Extrude Remove</td><td class="m">62×105×8.5 @ (10,27)</td></tr>
+    <tr><td>4</td><td>TF/SD/USB/喇叭孔</td><td>Sketch → Extrude Remove（穿通）</td><td class="m">见 04 节坐标</td></tr>
+    <tr><td>5</td><td>前壳主体</td><td>Box</td><td class="m">110 × 160 × 2.5</td></tr>
+    <tr><td>6</td><td>屏幕开窗</td><td>Sketch → Remove 穿通（或沉台 1.5）</td><td class="m">按实测重定</td></tr>
+    <tr><td>7</td><td>摇杆孔 + 麦克孔</td><td>Sketch 圆 → Remove</td><td class="m">Ø20 @ (34,102)；Ø2.6 @ (55,3)</td></tr>
+    <tr><td>8</td><td>键孔 60 个</td><td>画 1 个 → <b>Pattern 阵列</b> 10 列 × 6 行</td><td class="m">孔 7.3²，间距 10</td></tr>
+    <tr><td>9</td><td>侧键孔 ×3</td><td>Sketch → Remove</td><td class="m">8×22 @ 左缘</td></tr>
+    <tr><td>10</td><td>螺柱 ×4</td><td>Cylinder 凸起 + 中心孔</td><td class="m">Ø3，高 14，中心孔 Ø1.6</td></tr>
+    <tr><td>11</td><td>（可选）键盘区隔板</td><td>Box 薄板</td><td class="m">100×57×1.6，落在开关上方 0.25 行程位</td></tr>
+    <tr><td>12</td><td>键帽 ×60</td><td>画 1 个（7×7×2.5 + 底柱）→ Pattern</td><td class="m">独立打印件，不焊</td></tr>
+  </table>
+  <div class="ok-note note"><b>防坑提示：</b>① 阵列用 Pattern（不是复制粘贴），位置自动对齐；② 键帽底面中心加 Ø1.5 圆柱（长 1）卡进开关柄，防滑脱；③ 所有 Remove 用「穿通」或精确深度，别用「穿透到面」——导出 STL 才不会有悬空面；④ 打印精度 0.2mm 足够，所有间隙 ≥0.3。</div>
+</div>
+
+</div>
+</body>
+</html>
+

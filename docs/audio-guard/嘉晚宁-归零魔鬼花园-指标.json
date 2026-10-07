@@ -1,0 +1,15 @@
+{
+  "file": "嘉晚宁-归零（ 魔鬼花园）.mp3",
+  "duration_s": 151.1,
+  "sample_rate": 44100,
+  "channels": 2,
+  "peak_dbfs": -0.0,
+  "rms_dbfs": -14.5,
+  "loudness_block95_dbfs": -0.1,
+  "dynamic_range_5_95_db": 16.7,
+  "hot_sec_pct": 25.2,
+  "clip_0dbfs_pct": 0.0,
+  "clip_099_pct": 0.0,
+  "clip_095_pct": 0.001,
+  "low_freq_ratio_pct": 3.2
+}

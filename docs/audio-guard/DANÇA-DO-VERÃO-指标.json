@@ -1,0 +1,15 @@
+{
+  "file": "DANÇA DO VERÃO.mp3",
+  "duration_s": 61.2,
+  "sample_rate": 44100,
+  "channels": 2,
+  "peak_dbfs": 0.0,
+  "rms_dbfs": -7.5,
+  "loudness_block95_dbfs": 0.0,
+  "dynamic_range_5_95_db": 0.2,
+  "hot_sec_pct": 96.7,
+  "clip_0dbfs_pct": 0.001,
+  "clip_099_pct": 0.005,
+  "clip_095_pct": 1.076,
+  "low_freq_ratio_pct": 1.8
+}

@@ -1,0 +1,15 @@
+{
+  "file": "OneRepublic-Good Life.mp3",
+  "duration_s": 253.3,
+  "sample_rate": 44100,
+  "channels": 2,
+  "peak_dbfs": 0.0,
+  "rms_dbfs": -11.4,
+  "loudness_block95_dbfs": 0.0,
+  "dynamic_range_5_95_db": 7.8,
+  "hot_sec_pct": 73.1,
+  "clip_0dbfs_pct": 0.024,
+  "clip_099_pct": 0.121,
+  "clip_095_pct": 0.429,
+  "low_freq_ratio_pct": 8.8
+}

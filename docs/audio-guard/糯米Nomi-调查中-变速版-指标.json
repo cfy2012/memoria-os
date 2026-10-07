@@ -1,0 +1,15 @@
+{
+  "file": "糯米Nomi-调查中 (变速版).mp3",
+  "duration_s": 167.8,
+  "sample_rate": 44100,
+  "channels": 2,
+  "peak_dbfs": 0.0,
+  "rms_dbfs": -13.0,
+  "loudness_block95_dbfs": -0.0,
+  "dynamic_range_5_95_db": 7.0,
+  "hot_sec_pct": 31.1,
+  "clip_0dbfs_pct": 0.0,
+  "clip_099_pct": 0.001,
+  "clip_095_pct": 0.003,
+  "low_freq_ratio_pct": 8.7
+}

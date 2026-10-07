@@ -1,0 +1,15 @@
+{
+  "file": "SEM NADA.mp3",
+  "duration_s": 101.9,
+  "sample_rate": 44100,
+  "channels": 2,
+  "peak_dbfs": 0.0,
+  "rms_dbfs": -6.4,
+  "loudness_block95_dbfs": 0.0,
+  "dynamic_range_5_95_db": 0.1,
+  "hot_sec_pct": 97.0,
+  "clip_0dbfs_pct": 0.533,
+  "clip_099_pct": 1.263,
+  "clip_095_pct": 5.17,
+  "low_freq_ratio_pct": 1.5
+}

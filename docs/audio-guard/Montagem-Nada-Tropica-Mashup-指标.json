@@ -1,0 +1,15 @@
+{
+  "file": "Montagem Nada Tropica (Mashup).mp3",
+  "duration_s": 130.7,
+  "sample_rate": 44100,
+  "channels": 2,
+  "peak_dbfs": -1.2,
+  "rms_dbfs": -14.5,
+  "loudness_block95_dbfs": -1.4,
+  "dynamic_range_5_95_db": 4.5,
+  "hot_sec_pct": 0.0,
+  "clip_0dbfs_pct": 0.0,
+  "clip_099_pct": 0.0,
+  "clip_095_pct": 0.0,
+  "low_freq_ratio_pct": 3.8
+}

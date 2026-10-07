@@ -1,0 +1,156 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Memoria OS · ESP32 核心板电路模型</title><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%230d1117'/%3E%3Cpath d='M5 12h14M12 5v14' stroke='%2358a6ff' stroke-width='2.5'/%3E%3Ccircle cx='12' cy='12' r='2.2' fill='%233fb950'/%3E%3C/svg%3E"><style>
+  :root{--bg:#0d1117;--panel:#161b22;--line:#30363d;--txt:#c9d1d9;--dim:#8b949e;--red:#f85149;--orange:#d29922;--blue:#58a6ff;--green:#3fb950;--yellow:#e3b341}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--txt);font-family:"Cascadia Code",Consolas,"Microsoft YaHei",monospace;padding:16px;overflow:hidden}
+  #hud{position:absolute;top:14px;left:16px;right:16px;z-index:10;pointer-events:none}
+  h1{font-size:19px;display:inline}
+  .sub{color:var(--dim);font-size:12px;margin-left:10px}
+  .meta{color:var(--dim);font-size:11.5px;margin-top:6px;line-height:1.5}
+  #legend{position:absolute;top:14px;right:16px;z-index:10;background:rgba(22,27,34,.88);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:11.5px;pointer-events:none}
+  #legend b{display:block;margin-bottom:4px;color:var(--dim);font-weight:normal}
+  #legend span{display:block;margin:2px 0}
+  .sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+  #tips{position:absolute;bottom:14px;left:16px;z-index:10;color:var(--dim);font-size:11.5px;background:rgba(22,27,34,.7);border:1px solid var(--line);border-radius:8px;padding:6px 10px;pointer-events:none}
+  #warn{position:absolute;bottom:14px;right:16px;z-index:10;max-width:360px;color:#e3b341;font-size:11.5px;background:rgba(227,179,65,.08);border:1px solid rgba(227,179,65,.4);border-radius:8px;padding:8px 10px;pointer-events:none;line-height:1.5}
+  #scene{position:fixed;inset:0}
+  @media(max-width:760px){#legend{display:none}}
+</style></head><body>
+<div id="scene"></div>
+<div id="hud"><h1>ESP32-S3 核心板 · 直插洞洞板装配模型</h1><span class="sub">45×28 大板（带排针）· 主板层洞洞板直插 + 底脚弯焊</span>
+<div class="meta">单位 mm · 洞洞板上表面 z=0 · 板厚 1.6 · 排针座高 2.5 · 组件总高 ≈5.5（座2.5+板1.6+芯片1.4，主板层 11.6 放得下）· 青色框 = 核心板落孔区（洞洞板坐标 X 52~97 / Y 60~88）</div></div>
+<div id="legend"><b>颜色图例</b>
+<span><i class="sw" style="background:#2a3038"></i>洞洞板（主板层）</span>
+<span><i class="sw" style="background:#1d4a3c"></i>PCB 板</span>
+<span><i class="sw" style="background:#c9a86a"></i>排针（插入洞洞板孔）</span>
+<span><i class="sw" style="background:#e3b341"></i>板底弯脚（敲弯焊固）</span>
+<span><i class="sw" style="background:#5f3dc4"></i>S3 模组/芯片</span>
+<span><i class="sw" style="background:#8b949e"></i>USB-C 口</span>
+<span><i class="sw" style="background:#58a6ff"></i>BOOT / RST 键</span>
+<span><i class="sw" style="background:#3fb950"></i>天线端（禁金属区 5mm）</span>
+<span><i class="sw" style="background:rgba(88,166,255,.14);border:1px solid #58a6ff"></i>核心板落孔区 45×28</span></div>
+<div id="tips">拖拽旋转 · 滚轮缩放 · 右键平移</div>
+<div id="warn">装配（用户拍板 10-03）：带排针核心板<b>直插洞洞板</b>——排针 2×17 沿长边插入 2.54 孔，板底针脚敲弯焊固；顶壳开舱 47×30 + 排线方案<b>取消</b>。功放 MAX98357A 被核心板覆盖（现位 X 86.5~99.5 / Y 62~77.5），挪位候选见桥（豆包-2 定）。</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function(){
+var scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0d1117);
+var camera = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, 0.1, 1000);
+camera.position.set(55, 42, 80);
+var renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+document.getElementById('scene').appendChild(renderer.domElement);
+var ctrl = new THREE.OrbitControls(camera, renderer.domElement);
+ctrl.enableDamping = true; ctrl.dampingFactor = .08;
+
+scene.add(new THREE.AmbientLight(0xffffff, .55));
+var dl = new THREE.DirectionalLight(0xffffff, .9); dl.position.set(60, 100, 40); scene.add(dl);
+var dl2 = new THREE.DirectionalLight(0x88bbff, .35); dl2.position.set(-50, -30, -60); scene.add(dl2);
+
+var matBoard = new THREE.MeshStandardMaterial({color:0x2a3038, roughness:.9, metalness:.05});
+var matPCB = new THREE.MeshStandardMaterial({color:0x1d4a3c, roughness:.75, metalness:.15});
+var matPin = new THREE.MeshStandardMaterial({color:0xc9a86a, roughness:.45, metalness:.6});
+var matBend = new THREE.MeshStandardMaterial({color:0xe3b341, roughness:.5, metalness:.5});
+var matChip = new THREE.MeshStandardMaterial({color:0x5f3dc4, roughness:.6, metalness:.2});
+var matUsb = new THREE.MeshStandardMaterial({color:0x8b949e, roughness:.4, metalness:.7});
+var matBtn = new THREE.MeshStandardMaterial({color:0x58a6ff, roughness:.5, metalness:.2});
+var matAnt = new THREE.MeshStandardMaterial({color:0x3fb950, roughness:.4, metalness:.3, transparent:true, opacity:.55});
+
+/* ===== 洞洞板（主板层局部，上表面 z=1.6，原点=洞洞板坐标 X52/Y60 处） =====
+   视口覆盖洞洞板坐标 X 34~112 / Y 42~110（局部 78×68），2.54 网格 */
+var board = new THREE.Mesh(new THREE.BoxGeometry(78, 68, 1.6), matBoard);
+board.position.set(39, 34, 0.8); scene.add(board);
+var holeGeom = new THREE.BufferGeometry(), hp = [];
+for(var i=0;i<=30;i++){ hp.push(i*2.54, 0, 0, i*2.54, 68, 0); }
+for(var j=0;j<=26;j++){ hp.push(0, j*2.54, 0, 78, j*2.54, 0); }
+holeGeom.setAttribute('position', new THREE.Float32BufferAttribute(hp,3));
+var holes = new THREE.LineSegments(holeGeom, new THREE.LineBasicMaterial({color:0x3d444d, transparent:true, opacity:.5}));
+holes.position.set(0,0,1.62); scene.add(holes);
+
+/* ===== 核心板：中心 = 落孔区中心（洞洞板坐标 X 74.5 / Y 74 → 局部 (22.5, 14)），PCB 底 z=4.1 ===== */
+var PCB_TOP = 4.1; /* 洞洞板上表面1.6 + 座高2.5 */
+var pcb = new THREE.Mesh(new THREE.BoxGeometry(45, 28, 1.6), matPCB);
+pcb.position.set(22.5, 14, PCB_TOP + 0.8); scene.add(pcb);
+
+/* 排针：沿长边（局部 X 向）两侧，插入洞洞板孔，z 从 PCB 底 4.1 到洞洞板下 -1.0，末端弯脚 */
+function addPins(side){
+  var n = 17, pitch = 2.54, len = (n-1)*pitch; /* 40.64，居中，两端余 2.2 */
+  for(var i=0;i<n;i++){
+    var x = 22.5 - len/2 + i*pitch;
+    /* 塑料座：PCB 底 4.1 → 洞洞板上表面 1.6 */
+    var base = new THREE.Mesh(new THREE.BoxGeometry(1.6, 2.0, 2.5), matPin);
+    base.position.set(x, side*14 + side*(14+1.0)/1, PCB_TOP - 1.25 - 0.8); /* 座在 PCB 底下方，跨洞洞板上 */
+    scene.add(base);
+    /* 针体：PCB 底 → 洞洞板下 -1.0 */
+    var pin = new THREE.Mesh(new THREE.CylinderGeometry(.45, .45, 5.6, 10), matPin);
+    pin.rotation.x = Math.PI/2;
+    pin.position.set(x, side*(14 + 2.5), (PCB_TOP + (-1.0))/2 - 0.4);
+    scene.add(pin);
+    /* 弯脚：针末端水平弯折 3mm */
+    var bend = new THREE.Mesh(new THREE.BoxGeometry(3.2, 1.0, .9), matBend);
+    bend.position.set(x + side*0, side*(14 + 2.5) + side*1.2, -1.0);
+    bend.rotation.z = 0; scene.add(bend);
+  }
+}
+addPins(1); addPins(-1);
+
+/* S3-WROOM 模组（芯片区） */
+var chip = new THREE.Mesh(new THREE.BoxGeometry(18, 18, 1.0), matChip);
+chip.position.set(22.5 + 2, 14, PCB_TOP + 1.6 + 0.5); scene.add(chip);
+
+/* USB-C 口（短边 +Y 端） */
+var usb = new THREE.Mesh(new THREE.BoxGeometry(8, 3.2, 3.2), matUsb);
+usb.position.set(22.5, 14 + 15.6, PCB_TOP + 1.6 + 0.2); scene.add(usb);
+
+/* BOOT / RST 键 */
+var b1 = new THREE.Mesh(new THREE.BoxGeometry(2.6, 2.6, 1.4), matBtn); b1.position.set(22.5 - 15, 14 + 13, PCB_TOP + 1.6 + 0.2); scene.add(b1);
+var b2 = new THREE.Mesh(new THREE.BoxGeometry(2.6, 2.6, 1.4), matBtn); b2.position.set(22.5 - 10, 14 + 13, PCB_TOP + 1.6 + 0.2); scene.add(b2);
+
+/* 天线端（-Y 短边，禁金属区） */
+var ant = new THREE.Mesh(new THREE.BoxGeometry(24, 10, .2), matAnt);
+ant.position.set(22.5, 14 - 16.5, PCB_TOP + 1.6 + 0.1); scene.add(ant);
+
+/* ===== 落孔区 45×28 青色框（核心板投影） ===== */
+var g = new THREE.BufferGeometry();
+var v = [22.5-22.5,14-14,0, 22.5+22.5,14-14,0, 22.5+22.5,14+14,0, 22.5-22.5,14+14,0, 22.5-22.5,14-14,0];
+g.setAttribute('position', new THREE.Float32BufferAttribute(v,3));
+var line = new THREE.Line(g, new THREE.LineBasicMaterial({color:0x58a6ff}));
+line.position.z = 1.63; scene.add(line);
+
+/* ===== 尺寸标注 ===== */
+function makeLabel(txt, x, y, z, col, scale){
+  var cnv = document.createElement('canvas'); cnv.width=256; cnv.height=64;
+  var cx = cnv.getContext('2d');
+  cx.fillStyle = 'rgba(13,17,23,0)'; cx.fillRect(0,0,256,64);
+  cx.font = 'bold 30px Cascadia Code, Consolas, monospace';
+  cx.fillStyle = col || '#c9d1d9';
+  cx.textAlign = 'center'; cx.textBaseline = 'middle';
+  cx.fillText(txt, 128, 32);
+  var tex = new THREE.CanvasTexture(cnv);
+  var sp = new THREE.Sprite(new THREE.SpriteMaterial({map:tex, transparent:true, depthTest:false}));
+  sp.scale.set((scale||14), (scale||14)*0.25, 1);
+  sp.position.set(x, y, z);
+  scene.add(sp);
+}
+makeLabel('45', 22.5, 14 + 20.5, PCB_TOP + 2.6, '#c9d1d9');
+makeLabel('28', 22.5 + 25.5, 14, PCB_TOP + 2.6, '#c9d1d9');
+makeLabel('落孔区 45×28', 22.5 + 30, 14 + 17, 2.2, '#58a6ff');
+makeLabel('排针 2×17 插孔', 22.5 + 24, 14 - 20, PCB_TOP + 1.0, '#c9a86a');
+makeLabel('板底弯脚 焊固', 22.5, 14 + 8, -1.8, '#e3b341');
+makeLabel('USB-C', 22.5, 14 + 19.5, PCB_TOP + 2.4, '#8b949e');
+makeLabel('总高 ≈5.5', 22.5 - 26, 14, PCB_TOP + 2.4, '#c9d1d9');
+makeLabel('天线禁金属 5mm', 22.5, 14 - 23, PCB_TOP + 2.4, '#3fb950');
+
+/* 网格地面 */
+var grid = new THREE.GridHelper(140, 14, 0x30363d, 0x21262d);
+grid.position.y = -12; scene.add(grid);
+
+function resize(){ camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); }
+addEventListener('resize', resize);
+(function loop(){ requestAnimationFrame(loop); ctrl.update(); renderer.render(scene, camera); })();
+})();
+</script>
+</body></html>

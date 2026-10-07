@@ -1,0 +1,15 @@
+{
+  "file": "NO BATIDAO.mp3",
+  "duration_s": 89.4,
+  "sample_rate": 44100,
+  "channels": 2,
+  "peak_dbfs": 0.0,
+  "rms_dbfs": -10.5,
+  "loudness_block95_dbfs": 0.0,
+  "dynamic_range_5_95_db": 0.0,
+  "hot_sec_pct": 98.9,
+  "clip_0dbfs_pct": 0.026,
+  "clip_099_pct": 0.099,
+  "clip_095_pct": 0.418,
+  "low_freq_ratio_pct": 0.9
+}
