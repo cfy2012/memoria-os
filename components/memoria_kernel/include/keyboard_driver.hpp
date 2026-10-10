@@ -31,4 +31,8 @@ void keyboard_init(KeyCallback cb);
 /* 启动后台扫描任务（FreeRTOS，固定 20ms 轮询） */
 void keyboard_start();
 
+/* 深睡眠前调用：两片 MCP23017 全引脚转输入（高阻）+ 输出清零 → 最低功耗态。
+ * 唤醒后 keyboard_init() 会重新完整配置，无需恢复逻辑。 */
+void keyboard_reset();
+
 }

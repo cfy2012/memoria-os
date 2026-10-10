@@ -31,6 +31,16 @@ public:
     bool is_low()  const { return voltage() < BATTERY_LOW_WARN_VOL; }
     bool is_crit() const { return voltage() < BATTERY_LOW_CRIT_VOL; }
 
+    /* TP4056 CHRG 充电检测（GPIO49 开漏，充电中拉低） */
+    bool is_charging() const { return _charging; }
+
+    /* 低电量回调（kernel 层注册，避免 drivers 依赖 kernel）：
+     *   crit_cb：电压 < 临界值持续触发（kernel 发 BatteryCrit 事件给 UI）
+     *   emergency_cb：电压 < 3.5V 持续 ~30s 触发（kernel 执行保命关机序列） */
+    using LowBatteryCb = void (*)();
+    static void set_crit_cb(LowBatteryCb cb)      { s_crit_cb = cb; }
+    static void set_emergency_cb(LowBatteryCb cb) { s_emergency_cb = cb; }
+
     bool is_inited() const { return _inited; }
 
 private:
@@ -39,7 +49,11 @@ private:
 
     float   _voltage = 4.0f;
     uint8_t _percent = 80;
+    bool    _charging = false;
     bool    _inited = false;
+
+    static LowBatteryCb s_crit_cb;
+    static LowBatteryCb s_emergency_cb;
 };
 
 } // namespace drivers

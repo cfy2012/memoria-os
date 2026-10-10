@@ -17,6 +17,9 @@ esp_err_t backlight_init();
 /* 背光键：三档循环 */
 void backlight_toggle();
 
+/* 立即全灭（关机序列调用：停 flash 定时器 + 全 0 帧） */
+void backlight_off();
+
 /* 按下打光：全亮片刻后恢复当前档位 */
 void backlight_flash();
 

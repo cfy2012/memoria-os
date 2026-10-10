@@ -192,4 +192,19 @@ void keyboard_start() {
     xTaskCreatePinnedToCore(scan_task, "kbd_scan", 4096, nullptr, 5, nullptr, 1);
 }
 
+void keyboard_reset() {
+    if (!s_mcp_rows || !s_mcp_cols) return;
+    /* 两片 MCP23017 全引脚转输入（高阻）+ 输出清零：
+     * 深睡眠前进入最低功耗态，无按键无上拉电流。
+     * 唤醒后 keyboard_init() 重新完整配置，无需恢复逻辑。 */
+    esp_err_t e = ESP_OK;
+    e |= mcp_write(s_mcp_rows, REG_IODIRA, 0xFF);
+    e |= mcp_write(s_mcp_rows, REG_IODIRB, 0xFF);
+    e |= mcp_write(s_mcp_cols, REG_IODIRA, 0xFF);
+    e |= mcp_write(s_mcp_rows, REG_GPIOA, 0x00);
+    e |= mcp_write(s_mcp_rows, REG_GPIOB, 0x00);
+    e |= mcp_write(s_mcp_cols, REG_GPIOA, 0x00);
+    ESP_LOGI(TAG, "MCP23017 reset (all-input, outputs 0) %s", e == ESP_OK ? "OK" : "WARN");
+}
+
 } /* namespace memoria::input */

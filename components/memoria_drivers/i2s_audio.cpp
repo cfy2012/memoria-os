@@ -19,6 +19,7 @@
 
 #include "i2s_audio.hpp"
 #include "mp4_demux.hpp"
+#include "power.hpp"
 
 extern "C" {
 #include "aacdec.h"
@@ -293,6 +294,9 @@ static esp_err_t play_wav_impl(const std::string& path) {
     s_ctx.playing->store(true);
     if (s_done_evt) xEventGroupClearBits(s_done_evt, PLAY_DONE_BIT);
 
+    /* 功放 EN 开：播放前拉高（MAX98357A 从关断唤醒，防省电态） */
+    Power::instance()->amp_set_en(true);
+
     BaseType_t ok = xTaskCreatePinnedToCore(playback_task, "audio_play", 6144,
                                 nullptr, 3, nullptr, 1);   /* P1 双核：解码重活钉 core1 */
     if (ok != pdPASS) {
@@ -348,6 +352,9 @@ static esp_err_t play_mp3_impl(const std::string& path) {
     std::memcpy(s_ctx.first_pcm, pcm, first * sizeof(mp3d_sample_t));
     s_ctx.playing->store(true);
     if (s_done_evt) xEventGroupClearBits(s_done_evt, PLAY_DONE_BIT);
+
+    /* 功放 EN 开：播放前拉高（MAX98357A 从关断唤醒，防省电态） */
+    Power::instance()->amp_set_en(true);
 
     BaseType_t ok = xTaskCreatePinnedToCore(playback_task, "audio_play", 6144,
                                 nullptr, 3, nullptr, 1);   /* P1 双核：解码重活钉 core1 */
@@ -514,6 +521,7 @@ esp_err_t I2sAudio::play_audio(const std::string& path) {
 void I2sAudio::stop() {
     if (!_playing.load()) return;
     _playing.store(false);
+    Power::instance()->amp_set_en(false);   /* 功放 EN 关（省电 <1µA） */
     /* 等 playback_task 真正退出（置 PLAY_DONE 后其 s_ctx 清理已完成），
      * 500ms 超时回退：此时 I2S 端口单通道约束会让下一次 play 的 setup 失败，不会双任务 */
     if (s_done_evt) {
@@ -526,6 +534,7 @@ static void playback_task(void* arg) {
     PlayCtx& ctx = s_ctx;
     if (!ctx.fp || !ctx.tx) {
         if (s_done_evt) xEventGroupSetBits(s_done_evt, PLAY_DONE_BIT);
+        Power::instance()->amp_set_en(false);
         vTaskDelete(nullptr); return;
     }
 
@@ -534,6 +543,7 @@ static void playback_task(void* arg) {
         CHUNK, MALLOC_CAP_DMA | MALLOC_CAP_8BIT));
     if (!buf) {
         if (s_done_evt) xEventGroupSetBits(s_done_evt, PLAY_DONE_BIT);
+        Power::instance()->amp_set_en(false);
         vTaskDelete(nullptr); return;
     }
 
@@ -692,6 +702,7 @@ static void playback_task(void* arg) {
     ctx.fp = nullptr;
     std::free(buf);
     if (s_done_evt) xEventGroupSetBits(s_done_evt, PLAY_DONE_BIT);
+    Power::instance()->amp_set_en(false);
     vTaskDelete(nullptr);
 }
 

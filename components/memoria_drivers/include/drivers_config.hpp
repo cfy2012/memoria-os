@@ -15,6 +15,8 @@
  *   WiFi + BLE 内部射频
  */
 
+#ifndef MEMORIA_DRIVERS_CONFIG_HPP
+#define MEMORIA_DRIVERS_CONFIG_HPP
 #pragma once
 
 #include <cstdint>
@@ -135,5 +137,38 @@ static constexpr uint8_t KBD_MCP_COLS  = 0x21;     /* 列 C4-C9 */
 /* 键盘背光灯带（WS2812，单线 RMT）：GPIO46，上下两条 */
 static constexpr int KEY_LED_GPIO     = 46;
 
+/* 侧面 ON/OFF 按键双接：
+ * 一路接 MCP#1 GPA0（矩阵行 R0，正常运行时键盘扫描）
+ * 一路接 GPIO2（深睡眠唤醒源，按键拉低触发 wakeup）
+ * 深睡眠时 MCP23017 断电，矩阵键无法唤醒 ESP32，必须直连 ESP32 GPIO
+ */
+static constexpr int WAKEUP_GPIO      = 2;   /* 侧面 ON/OFF 键唤醒脚 */
+
+/* 功放 MAX98357A EN/SHDN 脚：GPIO47
+ * 电源架构改 5V 后，功放 VIN 从直供轨改 5V 轨，固件控 EN 省电
+ * （不用音频时拉低 EN → 功放电流 <1µA）
+ * GPIO2 留给侧面 ON/OFF 唤醒键，功放 EN 换 GPIO47（普通 IO，自由脚池）
+ * 注：S3 的 USB D-/D+ 是 GPIO19/20，GPIO47 与 USB 无关，可作普通输出。
+ */
+static constexpr int AMP_EN_GPIO      = 47;
+
+/* 次级 MOS（AO3401 同款 P-MOS）EN：GPIO48（普通 IO，自由脚池）
+ * 控制 5V 轨外围负载（屏/功放/灯带/SD 卡）通断：
+ *   高电平 = 外围 5V 供电；低电平 = 深睡眠断电（ESP32 本体 VIN 不过此 MOS，仍供电）
+ * 深睡眠时拉低 → 外围全断电，只剩 ESP32 深睡 + MT3608 空载
+ * ⚠ P-MOS 极性：G 低=导通（供电）、G 高=关断（深睡）。G 并 100K 上拉到 5V 节点防上电浮空。
+ */
+static constexpr int SUBMOS_EN_GPIO   = 48;
+
+/* TP4056 CHRG 充电检测：GPIO49（USB D+ 旁边，开漏输出，充电中拉低）
+ * 输入内部上拉：低电平 = 正在充电；高电平 = 未充电/充满
+ */
+static constexpr int CHRG_DET_GPIO    = 49;
+
+/* 低电量保命关机阈值（伏）：正常运行时电压跌破此值持续 30s → 保命深睡眠 */
+static constexpr float BATTERY_EMERGENCY_VOL = 3.5f;
+
 } // namespace drivers
 } // namespace memoria
+
+#endif // MEMORIA_DRIVERS_CONFIG_HPP

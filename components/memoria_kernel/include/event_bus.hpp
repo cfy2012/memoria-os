@@ -31,6 +31,8 @@ enum class EventType : uint8_t {
     BLEConnected,
     BLEDisconnected,
     AlarmFired,
+    PowerOffRequest,   /* 用户主动关机（侧面键长按 2s）→ kernel 执行关机序列 */
+    EmergencyShutdown, /* 低电量保命 → kernel 立即执行关机序列 */
 };
 
 struct Event {

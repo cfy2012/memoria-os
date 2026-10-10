@@ -268,6 +268,7 @@ void WifiManager::_ip_event_handler(void* arg, esp_event_base_t eb, int32_t ev, 
         xTaskCreate([](void*) {
             vTaskDelay(pdMS_TO_TICKS(500));
             drivers::RtcClock::instance()->ntp_sync();
+            vTaskDelete(NULL);   /* 任务主体不允许 return（#87） */
         }, "ntp", 2048, nullptr, 2, nullptr);
     }
 }

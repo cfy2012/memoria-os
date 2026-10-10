@@ -460,6 +460,7 @@ private:
         WifiManager::instance()->scan();
         s_net_scanning = false;
         s_net_scan_done = true;
+        vTaskDelete(NULL);   /* 任务主体不允许 return（#87 同款） */
     }
 
     static bool s_net_scanning;

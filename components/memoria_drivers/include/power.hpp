@@ -1,9 +1,11 @@
 /**
  * @file power.hpp
- * @brief 电源与背光管理：LEDC PWM 调节背光亮度 + 自动息屏
+ * @brief 电源与背光管理：LEDC PWM 调节背光亮度 + 空闲超时自动变暗
+ *        + 深睡眠电源管理（GPIO47 功放 EN / GPIO48 次级 MOS / NVS 关机标志）
  *
  * 硬件：GPIO14 接 ILI9341 BLK 引脚，LEDC 通道 0
  * 功能：set_backlight / get_backlight / idle timeout 自动变暗 / 触摸事件重置超时
+ * 深睡眠：关机序列由 kernel 层编排（跨组件），本层只提供原子动作。
  */
 
 #pragma once
@@ -36,6 +38,26 @@ public:
     /* 状态查询 */
     bool      is_dimmed()   const { return _dimmed; }
     uint32_t  idle_sec()    const;
+
+    /* ============ 深睡眠电源管理 ============ */
+    /* boot 最早调用（kernel init 第 0 步）：
+     * GPIO47=0 功放关、GPIO48=1 次级 MOS 开（外围 5V 上电）、
+     * WS2812 DIN(46) 拉低防 boot 闪灯，然后等 50ms 让 5V 轨稳定 */
+    void      boot_defaults();
+
+    /* 功放 EN（GPIO47）：true=开（播放时），false=关（省电 <1µA） */
+    void      amp_set_en(bool on);
+
+    /* 次级 MOS（GPIO48）：true=外围 5V 轨供电，false=深睡眠断电 */
+    void      subm_rail(bool on);
+
+    /* NVS 关机标志：关机序列写入，boot 时读取并清除（记录"上次主动关机"） */
+    void      set_shutdown_flag();
+    void      clear_shutdown_flag();
+    bool      shutdown_flag() const;
+
+    /* 配置 GPIO2 EXT0 唤醒并进入深睡眠（不返回） */
+    void      deep_sleep_now();
 
 private:
     Power() = default;

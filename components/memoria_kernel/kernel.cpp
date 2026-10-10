@@ -28,6 +28,7 @@
 #include "update_scheduler.hpp"
 #include "mode_manager.hpp"
 #include "keyboard_input.hpp"
+#include "keyboard_driver.hpp"
 #include "backlight.hpp"
 #include "input_queue.hpp"
 #include "ime.hpp"
@@ -52,6 +53,40 @@ static const char* TAG = "KERNEL";
 Kernel* Kernel::instance() {
     static Kernel inst;
     return &inst;
+}
+
+/* ---------- 关机序列（7 步，顺序固定，调用方只负责触发） ----------
+ * 触发源：①侧面键长按 2s（PowerOffRequest）②低电量保命（EmergencyShutdown）
+ * 由主循环 EventBus pump 执行（唯一上下文），避免与外设驱动竞争。
+ * deep_sleep_now() 不返回。 */
+static void power_off_now() {
+    ESP_LOGW(TAG, "=== POWER OFF SEQUENCE ===");
+
+    /* 1. 功放 EN 关（先停播放，避免 I2S 还在推数据） */
+    if (drivers::I2sAudio::instance()->is_playing()) {
+        drivers::I2sAudio::instance()->stop();
+    } else {
+        drivers::Power::instance()->amp_set_en(false);
+    }
+
+    /* 2. WS2812 灯带全灭（停 flash 定时器 + 全 0 帧） */
+    input::backlight_off();
+
+    /* 3. 屏幕 Sleep In + 背光关 */
+    drivers::Ili9341::instance()->sleep();
+    drivers::Power::instance()->set_backlight(0);
+
+    /* 4. MCP23017 全引脚转输入（高阻）+ 输出清零 → 最低功耗态 */
+    input::keyboard_reset();
+
+    /* 5. 次级 MOS 关：外围 5V 轨断电（屏/功放/灯带/SD） */
+    drivers::Power::instance()->subm_rail(false);
+
+    /* 6. NVS 存"正常关机"标志（boot 时读取清除，区分异常复位） */
+    drivers::Power::instance()->set_shutdown_flag();
+
+    /* 7. 深睡眠（GPIO2 EXT0 唤醒，不返回） */
+    drivers::Power::instance()->deep_sleep_now();
 }
 
 /* ---------- 摇杆状态回调：桥接到 EventBus ----------
@@ -111,6 +146,11 @@ esp_err_t Kernel::init() {
     ESP_LOGI(TAG, "========== Memoria OS Boot ==========");
     ESP_LOGI(TAG, "Build: %s %s", MEMORIA_OS_NAME, MEMORIA_OS_VERSION);
 
+    /* 0. 电源 boot 默认态（最早，先于一切外设）：
+     *    功放 EN 关（防 boot 滋啦）、次级 MOS 开（外围 5V 上电）、
+     *    WS2812 DIN 拉低（防 boot 闪灯），等 50ms 让 5V 轨稳定 */
+    drivers::Power::instance()->boot_defaults();
+
     /* 1. NVS Flash */
     {
         esp_err_t ret = nvs_flash_init();
@@ -120,6 +160,13 @@ esp_err_t Kernel::init() {
         }
         if (ret != ESP_OK) { ESP_LOGE(TAG, "NVS: %s", esp_err_to_name(ret)); return ret; }
         ESP_LOGI(TAG, "NVS OK");
+
+        /* 深睡眠唤醒/异常复位都会走完整 boot：清除"上次正常关机"标志，
+         * 外设全部重新初始化（深睡眠时 5V 外围断电，MCP/屏必须重配） */
+        if (drivers::Power::instance()->shutdown_flag()) {
+            ESP_LOGI(TAG, "last power-off was NORMAL (deep sleep wakeup)");
+            drivers::Power::instance()->clear_shutdown_flag();
+        }
     }
 
     /* 2. SPI 总线 */
@@ -139,8 +186,16 @@ esp_err_t Kernel::init() {
         ESP_LOGI(TAG, "SD: %s", esp_err_to_name(ret));
     }
 
-    /* 6. Battery ADC（后台采样任务） */
+    /* 6. Battery ADC（后台采样任务）+ 低电量回调注册
+     *    回调在 battery 采样任务上下文触发，只入队事件，执行在主循环 pump */
     MEMORIA_CHECK(drivers::BatteryAdc::instance()->init());
+    drivers::BatteryAdc::set_crit_cb([]() {
+        EventBus::instance()->publish({EventType::BatteryCrit});
+    });
+    drivers::BatteryAdc::set_emergency_cb([]() {
+        ESP_LOGW(TAG, "battery emergency -> shutdown sequence");
+        EventBus::instance()->publish({EventType::EmergencyShutdown});
+    });
 
     /* 7. KY-023 摇杆 + 回调注册 */
     MEMORIA_CHECK(drivers::Joystick::instance()->init());
@@ -224,6 +279,12 @@ esp_err_t Kernel::init() {
                 window::WindowManager::instance()->dispatch_sys(window::SysEvent::BLEDisconnected);
             } else if (ev.type == EventType::AlarmFired) {
                 window::WindowManager::instance()->dispatch_sys(window::SysEvent::AlarmFired);
+            } else if (ev.type == EventType::PowerOffRequest) {
+                ESP_LOGI(TAG, "PowerOffRequest: side key held 2s");
+                power_off_now();   /* 不返回 */
+            } else if (ev.type == EventType::EmergencyShutdown) {
+                ESP_LOGI(TAG, "EmergencyShutdown: battery low");
+                power_off_now();   /* 不返回 */
             }
         });
     }

@@ -130,6 +130,14 @@ void backlight_toggle() {
     ESP_LOGI(TAG, "strip level %d/%d", s_level, LEVEL_COUNT - 1);
 }
 
+void backlight_off() {
+    if (!s_inited) return;
+    esp_timer_stop(s_flash_timer);   /* 停打光定时器（防 120ms 后又亮） */
+    s_flashing = false;
+    s_level = LEVEL_OFF;
+    apply_level();
+}
+
 void backlight_flash() {
     if (!s_inited) return;
     /* 全亮打光 120ms */
