@@ -14,9 +14,9 @@ ESP32-S3 N16R8 上的自研掌机操作系统：内核、窗口、文件系统�
 | 仓库落地 | 🟢 完成 | I 盘物理损坏后，从 GitHub 完整回落到 `G:\Memoria OS`；基线 `f2413394`（v1.4.0，54 次提交） |
 | 固件主线 | 🟢 **v1.6.0 编译全绿** | 1261 步构建通过，bin 1,877,248 B / SHA256 `97FB4F04…`，factory 分区余 39% |
 | 版本账 | 🟢 厘清 | v1.5.0 源码从未推送、随盘丢失，**不补号**；1.6.0 起重新起算 |
-| 引脚/接线 | 🟡 CHRG 与 SDMMC 已定 | CHRG 49→42；新增 SDMMC CLK40/CMD39/D0 41（1-bit）；已用 25 脚，剩 47、48 |
-| OTA 分发 | 🔴 现网仍是 1.4.0 | 本地已备 `firmware/memoria_os_1.6.0.bin` + `version.json`(1.6.0)，未上传 |
-| 远端仓库 | 🔴 未更新 | 远端 `cfy2012/memoria-os` 仍停在 `f2413394`；推送缺有效写凭据（详见六） |
+| 引脚/接线 | 🟡 CHRG 与 SDMMC 已定 | CHRG 49→42；新增 SDMMC CLK40/CMD39/D0 41（1-bit）；共占用 26 个 GPIO，47/48 已分给功放使能与次级电源 MOS，**无剩余普通 IO** |
+| OTA 分发 | 🟢 已上传 1.6.0 | `memoria-ota` 远端已收 `memoria_os_1.6.0.bin` + `version.json`(1.6.0)，待真机验证 |
+| 远端仓库 | 🟢 已同步 v1.6.0 | 两个仓远端 main 内容与本地逐字节一致（tree 校验通过）；哈希与本地不同，因本地提交带 SSH 签名，详见六 |
 | 硬件到位 | 🟡 卡在两件料 | 到手屏是 ILI9486 8bit 并口，固件走 ILI9488 SPI；MCP23017 到手 SOIC-28，BOM 要 DIP-28 |
 | 上板实测 | 🟡 进行中 | 烧录/boot/命令行已验；键盘、TF 卡、音频、外设待上 |
 | 稳定性 | 🟢 本轮一轮静态处理 | 见 `docs/CHANGELOG.md` v1.6.0「稳定性处理」与「构建链路修复」两节 |
@@ -55,7 +55,7 @@ ESP32-S3 N16R8 上的自研掌机操作系统：内核、窗口、文件系统�
 
 | # | 优先级 | 任务 | 责任人 | 依赖 | 状态 |
 |---|--------|------|--------|------|------|
-| 1 | **P0** | 补 GitHub 写凭据并推送 v1.6.0（HTTPS token 已 401；SSH 账号 DualBrainOS 无写权限） | 用户 | cfy2012 账号的 PAT，或把 DualBrainOS 加为协作者 | 🔴 |
+| 1 | ~~P0~~ | ~~补 GitHub 写凭据并推送 v1.6.0~~ | — | — | 🟢 2026-11-07 完成 |
 | 2 | **P0** | ILI9486 并口屏与固件 ILI9488 SPI 驱动的适配抉择（换屏 or 加并口驱动分支） | 用户拍板 + 固件改 | 屏已到手 | 🔴 |
 | 3 | **P0** | MCP23017 封装换货（SOIC-28 → DIP-28，或改用转接板） | 用户 | 商家换货 | 🔴 |
 | 4 | **P0** | TF 卡整目录拷 `sdcard/`（字库/码表/chat.bas） | 用户 | 卡 | ⚪ |
@@ -73,15 +73,15 @@ ESP32-S3 N16R8 上的自研掌机操作系统：内核、窗口、文件系统�
 |------|-----|------|
 | `build/memoria_os.bin` v1.6.0 | 1,877,248 B / SHA256 `97FB4F0471E5FF3B587F7F0A793A5D93B07E0E1EB68BACA8426275400B4949FB` | 1261 步全绿，factory 分区余 39% |
 | `firmware/memoria_os_1.6.0.bin` | 同上，逐字节复制 | 待随 OTA 上线 |
-| `firmware/version.json` | version 1.6.0 / url 指向 `memoria_os_1.6.0.bin` / major false | 本地已改，远端仍是 1.4.0 |
-| 本地 git | `main` = `d4f3ebf`（2026-11-07） | 远端 `f2413394`，差 1 提交 |
-| OTA 远端 | `memoria-ota` firmware 目录：1.0.0 / 1.1.0 / 1.2.1 / 1.4.0 四个 bin + version.json | version.json 实测 1.4.0 |
+| `firmware/version.json` | version 1.6.0 / url 指向 `memoria_os_1.6.0.bin` / major false | 已随 OTA 仓上传 |
+| 本地 git | `main` 三个提交：`f2413394`（v1.4.0）→ `d4f3ebf`（重建基线）→ `1ce95d4`（文档与分发） | 远端正本见「六」 |
+| OTA 远端 | firmware 目录：1.0.0 / 1.1.0 / 1.2.1 / 1.4.0 / **1.6.0** 五个 bin + version.json(1.6.0) | 已上传，等真机 OTA 验证 |
 | 旧快照归档 | `archive/snapshots/` 三份（MEMORY-SNAPSHOT v1.1.2 / PROJECT-STATUS v1.3.0 / HEALTH-REPORT 10-06） | 原文件保留未删 |
 | 脏目录留档 | `archive/legacy-quoted-dirs-2026-11-07.zip`（26 文件 / 888,962 B） | 三个 `_design`/`_docs`/`_simulator` 已删除 |
 
 ## 六、风险与缺口
 
-- **推送凭据是当前唯一硬卡点**：`github.com:443` HTTPS 被重置（`WinError 10054`）；本机 credential 里的 `ghp_` token 对 API 返回 401；SSH key 认证为 `DualBrainOS`，对该仓库 `ls-remote` 可读、`push` 被 403 拒。`api.github.com` 可达（可读仓库内容，不能写）。缺一个对 `cfy2012` 有 `repo` 权限的凭据。
+- **推送只能走 API，不能 `git push`**：这台机器 `github.com:443` 连上后被重置（`WinError 10054`），HTTPS 推不通；SSH key 认证为 `DualBrainOS`，对 `cfy2012` 两个仓只有读权限，`push` 被 403 拒。唯一可写通道是 `api.github.com` 的 Git Data API，脚本见 `tools/push_api.py`（从环境变量 `GH_PAT` 取 token，不落盘、不入库）。**副作用**：本地提交带 SSH 签名（`gpgsig`），API 建的提交没有签名，两边哈希必然不同，`git status` 会显示分叉。判断是否同步只看内容——脚本会校验远端 tree 与本地 `HEAD^{tree}` 是否相等，相等即一致，不要拿哈希比。
 - **显示驱动与实物不符**：到手 ILI9486 是 8bit 并口，固件全链条按 ILI9488 SPI 写。这不是改引脚能解决的，要么换屏，要么加一套并口驱动。
 - **MCP23017 封装错**：到手 SOIC-28 贴片，BOM 写的是 DIP-28。贴片不能直插洞洞板。
 - **I2S/TF/MIC 引脚两套口径未定**：代码 `drivers_config.hpp` 是 BCLK18 / WS21 / DOUT15 / MIC16 / TF CS17；记忆里的「最终定版」是 DOUT16 / MIC17 / TF CS18 / BCLK19 / WS22。除 CHRG 外无文档硬证据，本轮只动了 CHRG 与新增 SDMMC，未擅自改这套。
