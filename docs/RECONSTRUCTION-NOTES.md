@@ -36,8 +36,8 @@
 
 ## 四、记录在案、文件已丢（B 级）
 
-- 2026-10-11 的 `GPIO-ALLOC.md`（GPIO 账本，没进重建仓，内容已并入本文与 README 引脚表）
-- 2026-10-11 对 `docs/硬件采购清单.docx` 的更新（加 SD 大卡座、1N4148 ×60、洞洞板按 100×150）——仓里仍是 1.4.0 旧版
+- 2026-10-11 的 `GPIO-ALLOC.md`（GPIO 账本，没进重建仓，内容已并入本文与 README 引脚表）——2026-11-08 复查：全仓无同名文件，确认未恢复
+- 2026-10-11 对 `docs/硬件采购清单.docx` 的更新——**已在仓内**：现文件是 v4（2026-10-10，对齐 BOM v3 + 预算 200 + 焊坏备件），归档 zip 里那份是 v2（2026-10-03）。仓内版更新，不要拿归档版覆盖
 - 1.5.0 期间除引脚定版与文档之外的固件改动：无记录，无法确认是否存在
 
 ## 五、已知未修
@@ -48,14 +48,16 @@
 
 ## 六、彻底缺失、需要重做（C 级）
 
-| 产物 | 原位置 | 说明 |
-|------|--------|------|
-| 原理图 HTML | `I:\Memoria OS\MemoriaOS原理图.html` | KiCad/EPLAN 风格，AMS1117 供电版 |
-| 自绘符号库 | `I:\Memoria OS\kicad_lib\Memoria_OS.kicad_sym` | 含 MT3608、TP4056，官方库与乐鑫库里没有 |
-| BASIC 游戏预览页 | `I:\Memoria OS\memoria-os\simulator\BASIC游戏预览.html` | 单文件 Canvas，复刻 5 个游戏 |
-| 完整接线表 docx | `I:\Memoria OS\Memoria OS完整接线表-打印版.docx` | 电源树 ASCII 流程 + SD 卡座 10 脚标注 |
-| 键盘矩阵接线表 docx | `I:\Memoria OS\键盘矩阵接线表-打印版.docx` | 二极管方向约定在内 |
-| 上述 docx 的生成脚本 | `I:\Memoria OS\电路\_tools\gen_full_docx.py` | |
+下表是原件缺失，不是同类替代品缺失。`design/` 里有功能相近的图纸（点到点电路原理图、电路接线图、硬件正面布局、总装工程图），但都不是下表这几份原件。
+
+| 产物 | 原位置 | 说明 | 2026-11-08 复查 |
+|------|--------|------|----------------|
+| 原理图 HTML | `I:\Memoria OS\MemoriaOS原理图.html` | KiCad/EPLAN 风格，AMS1117 供电版 | 全仓无此文件；`design/` 的图纸是同题材另一份 |
+| 自绘符号库 | `I:\Memoria OS\kicad_lib\Memoria_OS.kicad_sym` | 含 MT3608、TP4056，官方库与乐鑫库里没有 | 全仓无 `*.kicad_sym` |
+| BASIC 游戏预览页 | `I:\Memoria OS\memoria-os\simulator\BASIC游戏预览.html` | 单文件 Canvas，复刻 5 个游戏 | `simulator/simulator.html` 是 480×320 键盘模拟器，不是它 |
+| 完整接线表 docx | `I:\Memoria OS\Memoria OS完整接线表-打印版.docx` | 电源树 ASCII 流程 + SD 卡座 10 脚标注 | 全仓无 `*接线表*.docx` |
+| 键盘矩阵接线表 docx | `I:\Memoria OS\键盘矩阵接线表-打印版.docx` | 二极管方向约定在内 | 全仓无 `*接线表*.docx` |
+| 上述 docx 的生成脚本 | `I:\Memoria OS\电路\_tools\gen_full_docx.py` | | 全仓无此脚本 |
 
 ## 七、旧 KiCad 图已知错误（重画接线时避开）
 
@@ -86,3 +88,34 @@
 - `tools/push_api.py`：Git Data API 推送工具（443 被重置时用），逐提交重建 + blob 逐字节校验，token 只读环境变量
 - `firmware/memoria_os_1.6.1.bin`：1,884,384 B，SHA256 `59EC2755…4D28`（v1.6.0 那份已被 1.6.1 替换）
 - `docs/HEALTH-REPORT.md` 第四节「2026-11-07 复查」
+
+## 十、归档 zip 26 项核验（2026-11-08）
+
+`archive/legacy-quoted-dirs-2026-11-07.zip`（888,962 B，26 项）是 I 盘损坏时唯一带出来的图纸与模型包。条目名被打成 UTF-8 字节的三位八进制分段，例如 `345/233/276` = `E5 9B BE` = 「图」。
+
+**还原规则**（可复现）：每个以三位八进制开头的分段取前三位转一个字节，分段剩余字符按字面拼接；非八进制分段按 UTF-8 字面并补路径分隔；路径末位的 `_` 是转义残留，去掉。
+
+**核验方式**：按上表规则解压到 `archive/legacy-quoted-dirs-2026-11-07/`（保留 `_design` / `_docs` / `_simulator` 三层原结构），再与 `design/`、`simulator/`、`docs/` 中现文件做 SHA-256 逐字节比对。
+
+**结论：这批资产没有丢，全部在 `design/` 与 `simulator/` 里。**
+
+| 结果 | 数量 | 明细 |
+|------|------|------|
+| 逐字节相同 | 22 | 8 张设计 HTML、键盘按键布局表.xlsx、3 个 .123dx/STL 组（8 个 STL）、外壳尺寸规划、启动CHAT代理.bat |
+| 文本相同、仅样式字节不同 | 3 | 整机装配电路模型.html、同款_自包含版、洞洞板点位图.html（提取纯文本后 diff 为 0 行） |
+| 仓内版更新 | 1 | `docs/硬件采购清单.docx`：仓内 v4（2026-10-10）> 归档 v2（2026-10-03） |
+
+归档名与仓内现名的对应（建档时做过改名，内容未变）：
+
+| 归档内 | 仓内现名 |
+|--------|----------|
+| `_design/3D/模型外壳.123dx` | `design/3D模型/外壳.123dx` |
+| `_design/3D/模型外壳STL/前面板.stl`、`壳体`、`底仓壁`、`底壳`、`隔板①②③`、`顶盖` | `design/3D模型/外壳STL/` 同名去掉「模型外壳」前缀 |
+| `_design/3D/模型外壳STL预览.html` | `design/3D模型/外壳STL预览.html` |
+| `_design/3D/模型整机装配电路模型(_自包含版).html` | `design/3D模型/整机装配电路模型(_自包含版).html` |
+| `_design/3D/模型核心板电路模型.html` | `design/3D模型/核心板电路模型.html` |
+| `_design/3D/模型洞洞板布局与外壳尺寸.html` | `design/3D模型/洞洞板布局与外壳尺寸.html` |
+| `_design/3D/模型洞洞板点位图.html` | `design/3D模型/洞洞板点位图.html` |
+| `_design/shell-design/Memoria-OS/外壳尺寸规划.html` | `design/shell-design/Memoria-OS外壳尺寸规划.html` |
+| `_docs/硬件采购清单.docx` | `docs/硬件采购清单.docx`（仓内版更新，不要覆盖） |
+| `_simulator/启动CHAT代理.bat` | `simulator/启动CHAT代理.bat` |
