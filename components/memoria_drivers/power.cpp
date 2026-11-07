@@ -184,8 +184,8 @@ void Power::_power_task_c(void* arg) {
         if (idle > self->_idle_timeout_sec && !self->_dimmed) {
             /* 分步渐暗：只压 LEDC 输出，不经过 set_backlight（保护 s_user_brightness） */
             for (int d = s_user_brightness; d >= 0; d -= 40) {
-                ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, static_cast<uint32_t>(d));
-                ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0);
+                ledc_set_duty(LEDC_LOW_SPEED_MODE, static_cast<ledc_channel_t>(LEDC_CHN_BACKLIGHT), static_cast<uint32_t>(d));
+                ledc_update_duty(LEDC_LOW_SPEED_MODE, static_cast<ledc_channel_t>(LEDC_CHN_BACKLIGHT));
                 vTaskDelay(pdMS_TO_TICKS(50));
             }
             self->_dimmed = true;

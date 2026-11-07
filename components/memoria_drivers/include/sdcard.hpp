@@ -25,6 +25,10 @@ public:
 
     /* quiet=true：失败时不打 ERROR 日志（poll 周期重试用） */
     esp_err_t init(bool quiet = false);
+    /* SDMMC 1-bit 大卡座通路（CLK/CMD/D0 = 40/39/41，见 drivers_config.hpp）。
+     * 与 SPI 路共用同一挂载点 /mem_fat，二者互斥：已挂载时直接返回 ESP_OK。
+     * 卡座未接线时返回 ESP_ERR_TIMEOUT，不阻塞后续 SPI 回退。 */
+    esp_err_t init_sdmmc(bool quiet = false);
     esp_err_t deinit();
     /* 应急格式化：卸载 -> format_if_mount_failed=true 重挂（shell safe 模式用） */
     esp_err_t reformat();
@@ -33,12 +37,14 @@ public:
 
     const std::string& mount_point() const { return _mount_point; }
     bool is_mounted() const { return _mounted; }
+    bool is_sdmmc()   const { return _sdmmc; }
 
 private:
     SdCard() = default;
 
     std::string    _mount_point{"/mem_fat"};
     bool           _mounted = false;
+    bool           _sdmmc   = false;       /* 当前挂载走的哪条通路 */
     bool           _format_next = false;   /* 下次 init 时 format_if_mount_failed=true */
     sdmmc_card_t*  _card = nullptr;        /* mount 出参，deinit 需要它 */
 };

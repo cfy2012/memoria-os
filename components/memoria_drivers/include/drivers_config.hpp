@@ -160,10 +160,22 @@ static constexpr int AMP_EN_GPIO      = 47;
  */
 static constexpr int SUBMOS_EN_GPIO   = 48;
 
-/* TP4056 CHRG 充电检测：GPIO49（USB D+ 旁边，开漏输出，充电中拉低）
+/* TP4056 CHRG 充电检测：GPIO42（开漏输出，充电中拉低）
  * 输入内部上拉：低电平 = 正在充电；高电平 = 未充电/充满
+ * 2026-10-11 定版：49 → 42（39/40/41 让位 SDMMC 大卡，42 与 47/48 相邻收口）
  */
-static constexpr int CHRG_DET_GPIO    = 49;
+static constexpr int CHRG_DET_GPIO    = 42;
+
+/* ============================================================
+ * SD 大卡座 SDMMC（1-bit）—— 2026-10-11 定版
+ * 小 TF 卡继续走 SPI（SD_CS_GPIO=17），两套并存互不干扰：
+ *   - SPI 路：SPI2_HOST 共享总线，CS=17，兼容任意 TF 转接板
+ *   - SDMMC 路：专用外设，1-bit 只需 CLK/CMD/D0 三线，速度远高于 SPI
+ * 固件优先尝试 SDMMC，失败回落 SPI。
+ * ============================================================ */
+static constexpr int SDMMC_CLK_GPIO = 40;
+static constexpr int SDMMC_CMD_GPIO = 39;
+static constexpr int SDMMC_D0_GPIO  = 41;
 
 /* 低电量保命关机阈值（伏）：正常运行时电压跌破此值持续 30s → 保命深睡眠 */
 static constexpr float BATTERY_EMERGENCY_VOL = 3.5f;

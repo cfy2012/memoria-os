@@ -81,7 +81,57 @@ esp_err_t SdCard::init(bool quiet) {
 
     _card = card;
     _mounted = true;
+    _sdmmc = false;
     ESP_LOGI(TAG, "FAT mounted at %s", _mount_point.c_str());
+    return ESP_OK;
+}
+
+/* SD 大卡座：SDMMC 1-bit 专用外设通路（2026-10-11 定版）
+ * 与 SPI 路共用 /mem_fat 挂载点，互斥；卡座未接线时返回超时，调用方回落 SPI。 */
+esp_err_t SdCard::init_sdmmc(bool quiet) {
+    if (_mounted) return ESP_OK;
+
+    /* 日志压制口径与 SPI init 一致：无卡探测期间 sdmmc/gpio 层会刷屏 */
+    esp_log_level_t lv_sdmmc = esp_log_level_get("sdmmc_sd");
+    esp_log_level_t lv_vfs   = esp_log_level_get("vfs_fat_sdmmc");
+    esp_log_level_t lv_gpio  = esp_log_level_get("gpio");
+    esp_log_level_set("sdmmc_sd", ESP_LOG_NONE);
+    esp_log_level_set("vfs_fat_sdmmc", ESP_LOG_NONE);
+    esp_log_level_set("gpio", ESP_LOG_NONE);
+
+    sdmmc_host_t host = SDMMC_HOST_DEFAULT();
+    host.flags = SDMMC_HOST_FLAG_1BIT;   /* 只要 D0，D1-D3 不接 */
+
+    sdmmc_slot_config_t slot_cfg = SDMMC_SLOT_CONFIG_DEFAULT();
+    slot_cfg.width = 1;
+    slot_cfg.clk   = static_cast<gpio_num_t>(SDMMC_CLK_GPIO);
+    slot_cfg.cmd   = static_cast<gpio_num_t>(SDMMC_CMD_GPIO);
+    slot_cfg.d0    = static_cast<gpio_num_t>(SDMMC_D0_GPIO);
+    slot_cfg.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
+
+    esp_vfs_fat_mount_config_t mount_cfg{};
+    mount_cfg.format_if_mount_failed = _format_next;
+    mount_cfg.max_files = 16;
+    mount_cfg.allocation_unit_size = 32 * 1024;
+
+    sdmmc_card_t* card = nullptr;
+    esp_err_t ret = esp_vfs_fat_sdmmc_mount(
+        _mount_point.c_str(), &host, &slot_cfg, &mount_cfg, &card);
+
+    esp_log_level_set("sdmmc_sd", lv_sdmmc);
+    esp_log_level_set("vfs_fat_sdmmc", lv_vfs);
+    esp_log_level_set("gpio", lv_gpio);
+
+    if (ret != ESP_OK) {
+        if (quiet) ESP_LOGD(TAG, "sdmmc mount retry: %s", esp_err_to_name(ret));
+        else       ESP_LOGE(TAG, "SDMMC mount failed: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
+    _card = card;
+    _mounted = true;
+    _sdmmc = true;
+    ESP_LOGI(TAG, "FAT mounted at %s (SDMMC 1-bit)", _mount_point.c_str());
     return ESP_OK;
 }
 
@@ -96,7 +146,7 @@ esp_err_t SdCard::reformat() {
 esp_err_t SdCard::deinit() {
     if (!_mounted) return ESP_OK;
     esp_err_t ret = esp_vfs_fat_sdcard_unmount(_mount_point.c_str(), _card);
-    if (ret == ESP_OK) { _mounted = false; _card = nullptr; }
+    if (ret == ESP_OK) { _mounted = false; _sdmmc = false; _card = nullptr; }
     return ret;
 }
 

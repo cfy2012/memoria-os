@@ -15,6 +15,7 @@
 #include "ble_manager.hpp"
 #include "sdcard.hpp"
 #include "power.hpp"
+#include "system_info.h"
 #include "i2s_audio.hpp"
 #include "kernel.hpp"   /* reboot */
 #include "evaluator.hpp"
@@ -120,7 +121,7 @@ int Shell::execute(const std::string& line, bool safe) {
     if (cmd == "help") { _print_help(safe); return 0; }
 
     if (cmd == "info") {
-        std::fprintf(stdout, "memoria os v1.4.0 (ESP32-S3)\n");
+        std::fprintf(stdout, "memoria os v%s (ESP32-S3)\n", MEMORIA_OS_VERSION);
         std::fprintf(stdout, "uptime_ms = %lu\n", (unsigned long)(esp_timer_get_time() / 1000));
         std::fprintf(stdout, "free_heap = %lu B\n", (unsigned long)esp_get_free_heap_size());
         std::fprintf(stdout, "psram     = %lu B free\n",
@@ -300,6 +301,12 @@ int Shell::execute(const std::string& line, bool safe) {
             else             std::fprintf(stdout, "sd mount: failed (%s) - insert card or try 'sd format'\n", esp_err_to_name(e));
             return 0;
         }
+        if (args.size() >= 2 && args[1] == "mmc") {
+            esp_err_t e = s->init_sdmmc(false);   /* SD 大卡座：SDMMC 1-bit 通路 */
+            if (e == ESP_OK) std::fprintf(stdout, "sd mmc: OK, mounted at %s (SDMMC 1-bit)\n", s->mount_point().c_str());
+            else             std::fprintf(stdout, "sd mmc: failed (%s) - check CLK/CMD/D0 wiring\n", esp_err_to_name(e));
+            return 0;
+        }
         if (args.size() >= 2 && args[1] == "format") {
             std::fprintf(stdout, "sd format: erasing ALL data on TF card...\n");
             esp_err_t e = s->reformat();
@@ -307,7 +314,8 @@ int Shell::execute(const std::string& line, bool safe) {
             else             std::fprintf(stdout, "sd format: failed (%s)\n", esp_err_to_name(e));
             return 0;
         }
-        std::fprintf(stdout, "sd: mounted=%s\n", s->is_mounted() ? "yes" : "no");
+        std::fprintf(stdout, "sd: mounted=%s bus=%s\n", s->is_mounted() ? "yes" : "no",
+                     s->is_sdmmc() ? "SDMMC" : "SPI");
         return 0;
     }
 
