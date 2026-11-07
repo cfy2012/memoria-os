@@ -81,7 +81,7 @@ ESP32-S3 N16R8 上的自研掌机操作系统：内核、窗口、文件系统�
 
 ## 六、风险与缺口
 
-- **推送只能走 API，不能 `git push`**：这台机器 `github.com:443` 连上后被重置（`WinError 10054`），HTTPS 推不通；SSH key 认证为 `DualBrainOS`，对 `cfy2012` 两个仓只有读权限，`push` 被 403 拒。唯一可写通道是 `api.github.com` 的 Git Data API，脚本见 `tools/push_api.py`（从环境变量 `GH_PAT` 取 token，不落盘、不入库）。**副作用**：本地提交带 SSH 签名（`gpgsig`），API 建的提交没有签名，两边哈希必然不同，`git status` 会显示分叉。判断是否同步只看内容——脚本会校验远端 tree 与本地 `HEAD^{tree}` 是否相等，相等即一致，不要拿哈希比。
+- **推送只能走 API，不能 `git push`**：这台机器 `github.com:443` 连上后被重置（`WinError 10054`），HTTPS 推不通；SSH key 认证为 `DualBrainOS`，对 `cfy2012` 两个仓只有读权限，`push` 被 403 拒。唯一可写通道是 `api.github.com` 的 Git Data API，脚本见 `tools/push_api.py`（从环境变量 `GH_PAT` 取 token，不落盘、不入库）。**副作用**：本地提交带 SSH 签名（`gpgsig`），API 建的提交没有签名，两边哈希必然不同；`git status` 的领先/分叉计数也不可靠（跟踪引用停在旧基线）。判断是否同步只看内容——脚本会校验远端 tree 与本地 `HEAD^{tree}` 是否相等，相等即一致，不要拿哈希比。
 - **显示驱动与实物不符**：到手 ILI9486 是 8bit 并口，固件全链条按 ILI9488 SPI 写。这不是改引脚能解决的，要么换屏，要么加一套并口驱动。
 - **MCP23017 封装错**：到手 SOIC-28 贴片，BOM 写的是 DIP-28。贴片不能直插洞洞板。
 - **I2S/TF/MIC 引脚两套口径未定**：代码 `drivers_config.hpp` 是 BCLK18 / WS21 / DOUT15 / MIC16 / TF CS17；记忆里的「最终定版」是 DOUT16 / MIC17 / TF CS18 / BCLK19 / WS22。除 CHRG 外无文档硬证据，本轮只动了 CHRG 与新增 SDMMC，未擅自改这套。
