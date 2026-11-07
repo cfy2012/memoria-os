@@ -2,6 +2,25 @@
 
 > 一条规矩：**改一部分就推一版**。这个文件随每次发版更新，版本号只增不补。
 
+## v1.6.1 — 2026-11-07 · 从轨迹补丁复原 10-11 批 GUI 改动
+
+**背景**：v1.6.0 是按记忆重建的。10-11 那批 BASIC GUI 改动当年写在 I 盘的另一个目录树里，从未入库，随盘一起丢了。本次用 `docs/recovery/patches/*.edits.txt`（会话轨迹里的 Edit 原文，OLD/NEW 全文）逐处重放，把 1.4.0 里没有的这部分补回来。
+
+**重放结果**：40 处 Edit 全部精确落位（`window_hpp` 1、`window_cpp` 6、`basic_host_hpp` 8、`basic_host_cpp` 25），代码增量 +341 / −105 行。应用工具 `tools/apply_edits.py`，按 OLD 唯一匹配、匹配不上即停。
+
+| 类别 | 内容 |
+|------|------|
+| 显示层 | `draw_text_utf8` / `text_width_utf8` 新增 scale 重载，1~3 倍整数放大（中文最大 48×36，0 或负数夹到 1）；旧签名转调新签名，全仓调用点不用改 |
+| BASIC 列表 | 列表改多实例 `list id,x,y,w,h`（旧写法视作 id=0）；行高 16px、最多展示 400 行、保留 300 行、最小换行宽 `max(40, w-6)` |
+| BASIC 按钮 | `btn` 增加 icon / font 参数，按钮上限 8 → 16 |
+| BASIC 图标 | 新增 `ICON id,"16 行 × 16 字符"`，id 100~139 共 40 个 |
+| BASIC 彩蛋 | 新增 `EGG` / `EGGLIST` / `EGGSCROLL`，`EGGS[24]` 数据表（E01~E21 + C1~C3），图鉴行高 20px |
+| 兼容 | `_list_add` 保留单参重载（默认写 id=0 列表），v1.4.0 的 HTTP 提示调用点无需改动 |
+
+**未恢复**：`tools/pc/basic.cpp`（PC 模拟器）。补丁是"在已有文件上改 5 处"，而该文件本体从未入库，没有底稿，无法凭增量重建。
+
+**验证**：`idf.py build` 零警告零错误；`memoria_os.bin` 1,884,384 B（0x1CC0E0），factory 分区余 39%，相对 v1.6.0 增 7,136 B。版本串同步 `CMakeLists.txt` / `system_info.h` / `firmware/version.json`。
+
 ## v1.6.0 — 2026-11-07 · 硬盘损毁后的重建基线
 
 **背景**：本地工作盘（I 盘）物理磕坏，源码、构建产物、未推送的改动全部丢失。本次从

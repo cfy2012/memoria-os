@@ -71,20 +71,8 @@ void BasicHost::install(basic::BasicInterpreter& interp) {
     interp.add_cmd("WIN",     [this](auto& a) { _cmd_win(a); });
     interp.add_cmd("LIST",    [this](auto& a) { _cmd_list(a); });
     interp.add_cmd("LADD",    [this](auto& a) { _cmd_ladd(a); });
-    interp.add_cmd("LCLR",    [this](const std::vector<basic::BasicArg>&) {
-        std::lock_guard<std::mutex> lk(_mtx);
-        _list_lines.clear();
-        _list_scroll = 0;
-    });
-    interp.add_cmd("LSCR",    [this](const std::vector<basic::BasicArg>& a) {
-        if (a.empty()) return;
-        std::lock_guard<std::mutex> lk(_mtx);
-        if (!_has_list || _list_lines.empty()) return;
-        int visible = std::max(1, (_list_r.h - 4) / 16);
-        int lo = 0, hi = std::max(0, (int)_list_lines.size() - visible);
-        _list_scroll += (int)a[0].num;
-        _list_scroll = std::max(lo, std::min(hi, _list_scroll));
-    });
+    interp.add_cmd("LCLR",    [this](auto& a) { _cmd_lclr(a); });
+    interp.add_cmd("LSCR",    [this](auto& a) { _cmd_lscr(a); });
     interp.add_cmd("BTN",     [this](auto& a) { _cmd_btn(a); });
     interp.add_cmd("BSEL",    [this](auto& a) { _cmd_bsel(a); });
     interp.add_cmd("INPUTAT", [this](const std::vector<basic::BasicArg>& a) {
@@ -116,7 +104,11 @@ void BasicHost::install(basic::BasicInterpreter& interp) {
     interp.add_cmd("LLBL",   [this](auto& a) { _cmd_llbl(a); });
     interp.add_cmd("LBLD",   [this](auto& a) { _cmd_lbld(a); });
     interp.add_cmd("IMG",    [this](auto& a) { _cmd_img(a); });
+    interp.add_cmd("ICON",   [this](auto& a) { _cmd_icon(a); });
     interp.add_cmd("AFTER",  [this](auto& a) { _cmd_after(a); });
+    interp.add_cmd("EGG",    [this](auto& a) { _cmd_egg(a); });
+    interp.add_cmd("EGGLIST",[this](auto& a) { _cmd_egglist(a); });
+    interp.add_cmd("EGGSCROLL", [this](auto& a) { _cmd_eggscroll(a); });
 
     /* ---- key()：非阻塞键事件 ---- */
     interp.add_func("KEY", [this](const std::vector<basic::BasicArg>&) -> double {
@@ -126,7 +118,7 @@ void BasicHost::install(basic::BasicInterpreter& interp) {
     /* ---- 连接 / 系统（网络系统托管：wifi 语句保留但忽略） ---- */
     interp.add_cmd("WIFI", [this](const std::vector<basic::BasicArg>&) {
         std::lock_guard<std::mutex> lk(_mtx);
-        if (_has_list) _list_add("系统托管网络：wifi 语句已忽略（读 wifi_ssid$）");
+        if (!_lists.empty()) _list_add(&_lists[0], "系统托管网络：wifi 语句已忽略（读 wifi_ssid$）");
     });
     interp.add_func("WIFISTAT", [](const std::vector<basic::BasicArg>&) -> double {
         /* 按需射频：联网程序第一步查询即触发 RF 启动 + NVS 自动重连（幂等） */
@@ -226,7 +218,7 @@ void BasicHost::feed_nav(int dir) {
 
 void BasicHost::_mark_btn_press() {
     std::lock_guard<std::mutex> lk(_mtx);
-    if (_btn_focus >= 0 && _btn_focus < 8 && _btn_focus < (int)_btns.size())
+    if (_btn_focus >= 0 && _btn_focus < 16 && _btn_focus < (int)_btns.size())
         _btn_press[_btn_focus] = 1;
 }
 
@@ -295,28 +287,68 @@ void BasicHost::_cmd_win(const std::vector<basic::BasicArg>& a) {
 void BasicHost::_cmd_list(const std::vector<basic::BasicArg>& a) {
     if (a.size() < 4) return;
     std::lock_guard<std::mutex> lk(_mtx);
-    _list_r = {(int16_t)(int)a[0].num, (int16_t)(int)a[1].num,
-               (int16_t)(int)a[2].num, (int16_t)(int)a[3].num};
-    _has_list = true;
-    _list_lines.clear();
-    _list_scroll = 0;
+    /* 新语法 list id,x,y,w,h（多实例，id=下标）；旧语法 list x,y,w,h 视为 id=0 */
+    int id = 0, off = 0;
+    if (a.size() >= 5) { id = (int)a[0].num; off = 1; }
+    while ((int)_lists.size() <= id) _lists.push_back(ListPanel{});
+    ListPanel* p = &_lists[id];
+    p->r = {(int16_t)(int)a[off].num, (int16_t)(int)a[off+1].num,
+            (int16_t)(int)a[off+2].num, (int16_t)(int)a[off+3].num};
+    p->lines.clear();
+    p->scroll = 0;
+}
+
+BasicHost::ListPanel* BasicHost::_find_list(int id) {
+    if (id < 0 || id >= (int)_lists.size()) return nullptr;
+    return &_lists[id];
+}
+
+void BasicHost::_cmd_lclr(const std::vector<basic::BasicArg>& a) {
+    std::lock_guard<std::mutex> lk(_mtx);
+    int id = a.empty() ? 0 : (int)a[0].num;
+    ListPanel* p = _find_list(id);
+    if (!p) return;
+    p->lines.clear();
+    p->scroll = 0;
+}
+
+void BasicHost::_cmd_lscr(const std::vector<basic::BasicArg>& a) {
+    if (a.empty()) return;
+    std::lock_guard<std::mutex> lk(_mtx);
+    int id = 0, n;
+    if (a.size() >= 2) { id = (int)a[0].num; n = (int)a[1].num; }
+    else n = (int)a[0].num;
+    ListPanel* p = _find_list(id);
+    if (!p || p->lines.empty()) return;
+    int visible = std::max(1, (p->r.h - 4) / 16);
+    int lo = 0, hi = std::max(0, (int)p->lines.size() - visible);
+    p->scroll += n;
+    p->scroll = std::max(lo, std::min(hi, p->scroll));
 }
 
 void BasicHost::_cmd_ladd(const std::vector<basic::BasicArg>& a) {
     if (a.empty()) return;
     std::lock_guard<std::mutex> lk(_mtx);
-    if (!_has_list) return;
-    _list_add(a[0].str);
+    /* 新语法 ladd id,"文本"；旧语法 ladd "文本" 视为 id=0 */
+    int id = 0;
+    const basic::BasicArg* txt;
+    if (a[0].is_string) { txt = &a[0]; }
+    else { if (a.size() < 2) return; id = (int)a[0].num; txt = &a[1]; }
+    ListPanel* p = _find_list(id);
+    if (!p) return;
+    _list_add(p, txt->str);
 }
 
 void BasicHost::_cmd_btn(const std::vector<basic::BasicArg>& a) {
     if (a.size() < 4) return;
     std::lock_guard<std::mutex> lk(_mtx);
-    if (_btns.size() >= 8) return;
+    if (_btns.size() >= 16) return;
     Button b;
     b.r = {(int16_t)(int)a[0].num, (int16_t)(int)a[1].num,
            (int16_t)(int)a[2].num, (int16_t)(int)a[3].num};
     b.label = a.size() >= 5 ? a[4].str : "";
+    if (a.size() >= 6 && !a[5].is_string) b.icon = (int)a[5].num;            /* 图案：-1 无 / 0~7 内置 / 100+ 自定义 */
+    if (a.size() >= 7 && !a[6].is_string) b.font = (uint8_t)std::max(1, std::min(3, (int)a[6].num));  /* 字号 1~3 */
     _btns.push_back(std::move(b));
 }
 
@@ -332,7 +364,7 @@ double BasicHost::_func_bkey(const std::vector<basic::BasicArg>& a) {
     if (a.empty() || a[0].is_string) return 0;
     int i = (int)a[0].num;
     std::lock_guard<std::mutex> lk(_mtx);
-    if (i < 0 || i >= 8) return 0;
+    if (i < 0 || i >= 16) return 0;
     uint8_t v = _btn_press[i];   /* 读后清零：轮询式事件，与 key() 同语义 */
     _btn_press[i] = 0;
     return v ? 1.0 : 0.0;
@@ -349,6 +381,8 @@ void BasicHost::_cmd_lbl(const std::vector<basic::BasicArg>& a) {
     l.color = _cur_color;
     if (a.size() >= 5 && !a[4].is_string)
         l.style = (uint8_t)std::max(0, std::min(2, (int)a[4].num));
+    if (a.size() >= 6 && !a[5].is_string)
+        l.font = (uint8_t)std::max(1, std::min(3, (int)a[5].num));   /* 字号 1~3 */
     for (auto& e : _labels) { if (e.id == l.id) { e = l; return; } }   /* 同 id 覆盖 */
     if (_labels.size() < 16) _labels.push_back(l);
 }
@@ -362,6 +396,8 @@ void BasicHost::_cmd_llbl(const std::vector<basic::BasicArg>& a) {
             e.text = a[1].str;
             if (a.size() >= 3 && !a[2].is_string)
                 e.style = (uint8_t)std::max(0, std::min(2, (int)a[2].num));
+            if (a.size() >= 4 && !a[3].is_string)
+                e.font = (uint8_t)std::max(1, std::min(3, (int)a[3].num));   /* 字号 1~3 */
             return;
         }
     }
@@ -382,12 +418,33 @@ void BasicHost::_cmd_img(const std::vector<basic::BasicArg>& a) {
     DrawOp d;
     d.op = Op::Icon;
     d.color = _cur_color;
-    d.w  = (int16_t)(int)a[0].num;            /* 图标 id 0..7 */
+    d.w  = (int16_t)(int)a[0].num;            /* 图标 id：0~7 内置，100+ 自定义 */
     d.x  = (int16_t)(int)a[1].num;
     d.y  = (int16_t)(int)a[2].num;
-    if (d.w < 0 || d.w >= 8) return;
+    bool builtin = (d.w >= 0 && d.w < 8);
+    bool custom = (d.w >= 100 && (d.w - 100) < (int)_custom_icons.size());
+    if (!builtin && !custom) return;
     if (_ops.size() >= 64) _ops.erase(_ops.begin());
     _ops.push_back(std::move(d));
+}
+
+/* 自定义图标：icon id, "16行，用 / 分行，每行 16 字符（# 亮）"（id 100~139） */
+void BasicHost::_cmd_icon(const std::vector<basic::BasicArg>& a) {
+    if (a.size() < 2 || a[0].is_string || !a[1].is_string) return;
+    std::lock_guard<std::mutex> lk(_mtx);
+    int id = (int)a[0].num;
+    if (id < 100 || id >= 140) return;
+    std::vector<std::string> rows;
+    std::string cur;
+    for (char ch : a[1].str) {
+        if (ch == '/' || ch == '\n') { if (!cur.empty()) rows.push_back(cur); cur.clear(); }
+        else cur += ch;
+    }
+    if (!cur.empty()) rows.push_back(cur);
+    if ((int)rows.size() != 16) return;       /* 必须恰 16 行 */
+    int idx = id - 100;
+    if ((int)_custom_icons.size() <= idx) _custom_icons.resize(idx + 1);
+    _custom_icons[idx] = std::move(rows);
 }
 
 void BasicHost::_cmd_after(const std::vector<basic::BasicArg>& a) {
@@ -453,13 +510,15 @@ void BasicHost::_state_reset() {
     _btns.clear();
     _btn_focus = -1;
     std::memset(_btn_press, 0, sizeof(_btn_press));
-    _has_list = false;
-    _list_lines.clear();
-    _list_scroll = 0;
+    _lists.clear();
     _has_input_r = false;
     _ops.clear();
     _labels.clear();
+    _custom_icons.clear();
     _after.clear();
+    _egg_card.active = false;
+    _egg_gallery.active = false;
+    std::memset(_egg_collected, 0, sizeof(_egg_collected));
     _cur_color = 0xFFFF;
 }
 
@@ -479,33 +538,34 @@ static std::string clip_utf8(const std::string& s, int maxw) {
     return s.substr(0, i);
 }
 
-void BasicHost::_list_add(const std::string& text) {
-    /* 调用方持锁；_has_list 校验在 _cmd_ladd */
-    const int maxw = std::max(40, _list_r.w - 6);
-    int visible = std::max(1, (_list_r.h - 4) / 16);
-    int lines_before = (int)_list_lines.size();
-    bool was_bottom = (_list_scroll + visible >= lines_before);
+void BasicHost::_list_add(ListPanel* p, const std::string& text) {
+    /* 调用方持锁 */
+    if (!p) return;
+    const int maxw = std::max(40, p->r.w - 6);
+    int visible = std::max(1, (p->r.h - 4) / 16);
+    int lines_before = (int)p->lines.size();
+    bool was_bottom = (p->scroll + visible >= lines_before);
 
     std::string rest = text;
-    if (rest.empty()) _list_lines.push_back("");
-    while (!rest.empty() && _list_lines.size() < 400) {
+    if (rest.empty()) p->lines.push_back("");
+    while (!rest.empty() && p->lines.size() < 400) {
         std::string piece = clip_utf8(rest, maxw);
         if (piece.empty()) {   /* 首字符超宽：整字硬入 */
             size_t n = ((unsigned char)rest[0] & 0x80) ? 3 : 1;
             if (n > rest.size()) n = rest.size();
             piece = rest.substr(0, n);
         }
-        _list_lines.push_back(piece);
+        p->lines.push_back(piece);
         rest = rest.substr(piece.size());
     }
     /* 容量 300：丢最旧，滚动游标同步回退 */
-    while (_list_lines.size() > 300) {
-        _list_lines.erase(_list_lines.begin());
-        if (_list_scroll > 0) _list_scroll--;
+    while (p->lines.size() > 300) {
+        p->lines.erase(p->lines.begin());
+        if (p->scroll > 0) p->scroll--;
         lines_before--;
     }
     if (was_bottom) {
-        _list_scroll = std::max(0, (int)_list_lines.size() - visible);
+        p->scroll = std::max(0, (int)p->lines.size() - visible);
     }
 }
 
@@ -661,6 +721,70 @@ static const char* const ICON_BITMAPS[8][16] = {
     },
 };
 
+/* 教材附录 G 彩蛋图鉴数据（E01~E21 + C1~C3）：编号/标题/一句话线索/所在章 */
+const BasicHost::EggInfo BasicHost::EGGS[24] = {
+    {"E01","世界上第一只 bug","继电器里的飞蛾","0x01 行号"},
+    {"E02","为什么叫“浮点”","别用 = 比小数","0x02 变量"},
+    {"E03","早期没有 and/or","乘加逻辑的老写法","0x03 运算符"},
+    {"E04","真随机","芯片抓热噪声","0x03 运算符"},
+    {"E05","最早的聊天程序","ELIZA","0x11 input"},
+    {"E06","AI 会“作弊”","深蓝的一步棋","0x12 if"},
+    {"E07","循环变量为什么叫 i","FORTRAN 的工号","0x21 for"},
+    {"E08","高斯的快捷方式","首尾配对 101×50","0x21 for"},
+    {"E09","电磁炉同款设计","干烧断电哲学","0x22 while"},
+    {"E10","ASCII 是 1963 年的","大小写差 32","0x31 字符串"},
+    {"E11","直线的算法","1962 年的 Bresenham","0x41 绘图"},
+    {"E12","404 是房间号吗","都市传说","0x61 网络"},
+    {"E13","16kHz 是什么音质","电话是 8kHz","0x62 声音"},
+    {"E14","memoria 是拉丁词","记忆的意思","0x01 print"},
+    {"E15","串当背包的出处","string packing","0x31 字符串"},
+    {"E16","屏幕是长个子的","320×240 老坐标","0x41 绘图"},
+    {"E17","return 的记性本","栈","0x51 gosub"},
+    {"E18","状态码是一套暗号","4 怪自己 5 怪对方","0x61 网络"},
+    {"E19","重启是过劳疗法","关机睡一觉","0x71 硬件"},
+    {"E20","为什么是十万步","放过正常人拦下疯子","0x72 保命"},
+    {"E21","三个项目是一条路","逻辑 · 画面 · 网络","0x83 综合项目"},
+    {"C1","秒表挑战","会走字的 lbl","0x41 章末"},
+    {"C2","服务器的暗号","联网猜数字","0x61 章末"},
+    {"C3","快枪手认证","3 次以内有台词","0x81 章末"},
+};
+
+/* 彩蛋：egg id[,x,y] 弹彩蛋卡（id 1~21=E01~E21，22~24=C1~C3，0 清除），触发即标记收集 */
+void BasicHost::_cmd_egg(const std::vector<basic::BasicArg>& a) {
+    if (a.empty() || a[0].is_string) return;
+    std::lock_guard<std::mutex> lk(_mtx);
+    int id = (int)a[0].num;
+    if (id == 0) { _egg_card.active = false; return; }
+    if (id < 1 || id > 24) return;
+    _egg_card.active = true;
+    _egg_card.idx = id - 1;
+    _egg_card.x = a.size() >= 2 ? (int16_t)(int)a[1].num : (int16_t)40;
+    _egg_card.y = a.size() >= 3 ? (int16_t)(int)a[2].num : (int16_t)60;
+    _egg_collected[id - 1] = true;
+}
+
+/* 彩蛋图鉴：egglist [x,y,w,h] 开图鉴（缺省整屏），eggscroll n 滚动 */
+void BasicHost::_cmd_egglist(const std::vector<basic::BasicArg>& a) {
+    std::lock_guard<std::mutex> lk(_mtx);
+    _egg_gallery.active = true;
+    _egg_gallery.scroll = 0;
+    if (a.size() >= 4)
+        _egg_gallery.r = {(int16_t)(int)a[0].num, (int16_t)(int)a[1].num,
+                          (int16_t)(int)a[2].num, (int16_t)(int)a[3].num};
+    else
+        _egg_gallery.r = {10, 20, SCREEN_W - 20, SCREEN_H - 40};
+}
+
+void BasicHost::_cmd_eggscroll(const std::vector<basic::BasicArg>& a) {
+    if (a.empty()) return;
+    std::lock_guard<std::mutex> lk(_mtx);
+    if (!_egg_gallery.active) return;
+    int visible = std::max(1, (_egg_gallery.r.h - 10) / 20);
+    int lo = 0, hi = std::max(0, 24 - visible);
+    _egg_gallery.scroll += (int)a[0].num;
+    _egg_gallery.scroll = std::max(lo, std::min(hi, _egg_gallery.scroll));
+}
+
 void BasicHost::render(window::UIRenderer* ui) {
     std::lock_guard<std::mutex> lk(_mtx);
     const int16_t OY = 16;   /* app 区 y=0 在状态栏下 */
@@ -677,15 +801,15 @@ void BasicHost::render(window::UIRenderer* ui) {
         }
     }
 
-    if (_has_list) {
-        window::Rect r{_list_r.x, (int16_t)(_list_r.y + OY), _list_r.w, _list_r.h};
+    for (auto& lp : _lists) {
+        window::Rect r{lp.r.x, (int16_t)(lp.r.y + OY), lp.r.w, lp.r.h};
         ui->fill_rect(r, COLOR_BLACK);
         ui->draw_rect(r, COLOR_LIGHT_GRAY, 1);
         int visible = std::max(0, (r.h - 4) / 16);
         int y = r.y + 2;
-        for (int i = 0; i < visible && (_list_scroll + i) < (int)_list_lines.size(); i++, y += 16) {
+        for (int i = 0; i < visible && (lp.scroll + i) < (int)lp.lines.size(); i++, y += 16) {
             ui->draw_text_utf8((int16_t)(r.x + 3), (int16_t)y,
-                               _list_lines[_list_scroll + i], COLOR_WHITE);
+                               lp.lines[lp.scroll + i], COLOR_WHITE);
         }
     }
 
@@ -695,24 +819,46 @@ void BasicHost::render(window::UIRenderer* ui) {
         bool foc = (i == _btn_focus);
         ui->fill_rect(r, foc ? rgb565(70, 90, 160) : rgb565(36, 44, 74));
         ui->draw_rect(r, foc ? COLOR_YELLOW : COLOR_LIGHT_GRAY, foc ? 2 : 1);
+        int f = std::max(1, std::min(3, (int)b.font));
+        int icon_w = 0;
+        if (b.icon >= 0) {   /* 图案：0~7 内置，100+ 自定义；画在按钮左缘 16×16 */
+            if (b.icon < 8) {
+                for (int yy = 0; yy < 16; yy++) {
+                    const char* row = ICON_BITMAPS[b.icon][yy];
+                    for (int xx = 0; xx < 16; xx++)
+                        if (row[xx] == '#')
+                            ui->fill_rect({(int16_t)(r.x + 3 + xx), (int16_t)(r.y + 3 + yy), 1, 1}, b.color);
+                }
+                icon_w = 16;
+            } else if (b.icon >= 100 && (b.icon - 100) < (int)_custom_icons.size()) {
+                auto& crows = _custom_icons[b.icon - 100];
+                for (int yy = 0; yy < 16 && yy < (int)crows.size(); yy++)
+                    for (int xx = 0; xx < 16 && xx < (int)crows[yy].size(); xx++)
+                        if (crows[yy][xx] == '#')
+                            ui->fill_rect({(int16_t)(r.x + 3 + xx), (int16_t)(r.y + 3 + yy), 1, 1}, b.color);
+                icon_w = 16;
+            }
+        }
         if (!b.label.empty()) {
-            int tw = window::UIRenderer::text_width_utf8(b.label);
-            ui->draw_text_utf8((int16_t)(r.x + std::max(2, (r.w - tw) / 2)),
-                               (int16_t)(r.y + std::max(1, (r.h - 12) / 2)), b.label, COLOR_WHITE);
+            int tw = window::UIRenderer::text_width_utf8(b.label, f);
+            ui->draw_text_utf8((int16_t)(r.x + icon_w + std::max(2, (r.w - icon_w - tw) / 2)),
+                               (int16_t)(r.y + std::max(1, (r.h - 12 * f) / 2)), b.label, COLOR_WHITE, f);
         }
     }
 
     /* lbl 文本控件（控件层：面板之后、直绘之前；反白/粗体样式） */
     for (auto& l : _labels) {
         if (l.text.empty()) continue;
-        int tw = window::UIRenderer::text_width_utf8(l.text);
+        int f = std::max(1, std::min(3, (int)l.font));
+        int tw = window::UIRenderer::text_width_utf8(l.text, f);
+        int th = 16 * f;
         int x = l.x, y = (int16_t)(l.y + OY);
         if (l.style == 1) {   /* 反白：当前色底 + 黑字 */
-            ui->fill_rect({(int16_t)x, (int16_t)y, (int16_t)tw, 16}, (uint16_t)l.color);
-            ui->draw_text_utf8(x, y, l.text, COLOR_BLACK);
+            ui->fill_rect({(int16_t)x, (int16_t)y, (int16_t)tw, (int16_t)th}, (uint16_t)l.color);
+            ui->draw_text_utf8(x, y, l.text, COLOR_BLACK, f);
         } else {
-            ui->draw_text_utf8(x, y, l.text, (uint16_t)l.color);
-            if (l.style == 2) ui->draw_text_utf8((int16_t)(x + 1), y, l.text, (uint16_t)l.color);
+            ui->draw_text_utf8(x, y, l.text, (uint16_t)l.color, f);
+            if (l.style == 2) ui->draw_text_utf8((int16_t)(x + f), y, l.text, (uint16_t)l.color, f);  /* 粗体：右移 f px */
         }
     }
 
@@ -730,7 +876,7 @@ void BasicHost::render(window::UIRenderer* ui) {
                 }
                 break;
             }
-            case Op::Icon: {   /* 内置图标点阵（16×16，前景=当前色） */
+            case Op::Icon: {   /* 图标点阵（16×16，前景=当前色）：0~7 内置，100+ 自定义 */
                 int id = d.w;
                 if (id >= 0 && id < 8) {
                     for (int yy = 0; yy < 16; yy++) {
@@ -741,6 +887,13 @@ void BasicHost::render(window::UIRenderer* ui) {
                                               (uint16_t)d.color);
                         }
                     }
+                } else if (id >= 100 && (id - 100) < (int)_custom_icons.size()) {
+                    auto& crows = _custom_icons[id - 100];
+                    for (int yy = 0; yy < 16 && yy < (int)crows.size(); yy++)
+                        for (int xx = 0; xx < 16 && xx < (int)crows[yy].size(); xx++)
+                            if (crows[yy][xx] == '#')
+                                ui->fill_rect({(int16_t)(d.x + xx), (int16_t)(d.y + OY + yy), 1, 1},
+                                              (uint16_t)d.color);
                 }
                 break;
             }
@@ -799,6 +952,48 @@ void BasicHost::render(window::UIRenderer* ui) {
                            clip_utf8(_input_prompt + _input_buf + "_", r.w - 12), COLOR_WHITE);
         if (ime::ime_mode() == ime::Mode::CN)
             ime::ime_draw_bar(ui, 2, (int)(r.y + r.h + 4));
+    }
+
+    /* 彩蛋卡（最顶层覆盖） */
+    if (_egg_card.active) {
+        const EggInfo& e = EGGS[_egg_card.idx];
+        int16_t cx = _egg_card.x;
+        int16_t cy = (int16_t)(_egg_card.y + OY);
+        window::Rect card{cx, cy, 340, 150};
+        ui->fill_rect(card, rgb565(28, 32, 50));
+        ui->draw_rect(card, COLOR_YELLOW, 2);
+        ui->fill_rect({cx, cy, card.w, 16}, COLOR_DEEP_BLUE);
+        std::string head = std::string(e.no) + "  " + e.title;
+        ui->draw_text_utf8((int16_t)(cx + 4), (int16_t)(cy + 2), clip_utf8(head, card.w - 12), COLOR_WHITE);
+        ui->draw_text_utf8((int16_t)(cx + 8), (int16_t)(cy + 30), "线索：" , COLOR_LIGHT_GRAY);
+        ui->draw_text_utf8((int16_t)(cx + 8), (int16_t)(cy + 54), e.hint, COLOR_WHITE);
+        ui->draw_text_utf8((int16_t)(cx + 8), (int16_t)(cy + 84), "章节：" , COLOR_LIGHT_GRAY);
+        ui->draw_text_utf8((int16_t)(cx + 8), (int16_t)(cy + 108), e.where, COLOR_WHITE);
+    }
+
+    /* 彩蛋图鉴 */
+    if (_egg_gallery.active) {
+        window::Rect r{_egg_gallery.r.x, (int16_t)(_egg_gallery.r.y + OY), _egg_gallery.r.w, _egg_gallery.r.h};
+        ui->fill_rect(r, rgb565(20, 24, 36));
+        ui->draw_rect(r, COLOR_LIGHT_GRAY, 1);
+        ui->draw_text_utf8((int16_t)(r.x + 3), (int16_t)(r.y + 2), "彩蛋图鉴（21+3）", COLOR_YELLOW);
+        int visible = std::max(1, (r.h - 30) / 20);
+        int y = r.y + 22;
+        int n = 0;
+        for (int i = _egg_gallery.scroll; i < 24 && n < visible; i++, n++, y += 20) {
+            std::string line = std::string(EGGS[i].no) + " " + EGGS[i].title;
+            if (_egg_collected[i]) line += " ✓";
+            ui->draw_text_utf8((int16_t)(r.x + 4), (int16_t)y,
+                               clip_utf8(line, r.w - 10),
+                               _egg_collected[i] ? rgb565(30, 220, 90) : COLOR_WHITE);
+        }
+        int got = 0;
+        for (int i = 0; i < 24; i++) if (_egg_collected[i]) got++;
+        std::string grade = "已收集 " + std::to_string(got) + "/24";
+        if (got >= 24) grade += "  图书管理员！";
+        else if (got >= 18) grade += "  工匠";
+        else if (got >= 10) grade += "  学徒";
+        ui->draw_text_utf8((int16_t)(r.x + 4), (int16_t)(r.y + r.h - 18), grade, COLOR_LIGHT_GRAY);
     }
 }
 

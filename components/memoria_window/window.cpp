@@ -325,8 +325,14 @@ void UIRenderer::draw_image(const Rect& r, const uint16_t* rgb565_buf,
 }
 
 int UIRenderer::text_width_utf8(const std::string& text) {
+    return text_width_utf8(text, 1);
+}
+
+int UIRenderer::text_width_utf8(const std::string& text, int scale) {
     /* UTF-8 混排像素宽度：ASCII 8px（FONT_W），多字节序列（中文 GB2312 字库）16px。
-     * 用于绘制前居中/裁剪判定——禁止用字节数估算（UTF-8 中文 3 字节/字） */
+     * 用于绘制前居中/裁剪判定——禁止用字节数估算（UTF-8 中文 3 字节/字）。
+     * scale 1~3：宽度按比例放大（scale<1 按 1） */
+    if (scale < 1) scale = 1;
     int w = 0;
     size_t i = 0;
     while (i < text.size()) {
@@ -345,7 +351,7 @@ int UIRenderer::text_width_utf8(const std::string& text) {
             i += 1;
         }
     }
-    return w;
+    return w * scale;
 }
 
 void UIRenderer::draw_text(int16_t x, int16_t y, const std::string& text, Color c) {
@@ -355,6 +361,12 @@ void UIRenderer::draw_text(int16_t x, int16_t y, const std::string& text, Color 
 }
 
 void UIRenderer::draw_text_utf8(int16_t x, int16_t y, const std::string& text, Color c) {
+    draw_text_utf8(x, y, text, c, 1);
+}
+
+void UIRenderer::draw_text_utf8(int16_t x, int16_t y, const std::string& text, Color c, int scale) {
+    if (scale < 1) scale = 1;
+    if (scale > 3) scale = 3;
     auto* fb = drivers::Ili9341::instance()->framebuffer();
     if (!fb) return;
     auto* lcd = drivers::Ili9341::instance();
@@ -371,14 +383,18 @@ void UIRenderer::draw_text_utf8(int16_t x, int16_t y, const std::string& text, C
                     uint8_t line = glyph[row];
                     for (int col = 0; col < 8; col++) {
                         if (line & (0x80 >> col)) {
-                            int16_t sx = cx + col, sy = y + row;
-                            if (sx >= 0 && sx < SCREEN_W && sy >= 0 && sy < SCREEN_H)
-                                fb[sy * SCREEN_W + sx] = c;
+                            int16_t bx = cx + col * scale, by = y + row * scale;
+                            for (int dy = 0; dy < scale; dy++)
+                                for (int dx = 0; dx < scale; dx++) {
+                                    int16_t sx = bx + dx, sy = by + dy;
+                                    if (sx >= 0 && sx < SCREEN_W && sy >= 0 && sy < SCREEN_H)
+                                        fb[sy * SCREEN_W + sx] = c;
+                                }
                         }
                     }
                 }
             }
-            cx += FONT_W;
+            cx += FONT_W * scale;
             i++;
             continue;
         }
@@ -397,16 +413,16 @@ void UIRenderer::draw_text_utf8(int16_t x, int16_t y, const std::string& text, C
         int idx = gb2312_index(cp);
         if (idx < 0) {
             /* 缺字：画一个空心方框占位 */
-            lcd->draw_rect(cx, y, CJK_W, CJK_H, c);
-            cx += CJK_W;
+            lcd->draw_rect(cx, y, CJK_W * scale, CJK_H * scale, c);
+            cx += CJK_W * scale;
             i += len;
             continue;
         }
         const uint8_t* glyph = gb2312_glyph(idx);
         if (!glyph) {
             /* 字库未加载（缺 TF 卡）或索引越界：与缺字一致画空心方框 */
-            lcd->draw_rect(cx, y, CJK_W, CJK_H, c);
-            cx += CJK_W;
+            lcd->draw_rect(cx, y, CJK_W * scale, CJK_H * scale, c);
+            cx += CJK_W * scale;
             i += len;
             continue;
         }
@@ -416,13 +432,17 @@ void UIRenderer::draw_text_utf8(int16_t x, int16_t y, const std::string& text, C
             for (int col = 0; col < 16; col++) {
                 uint8_t bit = (col < 8) ? (hi & (0x80 >> col)) : (lo & (0x80 >> (col - 8)));
                 if (bit) {
-                    int16_t sx = cx + col, sy = y + row;
-                    if (sx >= 0 && sx < SCREEN_W && sy >= 0 && sy < SCREEN_H)
-                        fb[sy * SCREEN_W + sx] = c;
+                    int16_t bx = cx + col * scale, by = y + row * scale;
+                    for (int dy = 0; dy < scale; dy++)
+                        for (int dx = 0; dx < scale; dx++) {
+                            int16_t sx = bx + dx, sy = by + dy;
+                            if (sx >= 0 && sx < SCREEN_W && sy >= 0 && sy < SCREEN_H)
+                                fb[sy * SCREEN_W + sx] = c;
+                        }
                 }
             }
         }
-        cx += CJK_W;
+        cx += CJK_W * scale;
         i += len;
     }
 }

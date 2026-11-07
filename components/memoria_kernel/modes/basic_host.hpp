@@ -84,9 +84,14 @@ public:
 private:
     /* ---- 控件状态（BASIC 任务写 / 主循环读，_mtx 保护） ---- */
     struct Panel  { window::Rect r{}; std::string title; };
-    struct Button { window::Rect r{}; std::string label; };
-    struct Label  { int16_t id = 0, x = 0, y = 0; std::string text; uint32_t color = 0xFFFF; uint8_t style = 0; };
+    struct Button { window::Rect r{}; std::string label; int icon = -1; uint8_t font = 1; uint32_t color = 0xFFFF; };
+    struct Label  { int16_t id = 0, x = 0, y = 0; std::string text; uint32_t color = 0xFFFF; uint8_t style = 0; uint8_t font = 1; };
+    struct ListPanel { window::Rect r{}; std::vector<std::string> lines; int scroll = 0; };
     struct AfterTimer { uint32_t due_ms = 0; int line = 0; };   /* 一次性定时跳转 */
+    struct EggInfo { const char* no; const char* title; const char* hint; const char* where; };
+    struct EggCard { bool active = false; int idx = 0; int16_t x = 0, y = 0; };
+    struct EggGallery { bool active = false; window::Rect r{}; int scroll = 0; };
+    static const EggInfo EGGS[24];   /* 教材附录 G 彩蛋数据（cpp 定义） */
     enum class Op : uint8_t { Text, Fill, Rect, Line, Circle, Icon };
     struct DrawOp {
         Op op = Op::Text;
@@ -98,13 +103,19 @@ private:
 
     void _interp_abort();                   /* _interp 存在时 request_abort */
     void _state_reset();                    /* 清控件状态（run 前 / CLEAR） */
-    void _list_add(const std::string& text);
+    void _list_add(ListPanel* p, const std::string& text);
+    /* 兼容 1.4.0 的单参调用点（HTTP 提示等），默认写 id=0 的列表 */
+    void _list_add(const std::string& text) {
+        _list_add(_lists.empty() ? nullptr : &_lists[0], text);
+    }
     void _mark_btn_press();                 /* 确认键/摇杆按下 → 记入聚焦按钮 */
 
     /* 命令实现（BASIC 任务上下文） */
     void _cmd_win(const std::vector<basic::BasicArg>& a);
     void _cmd_list(const std::vector<basic::BasicArg>& a);
     void _cmd_ladd(const std::vector<basic::BasicArg>& a);
+    void _cmd_lclr(const std::vector<basic::BasicArg>& a);
+    void _cmd_lscr(const std::vector<basic::BasicArg>& a);
     void _cmd_btn(const std::vector<basic::BasicArg>& a);
     void _cmd_bsel(const std::vector<basic::BasicArg>& a);
     void _cmd_draw_op(Op op, const std::vector<basic::BasicArg>& a);
@@ -112,7 +123,12 @@ private:
     void _cmd_llbl(const std::vector<basic::BasicArg>& a);
     void _cmd_lbld(const std::vector<basic::BasicArg>& a);
     void _cmd_img(const std::vector<basic::BasicArg>& a);
+    void _cmd_icon(const std::vector<basic::BasicArg>& a);
     void _cmd_after(const std::vector<basic::BasicArg>& a);
+    void _cmd_egg(const std::vector<basic::BasicArg>& a);
+    void _cmd_egglist(const std::vector<basic::BasicArg>& a);
+    void _cmd_eggscroll(const std::vector<basic::BasicArg>& a);
+    ListPanel* _find_list(int id);
     double _func_bkey(const std::vector<basic::BasicArg>& a);
     int  _after_timer_check();              /* 解释器每行回调：到期返回跳转行号 */
     std::string _input_str(const std::string& prompt);
@@ -138,16 +154,17 @@ private:
     std::vector<Panel>   _panels;
     std::vector<Button>  _btns;
     int      _btn_focus = -1;
-    uint8_t  _btn_press[8] = {};            /* 按钮按下标记（bkey(i) 读后清零） */
-    window::Rect _list_r{};
-    bool     _has_list = false;
-    std::vector<std::string> _list_lines;   /* 已按宽换行的展示行 */
-    int      _list_scroll = 0;              /* 顶部展示行号 */
+    uint8_t  _btn_press[16] = {};           /* 按钮按下标记（bkey(i) 读后清零） */
+    std::vector<ListPanel> _lists;          /* 列表多实例（旧单实例 list 视为 id=0） */
     window::Rect _input_r{};
     bool     _has_input_r = false;
     std::vector<DrawOp> _ops;               /* 直接绘制语句重放表 */
     std::vector<Label>  _labels;            /* lbl 文本控件（上限 16，按 id 更新） */
+    std::vector<std::vector<std::string>> _custom_icons;  /* 自定义图标点阵（每图标 16 行×16 字符） */
     std::vector<AfterTimer> _after;         /* after 定时跳转（上限 8，BASIC 任务线程独用） */
+    EggCard _egg_card;                      /* egg id[,x,y] 彩蛋卡 */
+    EggGallery _egg_gallery;                /* egglist 图鉴 */
+    bool _egg_collected[24] = {};           /* 彩蛋收集标记（E01~E21 + C1~C3） */
     uint32_t _cur_color = 0xFFFF;           /* RGB565 白 */
 
     /* input a$ 会话（BASIC 任务等 / 主循环写） */

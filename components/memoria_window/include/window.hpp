@@ -193,7 +193,10 @@ public:
 
     /* UTF-8 中英混排：ASCII 走 8×12，汉字走 GB2312 16×16 点阵 */
     void draw_text_utf8(int16_t x, int16_t y, const std::string& text, Color c);
+    /* 字号缩放重载：scale 1~3，每像素点放大 scale×scale（0 按 1 处理） */
+    void draw_text_utf8(int16_t x, int16_t y, const std::string& text, Color c, int scale);
     static int text_width_utf8(const std::string& text);   /* 绘制前宽度计算（ASCII 8 / 中文 16） */
+    static int text_width_utf8(const std::string& text, int scale);   /* 缩放宽度（scale 1~3） */
 
     /* 字体尺寸 */
     static constexpr int FONT_W = 8;
