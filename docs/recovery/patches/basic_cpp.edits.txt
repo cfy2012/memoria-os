@@ -1,0 +1,430 @@
+# 源文件: I:\Memoria OS\memoria-os\tools\pc\basic.cpp
+# 共 5 处 Edit，按会话顺序排列；每处给出 改前(OLD) / 改后(NEW)
+
+====================================================================================================
+SESSION=38446540393620738 LINE=569 TOOL=Edit
+FILE_PATH=I:\Memoria OS\memoria-os\tools\pc\basic.cpp
+
+--- OLD ---
+    /* ---- GUI 控件状态（对齐固件 basic_host 语义） ---- */
+    bool list_on = false; int lx = 0, ly = 0, lw = 0, lh = 0;
+    std::vector<std::string> lmsgs; int lscroll = 0;
+    std::map<int, std::string> btns; int bsel_i = 0;
+    std::string ime_buf;                      /* inputat 输入内容（键循环演示用） */
+
+    void out(const std::string& s) { std::fputs(s.c_str(), stdout); std::fputc('\n', stdout); std::fflush(stdout); }
+
+--- NEW ---
+    /* ---- GUI 控件状态（对齐固件 basic_host 语义） ---- */
+    struct PCList { int x=0,y=0,w=0,h=0; std::vector<std::string> lines; int scroll=0; bool on=false; };
+    struct PCBtn  { int x=0,y=0,w=0,h=0; std::string label; int icon=-1; int font=1; };
+    struct PCLbl  { int id=0,x=0,y=0; std::string text; int style=0; int font=1; };
+    std::vector<PCList> lists_;                       /* 列表多实例（id=下标） */
+    std::vector<PCBtn>  btns_;                        /* 按钮（同固件 btn x,y,w,h,"文字"[,icon][,font]） */
+    std::vector<PCLbl>  lbls_;                        /* 文本控件（lbl id,x,y,"文字"[,style][,font]） */
+    int bsel_i = 0;
+    bool egg_card_on = false; int egg_idx = 0, egg_x = 40, egg_y = 60;
+    bool egg_gallery_on = false; int egg_gx = 10, egg_gy = 20, egg_gw = 460, egg_gh = 280, egg_scroll = 0;
+    std::map<int, bool> egg_collected;
+    std::string ime_buf;                      /* inputat 输入内容（键循环演示用） */
+
+    static const char* EGG_NO[24];
+    static const char* EGG_TITLE[24];
+    static const char* EGG_HINT[24];
+    static const char* EGG_WHERE[24];
+
+    void out(const std::string& s) { std::fputs(s.c_str(), stdout); std::fputc('\n', stdout); std::fflush(stdout); }
+
+    /* GUI 全量重绘（对齐固件每帧全量重放：面板/列表/按钮/文本/彩蛋） */
+    void render_gui() {
+        /* 列表多实例 */
+        for (auto& lp : lists_) {
+            if (!lp.on) continue;
+            int gw = lp.w / 5, gh = lp.h / 10; if (gw < 1) gw = 1; if (gh < 1) gh = 1;
+            canvas.fill(lp.x, lp.y, lp.w, lp.h, ' ');
+            canvas.rect(lp.x, lp.y, lp.w, lp.h, '+');
+            std::vector<std::string> rows;
+            for (auto& m : lp.lines) {
+                std::string s = m;
+                if (s.empty()) { rows.push_back(""); continue; }
+                while ((int)s.size() > gw - 2) { rows.push_back(s.substr(0, gw - 2)); s = s.substr(gw - 2); }
+                rows.push_back(s);
+            }
+            int avail = gh - 2;
+            int skip = (int)rows.size() - avail - lp.scroll * avail;
+            if (skip < 0) skip = 0;
+            for (int j = 0; j < avail && skip + j < (int)rows.size(); j++)
+                canvas.put_text(lp.x + 5, lp.y + 10 + j * 10, rows[skip + j]);
+        }
+        /* 按钮：指定位置画框 + 文字；聚焦 > 标记；font 放大字符格 */
+        for (int i = 0; i < (int)btns_.size(); i++) {
+            auto& b = btns_[i];
+            int gw = b.w / 5, gh = b.h / 10; if (gw < 1) gw = 1; if (gh < 1) gh = 1;
+            canvas.fill(b.x, b.y, b.w, b.h, ' ');
+            canvas.rect(b.x, b.y, b.w, b.h, (i == bsel_i) ? '>' : '+');
+            int f = b.font < 1 ? 1 : (b.font > 3 ? 3 : b.font);
+            if (!b.label.empty()) {
+                int gx = b.x / 5, gy = b.y / 10;
+                size_t maxc = (size_t)std::max(0, gw - 2);
+                int off = (gw - (int)(b.label.size() * f)) / 2; if (off < 0) off = 0;
+                for (size_t k = 0; k < b.label.size() && gx + off + (int)k * f < CW; k++) {
+                    for (int r = 0; r < f; r++)
+                        if (gx + off + (int)k * f + r < CW)
+                            canvas.cells[gy + gh / 2][gx + off + (int)k * f + r].ch = b.label[k];
+                }
+            }
+        }
+        /* 文本控件 lbl */
+        for (auto& l : lbls_) {
+            if (l.text.empty()) continue;
+            int f = l.font < 1 ? 1 : (l.font > 3 ? 3 : l.font);
+            int gx = l.x / 5, gy = l.y / 10;
+            for (size_t k = 0; k < l.text.size() && gx + (int)k * f < CW; k++) {
+                for (int r = 0; r < f; r++)
+                    if (gx + (int)k * f + r < CW)
+                        canvas.cells[gy][gx + (int)k * f + r].ch = l.text[k];
+            }
+        }
+        /* 彩蛋卡 */
+        if (egg_card_on) {
+            int gx = egg_x / 5, gy = egg_y / 10;
+            canvas.rect(egg_x, egg_y, 340, 150, '+');
+            std::string head = std::string(EGG_NO[egg_idx]) + "  " + EGG_TITLE[egg_idx];
+            canvas.put_text(egg_x + 5, egg_y + 10, head);
+            canvas.put_text(egg_x + 10, egg_y + 50, EGG_HINT[egg_idx]);
+            canvas.put_text(egg_x + 10, egg_y + 90, std::string("章节: ") + EGG_WHERE[egg_idx]);
+        }
+        /* 彩蛋图鉴 */
+        if (egg_gallery_on) {
+            int gw = egg_gw / 5, gh = egg_gh / 10; if (gw < 1) gw = 1; if (gh < 1) gh = 1;
+            canvas.fill(egg_gx, egg_gy, egg_gw, egg_gh, ' ');
+            canvas.rect(egg_gx, egg_gy, egg_gw, egg_gh, '+');
+            canvas.put_text(egg_gx + 5, egg_gy + 2, "彩蛋图鉴 (21+3)");
+            int visible = std::max(1, gh - 2);
+            int got = 0;
+            for (int i = 0; i < 24; i++) if (egg_collected.count(i) && egg_collected[i]) got++;
+            for (int i = 0; i < visible; i++) {
+                int idx = egg_scroll + i;
+                if (idx < 0 || idx >= 24) break;
+                std::string line = std::string(EGG_NO[idx]) + " " + EGG_TITLE[idx];
+                if (egg_collected.count(idx) && egg_collected[idx]) line += " [已收集]";
+                canvas.put_text(egg_gx + 5, egg_gy + 12 + i * 10, line);
+            }
+            std::string grade = "已收集 " + std::to_string(got) + "/24";
+            if (got >= 24) grade += " 图书管理员!";
+            else if (got >= 18) grade += " 工匠";
+            else if (got >= 10) grade += " 学徒";
+            canvas.put_text(egg_gx + 5, egg_gy + egg_gh - 8, grade);
+        }
+        canvas.render();
+    }
+
+--- ARGS_JSON ---
+{
+ "file_path": "I:\\Memoria OS\\memoria-os\\tools\\pc\\basic.cpp",
+ "new_string": "    /* ---- GUI 控件状态（对齐固件 basic_host 语义） ---- */\n    struct PCList { int x=0,y=0,w=0,h=0; std::vector<std::string> lines; int scroll=0; bool on=false; };\n    struct PCBtn  { int x=0,y=0,w=0,h=0; std::string label; int icon=-1; int font=1; };\n    struct PCLbl  { int id=0,x=0,y=0; std::string text; int style=0; int font=1; };\n    std::vector<PCList> lists_;                       /* 列表多实例（id=下标） */\n    std::vector<PCBtn>  btns_;                        /* 按钮（同固件 btn x,y,w,h,\"文字\"[,icon][,font]） */\n    std::vector<PCLbl>  lbls_;                        /* 文本控件（lbl id,x,y,\"文字\"[,style][,font]） */\n    int bsel_i = 0;\n    bool egg_card_on = false; int egg_idx = 0, egg_x = 40, egg_y = 60;\n    bool egg_gallery_on = false; int egg_gx = 10, egg_gy = 20, egg_gw = 460, egg_gh = 280, egg_scroll = 0;\n    std::map<int, bool> egg_collected;\n    std::string ime_buf;                      /* inputat 输入内容（键循环演示用） */\n\n    static const char* EGG_NO[24];\n    static const char* EGG_TITLE[24];\n    static const char* EGG_HINT[24];\n    static const char* EGG_WHERE[24];\n\n    void out(const std::string& s) { std::fputs(s.c_str(), stdout); std::fputc('\\n', stdout); std::fflush(stdout); }\n\n    /* GUI 全量重绘（对齐固件每帧全量重放：面板/列表/按钮/文本/彩蛋） */\n    void render_gui() {\n        /* 列表多实例 */\n        for (auto& lp : lists_) {\n            if (!lp.on) continue;\n            int gw = lp.w / 5, gh = lp.h / 10; if (gw < 1) gw = 1; if (gh < 1) gh = 1;\n            canvas.fill(lp.x, lp.y, lp.w, lp.h, ' ');\n            canvas.rect(lp.x, lp.y, lp.w, lp.h, '+');\n            std::vector<std::string> rows;\n            for (auto& m : lp.lines) {\n                std::string s = m;\n                if (s.empty()) { rows.push_back(\"\"); continue; }\n                while ((int)s.size() > gw - 2) { rows.push_back(s.substr(0, gw - 2)); s = s.substr(gw - 2); }\n                rows.push_back(s);\n            }\n            int avail = gh - 2;\n            int skip = (int)rows.size() - avail - lp.scroll * avail;\n            if (skip < 0) skip = 0;\n            for (int j = 0; j < avail && skip + j < (int)rows.size(); j++)\n                canvas.put_text(lp.x + 5, lp.y + 10 + j * 10, rows[skip + j]);\n        }\n        /* 按钮：指定位置画框 + 文字；聚焦 > 标记；font 放大字符格 */\n        for (int i = 0; i < (int)btns_.size(); i++) {\n            auto& b = btns_[i];\n            int gw = b.w / 5, gh = b.h / 10; if (gw < 1) gw = 1; if (gh < 1) gh = 1;\n            canvas.fill(b.x, b.y, b.w, b.h, ' ');\n            canvas.rect(b.x, b.y, b.w, b.h, (i == bsel_i) ? '>' : '+');\n            int f = b.font < 1 ? 1 : (b.font > 3 ? 3 : b.font);\n            if (!b.label.empty()) {\n                int gx = b.x / 5, gy = b.y / 10;\n                size_t maxc = (size_t)std::max(0, gw - 2);\n                int off = (gw - (int)(b.label.size() * f)) / 2; if (off < 0) off = 0;\n                for (size_t k = 0; k < b.label.size() && gx + off + (int)k * f < CW; k++) {\n                    for (int r = 0; r < f; r++)\n                        if (gx + off + (int)k * f + r < CW)\n                            canvas.cells[gy + gh / 2][gx + off + (int)k * f + r].ch = b.label[k];\n                }\n            }\n        }\n        /* 文本控件 lbl */\n        for (auto& l : lbls_) {\n            if (l.text.empty()) continue;\n            int f = l.font < 1 ? 1 : (l.font > 3 ? 3 : l.font);\n            int gx = l.x / 5, gy = l.y / 10;\n            for (size_t k = 0; k < l.text.size() && gx + (int)k * f < CW; k++) {\n                for (int r = 0; r < f; r++)\n                    if (gx + (int)k * f + r < CW)\n                        canvas.cells[gy][gx + (int)k * f + r].ch = l.text[k];\n            }\n        }\n        /* 彩蛋卡 */\n        if (egg_card_on) {\n            int gx = egg_x / 5, gy = egg_y / 10;\n            canvas.rect(egg_x, egg_y, 340, 150, '+');\n            std::string head = std::string(EGG_NO[egg_idx]) + \"  \" + EGG_TITLE[egg_idx];\n            canvas.put_text(egg_x + 5, egg_y + 10, head);\n            canvas.put_text(egg_x + 10, egg_y + 50, EGG_HINT[egg_idx]);\n            canvas.put_text(egg_x + 10, egg_y + 90, std::string(\"章节: \") + EGG_WHERE[egg_idx]);\n        }\n        /* 彩蛋图鉴 */\n        if (egg_gallery_on) {\n            int gw = egg_gw / 5, gh = egg_gh / 10; if (gw < 1) gw = 1; if (gh < 1) gh = 1;\n            canvas.fill(egg_gx, egg_gy, egg_gw, egg_gh, ' ');\n            canvas.rect(egg_gx, egg_gy, egg_gw, egg_gh, '+');\n            canvas.put_text(egg_gx + 5, egg_gy + 2, \"彩蛋图鉴 (21+3)\");\n            int visible = std::max(1, gh - 2);\n            int got = 0;\n            for (int i = 0; i < 24; i++) if (egg_collected.count(i) && egg_collected[i]) got++;\n            for (int i = 0; i < visible; i++) {\n                int idx = egg_scroll + i;\n                if (idx < 0 || idx >= 24) break;\n                std::string line = std::string(EGG_NO[idx]) + \" \" + EGG_TITLE[idx];\n                if (egg_collected.count(idx) && egg_collected[idx]) line += \" [已收集]\";\n                canvas.put_text(egg_gx + 5, egg_gy + 12 + i * 10, line);\n            }\n            std::string grade = \"已收集 \" + std::to_string(got) + \"/24\";\n            if (got >= 24) grade += \" 图书管理员!\";\n            else if (got >= 18) grade += \" 工匠\";\n            else if (got >= 10) grade += \" 学徒\";\n            canvas.put_text(egg_gx + 5, egg_gy + egg_gh - 8, grade);\n        }\n        canvas.render();\n    }",
+ "old_string": "    /* ---- GUI 控件状态（对齐固件 basic_host 语义） ---- */\n    bool list_on = false; int lx = 0, ly = 0, lw = 0, lh = 0;\n    std::vector<std::string> lmsgs; int lscroll = 0;\n    std::map<int, std::string> btns; int bsel_i = 0;\n    std::string ime_buf;                      /* inputat 输入内容（键循环演示用） */\n\n    void out(const std::string& s) { std::fputs(s.c_str(), stdout); std::fputc('\\n', stdout); std::fflush(stdout); }"
+}
+
+====================================================================================================
+SESSION=38446540393620738 LINE=571 TOOL=Edit
+FILE_PATH=I:\Memoria OS\memoria-os\tools\pc\basic.cpp
+
+--- OLD ---
+    std::map<int, bool> egg_collected;
+    std::string ime_buf;                      /* inputat 输入内容（键循环演示用） */
+
+    static const char* EGG_NO[24];
+    static const char* EGG_TITLE[24];
+    static const char* EGG_HINT[24];
+    static const char* EGG_WHERE[24];
+
+    void out(const std::string& s) { std::fputs(s.c_str(), stdout); std::fputc('\n', stdout); std::fflush(stdout); }
+
+--- NEW ---
+    std::map<int, bool> egg_collected;
+    std::string ime_buf;                      /* inputat 输入内容（键循环演示用） */
+
+    void out(const std::string& s) { std::fputs(s.c_str(), stdout); std::fputc('\n', stdout); std::fflush(stdout); }
+
+--- ARGS_JSON ---
+{
+ "file_path": "I:\\Memoria OS\\memoria-os\\tools\\pc\\basic.cpp",
+ "new_string": "    std::map<int, bool> egg_collected;\n    std::string ime_buf;                      /* inputat 输入内容（键循环演示用） */\n\n    void out(const std::string& s) { std::fputs(s.c_str(), stdout); std::fputc('\\n', stdout); std::fflush(stdout); }",
+ "old_string": "    std::map<int, bool> egg_collected;\n    std::string ime_buf;                      /* inputat 输入内容（键循环演示用） */\n\n    static const char* EGG_NO[24];\n    static const char* EGG_TITLE[24];\n    static const char* EGG_HINT[24];\n    static const char* EGG_WHERE[24];\n\n    void out(const std::string& s) { std::fputs(s.c_str(), stdout); std::fputc('\\n', stdout); std::fflush(stdout); }"
+}
+
+====================================================================================================
+SESSION=38446540393620738 LINE=573 TOOL=Edit
+FILE_PATH=I:\Memoria OS\memoria-os\tools\pc\basic.cpp
+
+--- OLD ---
+        std::fputs(o.c_str(), stdout); std::fflush(stdout);
+    }
+};
+
+--- NEW ---
+        std::fputs(o.c_str(), stdout); std::fflush(stdout);
+    }
+};
+
+/* 教材附录 G 彩蛋图鉴数据（E01~E21 + C1~C3） */
+static const char* EGG_NO[24] = {
+    "E01","E02","E03","E04","E05","E06","E07","E08","E09","E10","E11","E12",
+    "E13","E14","E15","E16","E17","E18","E19","E20","E21","C1","C2","C3"};
+static const char* EGG_TITLE[24] = {
+    "世界上第一只 bug","为什么叫“浮点”","早期没有 and/or","真随机","最早的聊天程序","AI 会“作弊”",
+    "循环变量为什么叫 i","高斯的快捷方式","电磁炉同款设计","ASCII 是 1963 年的","直线的算法","404 是房间号吗",
+    "16kHz 是什么音质","memoria 是拉丁词","串当背包的出处","屏幕是长个子的","return 的记性本","状态码是一套暗号",
+    "重启是过劳疗法","为什么是十万步","三个项目是一条路","秒表挑战","服务器的暗号","快枪手认证"};
+static const char* EGG_HINT[24] = {
+    "继电器里的飞蛾","别用 = 比小数","乘加逻辑的老写法","芯片抓热噪声","ELIZA","深蓝的一步棋",
+    "FORTRAN 的工号","首尾配对 101×50","干烧断电哲学","大小写差 32","1962 年的 Bresenham","都市传说",
+    "电话是 8kHz","记忆的意思","string packing","320×240 老坐标","栈","4 怪自己 5 怪对方",
+    "关机睡一觉","放过正常人拦下疯子","逻辑 · 画面 · 网络","会走字的 lbl","联网猜数字","3 次以内有台词"};
+static const char* EGG_WHERE[24] = {
+    "0x01 行号","0x02 变量","0x03 运算符","0x03 运算符","0x11 input","0x12 if",
+    "0x21 for","0x21 for","0x22 while","0x31 字符串","0x41 绘图","0x61 网络",
+    "0x62 声音","0x01 print","0x31 字符串","0x41 绘图","0x51 gosub","0x61 网络",
+    "0x71 硬件","0x72 保命","0x83 综合项目","0x41 章末","0x61 章末","0x81 章末"};
+
+--- ARGS_JSON ---
+{
+ "file_path": "I:\\Memoria OS\\memoria-os\\tools\\pc\\basic.cpp",
+ "new_string": "        std::fputs(o.c_str(), stdout); std::fflush(stdout);\n    }\n};\n\n/* 教材附录 G 彩蛋图鉴数据（E01~E21 + C1~C3） */\nstatic const char* EGG_NO[24] = {\n    \"E01\",\"E02\",\"E03\",\"E04\",\"E05\",\"E06\",\"E07\",\"E08\",\"E09\",\"E10\",\"E11\",\"E12\",\n    \"E13\",\"E14\",\"E15\",\"E16\",\"E17\",\"E18\",\"E19\",\"E20\",\"E21\",\"C1\",\"C2\",\"C3\"};\nstatic const char* EGG_TITLE[24] = {\n    \"世界上第一只 bug\",\"为什么叫“浮点”\",\"早期没有 and/or\",\"真随机\",\"最早的聊天程序\",\"AI 会“作弊”\",\n    \"循环变量为什么叫 i\",\"高斯的快捷方式\",\"电磁炉同款设计\",\"ASCII 是 1963 年的\",\"直线的算法\",\"404 是房间号吗\",\n    \"16kHz 是什么音质\",\"memoria 是拉丁词\",\"串当背包的出处\",\"屏幕是长个子的\",\"return 的记性本\",\"状态码是一套暗号\",\n    \"重启是过劳疗法\",\"为什么是十万步\",\"三个项目是一条路\",\"秒表挑战\",\"服务器的暗号\",\"快枪手认证\"};\nstatic const char* EGG_HINT[24] = {\n    \"继电器里的飞蛾\",\"别用 = 比小数\",\"乘加逻辑的老写法\",\"芯片抓热噪声\",\"ELIZA\",\"深蓝的一步棋\",\n    \"FORTRAN 的工号\",\"首尾配对 101×50\",\"干烧断电哲学\",\"大小写差 32\",\"1962 年的 Bresenham\",\"都市传说\",\n    \"电话是 8kHz\",\"记忆的意思\",\"string packing\",\"320×240 老坐标\",\"栈\",\"4 怪自己 5 怪对方\",\n    \"关机睡一觉\",\"放过正常人拦下疯子\",\"逻辑 · 画面 · 网络\",\"会走字的 lbl\",\"联网猜数字\",\"3 次以内有台词\"};\nstatic const char* EGG_WHERE[24] = {\n    \"0x01 行号\",\"0x02 变量\",\"0x03 运算符\",\"0x03 运算符\",\"0x11 input\",\"0x12 if\",\n    \"0x21 for\",\"0x21 for\",\"0x22 while\",\"0x31 字符串\",\"0x41 绘图\",\"0x61 网络\",\n    \"0x62 声音\",\"0x01 print\",\"0x31 字符串\",\"0x41 绘图\",\"0x51 gosub\",\"0x61 网络\",\n    \"0x71 硬件\",\"0x72 保命\",\"0x83 综合项目\",\"0x41 章末\",\"0x61 章末\",\"0x81 章末\"};",
+ "old_string": "        std::fputs(o.c_str(), stdout); std::fflush(stdout);\n    }\n};"
+}
+
+====================================================================================================
+SESSION=38446540393620738 LINE=575 TOOL=Edit
+FILE_PATH=I:\Memoria OS\memoria-os\tools\pc\basic.cpp
+
+--- OLD ---
+        canvas.reset(); http_status = 0; wifi_note_ = false; gpio_note_ = false;
+
+--- NEW ---
+        canvas.reset(); http_status = 0; wifi_note_ = false; gpio_note_ = false;
+        lists_.clear(); btns_.clear(); lbls_.clear(); bsel_i = 0;
+        egg_card_on = false; egg_gallery_on = false; egg_scroll = 0; egg_collected.clear();
+
+--- ARGS_JSON ---
+{
+ "file_path": "I:\\Memoria OS\\memoria-os\\tools\\pc\\basic.cpp",
+ "new_string": "        canvas.reset(); http_status = 0; wifi_note_ = false; gpio_note_ = false;\n        lists_.clear(); btns_.clear(); lbls_.clear(); bsel_i = 0;\n        egg_card_on = false; egg_gallery_on = false; egg_scroll = 0; egg_collected.clear();",
+ "old_string": "        canvas.reset(); http_status = 0; wifi_note_ = false; gpio_note_ = false;"
+}
+
+====================================================================================================
+SESSION=38446540393620738 LINE=581 TOOL=Edit
+FILE_PATH=I:\Memoria OS\memoria-os\tools\pc\basic.cpp
+
+--- OLD ---
+        /* ---- GUI 控件（对齐固件 basic_host；字符画布模拟） ---- */
+        auto render_list = [&]() {
+            if (!list_on) return;
+            int gw = lw / 5, gh = lh / 10; if (gw < 1) gw = 1; if (gh < 1) gh = 1;
+            canvas.fill(lx, ly, lw, lh, ' ');
+            canvas.rect(lx, ly, lw, lh, '+');
+            /* 消息换行填充区域，取尾部（跟随滚动），lscroll 向上翻页 */
+            std::vector<std::string> rows;
+            for (auto& m : lmsgs) {
+                std::string s = m;
+                while ((int)rows.size() > 4096) rows.erase(rows.begin());
+                if (s.empty()) { rows.push_back(""); continue; }
+                while ((int)s.size() > gw - 2) { rows.push_back(s.substr(0, gw - 2)); s = s.substr(gw - 2); }
+                rows.push_back(s);
+            }
+            int avail = gh - 2;
+            int skip = (int)rows.size() - avail - lscroll * avail;
+            if (skip < 0) skip = 0;
+            for (int j = 0; j < avail && skip + j < (int)rows.size(); j++)
+                canvas.put_text(lx + 5, ly + 10 + j * 10, rows[skip + j]);
+        };
+        auto render_btns = [&]() {   /* 按钮行画在画布底部 */
+            if (btns.empty()) return;
+            int by = (CH - 1) * 10;
+            std::string line;
+            for (auto& b : btns) {
+                line += (b.first == bsel_i ? ">" : " ");
+                line += "[" + std::to_string(b.first) + ":" + b.second + "]";
+            }
+            for (int i = 0; i < CW; i++) canvas.putc(i * 5, by, ' ');   /* 清按钮行 */
+            canvas.put_text(0, by, line);
+        };
+        if (head == "TEXT") {
+            auto ps = split_top_commas(rest);
+            if (ps.size() >= 3) canvas.put_text((int)eval_num(ps[0]), (int)eval_num(ps[1]),
+                                                eval_str(ps[2]));
+            canvas.render(); return true;
+        }
+        if (head == "RECT") {
+            auto v = nums(rest); if (v.size() >= 4) canvas.rect((int)v[0], (int)v[1], (int)v[2], (int)v[3]);
+            canvas.render(); return true;
+        }
+        if (head == "FILL") {
+            auto v = nums(rest); if (v.size() >= 4) canvas.fill((int)v[0], (int)v[1], (int)v[2], (int)v[3]);
+            canvas.render(); return true;
+        }
+        if (head == "WIN") {
+            auto ps = split_top_commas(rest);
+            if (ps.size() >= 5) {
+                int x = (int)eval_num(ps[0]), y = (int)eval_num(ps[1]);
+                int w = (int)eval_num(ps[2]), h = (int)eval_num(ps[3]);
+                canvas.fill(x, y, w, h, ' ');
+                canvas.rect(x, y, w, h, '+');
+                canvas.put_text(x + 5, y, "- " + eval_str(ps[4]) + " -");
+            }
+            canvas.render(); return true;
+        }
+        if (head == "LIST") {
+            auto v = nums(rest);
+            if (v.size() >= 4) { lx = (int)v[0]; ly = (int)v[1]; lw = (int)v[2]; lh = (int)v[3]; list_on = true; lscroll = 0; }
+            render_list(); canvas.render(); return true;
+        }
+        if (head == "LADD")  { for (auto& s : strs(rest)) lmsgs.push_back(s); lscroll = 0; render_list(); canvas.render(); return true; }
+        if (head == "LCLR")  { lmsgs.clear(); lscroll = 0; render_list(); canvas.render(); return true; }
+        if (head == "LSCR")  { auto v = nums(rest); if (!v.empty()) lscroll = std::max(0, (int)v[0]); render_list(); canvas.render(); return true; }
+        if (head == "BTN") {
+            auto ps = split_top_commas(rest);
+            if (ps.size() >= 2) btns[(int)eval_num(ps[0])] = eval_str(ps[1]);
+            render_btns(); canvas.render(); return true;
+        }
+        if (head == "BSEL") {
+            auto v = nums(rest); if (!v.empty()) bsel_i = (int)v[0];
+            render_btns(); canvas.render(); return true;
+        }
+
+--- NEW ---
+        /* ---- GUI 控件（对齐固件 basic_host；字符画布模拟） ---- */
+        if (head == "TEXT") {
+            auto ps = split_top_commas(rest);
+            if (ps.size() >= 3) canvas.put_text((int)eval_num(ps[0]), (int)eval_num(ps[1]), eval_str(ps[2]));
+            canvas.render(); return true;
+        }
+        if (head == "RECT") { auto v = nums(rest); if (v.size() >= 4) canvas.rect((int)v[0],(int)v[1],(int)v[2],(int)v[3]); canvas.render(); return true; }
+        if (head == "FILL") { auto v = nums(rest); if (v.size() >= 4) canvas.fill((int)v[0],(int)v[1],(int)v[2],(int)v[3]); canvas.render(); return true; }
+        if (head == "WIN") {
+            auto ps = split_top_commas(rest);
+            if (ps.size() >= 5) {
+                int x=(int)eval_num(ps[0]), y=(int)eval_num(ps[1]), w=(int)eval_num(ps[2]), h=(int)eval_num(ps[3]);
+                canvas.fill(x,y,w,h,' '); canvas.rect(x,y,w,h,'+');
+                canvas.put_text(x+5, y, "- " + eval_str(ps[4]) + " -");
+            }
+            canvas.render(); return true;
+        }
+        /* 列表多实例：list id,x,y,w,h（旧 list x,y,w,h 视为 id=0） */
+        if (head == "LIST") {
+            auto v = nums(rest);
+            if (v.size() >= 4) {
+                int id = 0, off = 0;
+                if (v.size() >= 5) { id = (int)v[0]; off = 1; }
+                while ((int)lists_.size() <= id) lists_.push_back(PCList{});
+                auto& lp = lists_[id];
+                lp.x=(int)v[off]; lp.y=(int)v[off+1]; lp.w=(int)v[off+2]; lp.h=(int)v[off+3];
+                lp.lines.clear(); lp.scroll=0; lp.on=true;
+            }
+            render_gui(); return true;
+        }
+        if (head == "LADD") {
+            auto ps = split_top_commas(rest);
+            if (ps.empty()) { render_gui(); return true; }
+            int id = 0; size_t ti = 0;
+            if (is_numeric_str(trim_str(ps[0]))) { if (ps.size() < 2) { render_gui(); return true; } id=(int)eval_num(ps[0]); ti=1; }
+            if (id < 0 || id >= (int)lists_.size()) { render_gui(); return true; }
+            auto& lp = lists_[id];
+            auto ss = strs(rest);
+            for (size_t k = ti; k < ss.size(); k++) lp.lines.push_back(ss[k]);
+            lp.scroll = 0;
+            render_gui(); return true;
+        }
+        if (head == "LCLR") {
+            auto v = nums(rest);
+            int id = v.empty() ? 0 : (int)v[0];
+            if (id >= 0 && id < (int)lists_.size()) { lists_[id].lines.clear(); lists_[id].scroll = 0; }
+            render_gui(); return true;
+        }
+        if (head == "LSCR") {
+            auto v = nums(rest);
+            if (v.size() >= 2) { int id=(int)v[0], n=(int)v[1]; if (id>=0 && id<(int)lists_.size()) lists_[id].scroll=std::max(0,n); }
+            else if (v.size() == 1 && !lists_.empty()) lists_[0].scroll = std::max(0,(int)v[0]);
+            render_gui(); return true;
+        }
+        /* 按钮：btn x,y,w,h,"文字"[,icon][,font]（上限 16） */
+        if (head == "BTN") {
+            auto ps = split_top_commas(rest);
+            if (ps.size() >= 4 && (int)btns_.size() < 16) {
+                PCBtn b;
+                b.x=(int)eval_num(ps[0]); b.y=(int)eval_num(ps[1]); b.w=(int)eval_num(ps[2]); b.h=(int)eval_num(ps[3]);
+                b.label = ps.size() >= 5 ? eval_str(ps[4]) : "";
+                if (ps.size() >= 6 && is_numeric_str(trim_str(ps[5]))) b.icon=(int)eval_num(ps[5]);
+                if (ps.size() >= 7 && is_numeric_str(trim_str(ps[6]))) b.font=std::max(1,std::min(3,(int)eval_num(ps[6])));
+                btns_.push_back(b);
+            }
+            render_gui(); return true;
+        }
+        if (head == "BSEL") { auto v = nums(rest); if (!v.empty()) bsel_i=(int)v[0]; render_gui(); return true; }
+        /* 文本控件：lbl id,x,y,"文字"[,style][,font]；llbl id,"文字"[,font]；lbld id */
+        if (head == "LBL") {
+            auto ps = split_top_commas(rest);
+            if (ps.size() >= 4) {
+                PCLbl l;
+                l.id=(int)eval_num(ps[0]); l.x=(int)eval_num(ps[1]); l.y=(int)eval_num(ps[2]); l.text=eval_str(ps[3]);
+                if (ps.size() >= 5 && is_numeric_str(trim_str(ps[4]))) l.style=std::max(0,std::min(2,(int)eval_num(ps[4])));
+                if (ps.size() >= 6 && is_numeric_str(trim_str(ps[5]))) l.font=std::max(1,std::min(3,(int)eval_num(ps[5])));
+                bool hit=false;
+                for (auto& e : lbls_) if (e.id == l.id) { e=l; hit=true; break; }
+                if (!hit && (int)lbls_.size() < 16) lbls_.push_back(l);
+            }
+            render_gui(); return true;
+        }
+        if (head == "LLBL") {
+            auto ps = split_top_commas(rest);
+            if (ps.size() >= 2) {
+                int id=(int)eval_num(ps[0]);
+                for (auto& e : lbls_) if (e.id == id) {
+                    e.text=eval_str(ps[1]);
+                    if (ps.size() >= 3 && is_numeric_str(trim_str(ps[2]))) e.font=std::max(1,std::min(3,(int)eval_num(ps[2])));
+                    break;
+                }
+            }
+            render_gui(); return true;
+        }
+        if (head == "LBLD") {
+            auto v = nums(rest);
+            if (!v.empty()) { int id=(int)v[0]; for (size_t k=0;k<lbls_.size();k++) if (lbls_[k].id==id) { lbls_.erase(lbls_.begin()+k); break; } }
+            render_gui(); return true;
+        }
+        if (head == "IMG")  { render_gui(); return true; }   /* 图标直绘：字符画布近似忽略，语法吃掉 */
+        if (head == "ICON") { render_gui(); return true; }   /* 自定义图标：PC 端忽略内容，语法吃掉 */
+        /* 彩蛋：egg id[,x,y] / egglist [x,y,w,h] / eggscroll n */
+        if (head == "EGG") {
+            auto v = nums(rest);
+            if (!v.empty()) {
+                int id=(int)v[0];
+                if (id == 0) egg_card_on = false;
+                else if (id >= 1 && id <= 24) { egg_card_on=true; egg_idx=id-1; egg_x=v.size()>=2?(int)v[1]:40; egg_y=v.size()>=3?(int)v[2]:60; egg_collected[id-1]=true; }
+            }
+            render_gui(); return true;
+        }
+        if (head == "EGGLIST") {
+            auto v = nums(rest);
+            if (v.size() >= 4) { egg_gx=(int)v[0]; egg_gy=(int)v[1]; egg_gw=(int)v[2]; egg_gh=(int)v[3]; }
+            egg_gallery_on = true; egg_scroll = 0;
+            render_gui(); return true;
+        }
+        if (head == "EGGSCROLL") {
+            auto v = nums(rest);
+            if (!v.empty() && egg_gallery_on) {
+                int visible = std::max(1, (egg_gh/10) - 2);
+                int lo = 0, hi = std::max(0, 24 - visible);
+                egg_scroll = std::max(lo, std::min(hi, egg_scroll + (int)v[0]));
+            }
+            render_gui(); return true;
+        }
+
+--- ARGS_JSON ---
+{
+ "file_path": "I:\\Memoria OS\\memoria-os\\tools\\pc\\basic.cpp",
+ "new_string": "        /* ---- GUI 控件（对齐固件 basic_host；字符画布模拟） ---- */\n        if (head == \"TEXT\") {\n            auto ps = split_top_commas(rest);\n            if (ps.size() >= 3) canvas.put_text((int)eval_num(ps[0]), (int)eval_num(ps[1]), eval_str(ps[2]));\n            canvas.render(); return true;\n        }\n        if (head == \"RECT\") { auto v = nums(rest); if (v.size() >= 4) canvas.rect((int)v[0],(int)v[1],(int)v[2],(int)v[3]); canvas.render(); return true; }\n        if (head == \"FILL\") { auto v = nums(rest); if (v.size() >= 4) canvas.fill((int)v[0],(int)v[1],(int)v[2],(int)v[3]); canvas.render(); return true; }\n        if (head == \"WIN\") {\n            auto ps = split_top_commas(rest);\n            if (ps.size() >= 5) {\n                int x=(int)eval_num(ps[0]), y=(int)eval_num(ps[1]), w=(int)eval_num(ps[2]), h=(int)eval_num(ps[3]);\n                canvas.fill(x,y,w,h,' '); canvas.rect(x,y,w,h,'+');\n                canvas.put_text(x+5, y, \"- \" + eval_str(ps[4]) + \" -\");\n            }\n            canvas.render(); return true;\n        }\n        /* 列表多实例：list id,x,y,w,h（旧 list x,y,w,h 视为 id=0） */\n        if (head == \"LIST\") {\n            auto v = nums(rest);\n            if (v.size() >= 4) {\n                int id = 0, off = 0;\n                if (v.size() >= 5) { id = (int)v[0]; off = 1; }\n                while ((int)lists_.size() <= id) lists_.push_back(PCList{});\n                auto& lp = lists_[id];\n                lp.x=(int)v[off]; lp.y=(int)v[off+1]; lp.w=(int)v[off+2]; lp.h=(int)v[off+3];\n                lp.lines.clear(); lp.scroll=0; lp.on=true;\n            }\n            render_gui(); return true;\n        }\n        if (head == \"LADD\") {\n            auto ps = split_top_commas(rest);\n            if (ps.empty()) { render_gui(); return true; }\n            int id = 0; size_t ti = 0;\n            if (is_numeric_str(trim_str(ps[0]))) { if (ps.size() < 2) { render_gui(); return true; } id=(int)eval_num(ps[0]); ti=1; }\n            if (id < 0 || id >= (int)lists_.size()) { render_gui(); return true; }\n            auto& lp = lists_[id];\n            auto ss = strs(rest);\n            for (size_t k = ti; k < ss.size(); k++) lp.lines.push_back(ss[k]);\n            lp.scroll = 0;\n            render_gui(); return true;\n        }\n        if (head == \"LCLR\") {\n            auto v = nums(rest);\n            int id = v.empty() ? 0 : (int)v[0];\n            if (id >= 0 && id < (int)lists_.size()) { lists_[id].lines.clear(); lists_[id].scroll = 0; }\n            render_gui(); return true;\n        }\n        if (head == \"LSCR\") {\n            auto v = nums(rest);\n            if (v.size() >= 2) { int id=(int)v[0], n=(int)v[1]; if (id>=0 && id<(int)lists_.size()) lists_[id].scroll=std::max(0,n); }\n            else if (v.size() == 1 && !lists_.empty()) lists_[0].scroll = std::max(0,(int)v[0]);\n            render_gui(); return true;\n        }\n        /* 按钮：btn x,y,w,h,\"文字\"[,icon][,font]（上限 16） */\n        if (head == \"BTN\") {\n            auto ps = split_top_commas(rest);\n            if (ps.size() >= 4 && (int)btns_.size() < 16) {\n                PCBtn b;\n                b.x=(int)eval_num(ps[0]); b.y=(int)eval_num(ps[1]); b.w=(int)eval_num(ps[2]); b.h=(int)eval_num(ps[3]);\n                b.label = ps.size() >= 5 ? eval_str(ps[4]) : \"\";\n                if (ps.size() >= 6 && is_numeric_str(trim_str(ps[5]))) b.icon=(int)eval_num(ps[5]);\n                if (ps.size() >= 7 && is_numeric_str(trim_str(ps[6]))) b.font=std::max(1,std::min(3,(int)eval_num(ps[6])));\n                btns_.push_back(b);\n            }\n            render_gui(); return true;\n        }\n        if (head == \"BSEL\") { auto v = nums(rest); if (!v.empty()) bsel_i=(int)v[0]; render_gui(); return true; }\n        /* 文本控件：lbl id,x,y,\"文字\"[,style][,font]；llbl id,\"文字\"[,font]；lbld id */\n        if (head == \"LBL\") {\n            auto ps = split_top_commas(rest);\n            if (ps.size() >= 4) {\n                PCLbl l;\n                l.id=(int)eval_num(ps[0]); l.x=(int)eval_num(ps[1]); l.y=(int)eval_num(ps[2]); l.text=eval_str(ps[3]);\n                if (ps.size() >= 5 && is_numeric_str(trim_str(ps[4]))) l.style=std::max(0,std::min(2,(int)eval_num(ps[4])));\n                if (ps.size() >= 6 && is_numeric_str(trim_str(ps[5]))) l.font=std::max(1,std::min(3,(int)eval_num(ps[5])));\n                bool hit=false;\n                for (auto& e : lbls_) if (e.id == l.id) { e=l; hit=true; break; }\n                if (!hit && (int)lbls_.size() < 16) lbls_.push_back(l);\n            }\n            render_gui(); return true;\n        }\n        if (head == \"LLBL\") {\n            auto ps = split_top_commas(rest);\n            if (ps.size() >= 2) {\n                int id=(int)eval_num(ps[0]);\n                for (auto& e : lbls_) if (e.id == id) {\n                    e.text=eval_str(ps[1]);\n                    if (ps.size() >= 3 && is_numeric_str(trim_str(ps[2]))) e.font=std::max(1,std::min(3,(int)eval_num(ps[2])));\n                    break;\n                }\n            }\n            render_gui(); return true;\n        }\n        if (head == \"LBLD\") {\n            auto v = nums(rest);\n            if (!v.empty()) { int id=(int)v[0]; for (size_t k=0;k<lbls_.size();k++) if (lbls_[k].id==id) { lbls_.erase(lbls_.begin()+k); break; } }\n            render_gui(); return true;\n        }\n        if (head == \"IMG\")  { render_gui(); return true; }   /* 图标直绘：字符画布近似忽略，语法吃掉 */\n        if (head == \"ICON\") { render_gui(); return true; }   /* 自定义图标：PC 端忽略内容，语法吃掉 */\n        /* 彩蛋：egg id[,x,y] / egglist [x,y,w,h] / eggscroll n */\n        if (head == \"EGG\") {\n            auto v = nums(rest);\n            if (!v.empty()) {\n                int id=(int)v[0];\n                if (id == 0) egg_card_on = false;\n                else if (id >= 1 && id <= 24) { egg_card_on=true; egg_idx=id-1; egg_x=v.size()>=2?(int)v[1]:40; egg_y=v.size()>=3?(int)v[2]:60; egg_collected[id-1]=true; }\n            }\n            render_gui(); return true;\n        }\n        if (head == \"EGGLIST\") {\n            auto v = nums(rest);\n            if (v.size() >= 4) { egg_gx=(int)v[0]; egg_gy=(int)v[1]; egg_gw=(int)v[2]; egg_gh=(int)v[3]; }\n            egg_gallery_on = true; egg_scroll = 0;\n            render_gui(); return true;\n        }\n        if (head == \"EGGSCROLL\") {\n            auto v = nums(rest);\n            if (!v.empty() && egg_gallery_on) {\n                int visible = std::max(1, (egg_gh/10) - 2);\n                int lo = 0, hi = std::max(0, 24 - visible);\n                egg_scroll = std::max(lo, std::min(hi, egg_scroll + (int)v[0]));\n            }\n            render_gui(); return true;\n        }",
+ "old_string": "        /* ---- GUI 控件（对齐固件 basic_host；字符画布模拟） ---- */\n        auto render_list = [&]() {\n            if (!list_on) return;\n            int gw = lw / 5, gh = lh / 10; if (gw < 1) gw = 1; if (gh < 1) gh = 1;\n            canvas.fill(lx, ly, lw, lh, ' ');\n            canvas.rect(lx, ly, lw, lh, '+');\n            /* 消息换行填充区域，取尾部（跟随滚动），lscroll 向上翻页 */\n            std::vector<std::string> rows;\n            for (auto& m : lmsgs) {\n                std::string s = m;\n                while ((int)rows.size() > 4096) rows.erase(rows.begin());\n                if (s.empty()) { rows.push_back(\"\"); continue; }\n                while ((int)s.size() > gw - 2) { rows.push_back(s.substr(0, gw - 2)); s = s.substr(gw - 2); }\n                rows.push_back(s);\n            }\n            int avail = gh - 2;\n            int skip = (int)rows.size() - avail - lscroll * avail;\n            if (skip < 0) skip = 0;\n            for (int j = 0; j < avail && skip + j < (int)rows.size(); j++)\n                canvas.put_text(lx + 5, ly + 10 + j * 10, rows[skip + j]);\n        };\n        auto render_btns = [&]() {   /* 按钮行画在画布底部 */\n            if (btns.empty()) return;\n            int by = (CH - 1) * 10;\n            std::string line;\n            for (auto& b : btns) {\n                line += (b.first == bsel_i ? \">\" : \" \");\n                line += \"[\" + std::to_string(b.first) + \":\" + b.second + \"]\";\n            }\n            for (int i = 0; i < CW; i++) canvas.putc(i * 5, by, ' ');   /* 清按钮行 */\n            canvas.put_text(0, by, line);\n        };\n        if (head == \"TEXT\") {\n            auto ps = split_top_commas(rest);\n            if (ps.size() >= 3) canvas.put_text((int)eval_num(ps[0]), (int)eval_num(ps[1]),\n                                                eval_str(ps[2]));\n            canvas.render(); return true;\n        }\n        if (head == \"RECT\") {\n            auto v = nums(rest); if (v.size() >= 4) canvas.rect((int)v[0], (int)v[1], (int)v[2], (int)v[3]);\n            canvas.render(); return true;\n        }\n        if (head == \"FILL\") {\n            auto v = nums(rest); if (v.size() >= 4) canvas.fill((int)v[0], (int)v[1], (int)v[2], (int)v[3]);\n            canvas.render(); return true;\n        }\n        if (head == \"WIN\") {\n            auto ps = split_top_commas(rest);\n            if (ps.size() >= 5) {\n                int x = (int)eval_num(ps[0]), y = (int)eval_num(ps[1]);\n                int w = (int)eval_num(ps[2]), h = (int)eval_num(ps[3]);\n                canvas.fill(x, y, w, h, ' ');\n                canvas.rect(x, y, w, h, '+');\n                canvas.put_text(x + 5, y, \"- \" + eval_str(ps[4]) + \" -\");\n            }\n            canvas.render(); return true;\n        }\n        if (head == \"LIST\") {\n            auto v = nums(rest);\n            if (v.size() >= 4) { lx = (int)v[0]; ly = (int)v[1]; lw = (int)v[2]; lh = (int)v[3]; list_on = true; lscroll = 0; }\n            render_list(); canvas.render(); return true;\n        }\n        if (head == \"LADD\")  { for (auto& s : strs(rest)) lmsgs.push_back(s); lscroll = 0; render_list(); canvas.render(); return true; }\n        if (head == \"LCLR\")  { lmsgs.clear(); lscroll = 0; render_list(); canvas.render(); return true; }\n        if (head == \"LSCR\")  { auto v = nums(rest); if (!v.empty()) lscroll = std::max(0, (int)v[0]); render_list(); canvas.render(); return true; }\n        if (head == \"BTN\") {\n            auto ps = split_top_commas(rest);\n            if (ps.size() >= 2) btns[(int)eval_num(ps[0])] = eval_str(ps[1]);\n            render_btns(); canvas.render(); return true;\n        }\n        if (head == \"BSEL\") {\n            auto v = nums(rest); if (!v.empty()) bsel_i = (int)v[0];\n            render_btns(); canvas.render(); return true;\n        }"
+}

@@ -1,0 +1,221 @@
+# 源文件: I:\Memoria OS\memoria-os\components\memoria_kernel\modes\basic_host.hpp
+# 共 8 处 Edit，按会话顺序排列；每处给出 改前(OLD) / 改后(NEW)
+
+====================================================================================================
+SESSION=38446540393620738 LINE=467 TOOL=Edit
+FILE_PATH=I:\Memoria OS\memoria-os\components\memoria_kernel\modes\basic_host.hpp
+
+--- OLD ---
+    /* ---- 控件状态（BASIC 任务写 / 主循环读，_mtx 保护） ---- */
+    struct Panel  { window::Rect r{}; std::string title; };
+    struct Button { window::Rect r{}; std::string label; };
+    struct Label  { int16_t id = 0, x = 0, y = 0; std::string text; uint32_t color = 0xFFFF; uint8_t style = 0; };
+    struct AfterTimer { uint32_t due_ms = 0; int line = 0; };   /* 一次性定时跳转 */
+
+--- NEW ---
+    /* ---- 控件状态（BASIC 任务写 / 主循环读，_mtx 保护） ---- */
+    struct Panel  { window::Rect r{}; std::string title; };
+    struct Button { window::Rect r{}; std::string label; int icon = -1; uint8_t font = 1; uint32_t color = 0xFFFF; };
+    struct Label  { int16_t id = 0, x = 0, y = 0; std::string text; uint32_t color = 0xFFFF; uint8_t style = 0; uint8_t font = 1; };
+    struct ListPanel { window::Rect r{}; std::vector<std::string> lines; int scroll = 0; };
+    struct AfterTimer { uint32_t due_ms = 0; int line = 0; };   /* 一次性定时跳转 */
+
+--- ARGS_JSON ---
+{
+ "file_path": "I:\\Memoria OS\\memoria-os\\components\\memoria_kernel\\modes\\basic_host.hpp",
+ "new_string": "    /* ---- 控件状态（BASIC 任务写 / 主循环读，_mtx 保护） ---- */\n    struct Panel  { window::Rect r{}; std::string title; };\n    struct Button { window::Rect r{}; std::string label; int icon = -1; uint8_t font = 1; uint32_t color = 0xFFFF; };\n    struct Label  { int16_t id = 0, x = 0, y = 0; std::string text; uint32_t color = 0xFFFF; uint8_t style = 0; uint8_t font = 1; };\n    struct ListPanel { window::Rect r{}; std::vector<std::string> lines; int scroll = 0; };\n    struct AfterTimer { uint32_t due_ms = 0; int line = 0; };   /* 一次性定时跳转 */",
+ "old_string": "    /* ---- 控件状态（BASIC 任务写 / 主循环读，_mtx 保护） ---- */\n    struct Panel  { window::Rect r{}; std::string title; };\n    struct Button { window::Rect r{}; std::string label; };\n    struct Label  { int16_t id = 0, x = 0, y = 0; std::string text; uint32_t color = 0xFFFF; uint8_t style = 0; };\n    struct AfterTimer { uint32_t due_ms = 0; int line = 0; };   /* 一次性定时跳转 */"
+}
+
+====================================================================================================
+SESSION=38446540393620738 LINE=469 TOOL=Edit
+FILE_PATH=I:\Memoria OS\memoria-os\components\memoria_kernel\modes\basic_host.hpp
+
+--- OLD ---
+    void _cmd_win(const std::vector<basic::BasicArg>& a);
+    void _cmd_list(const std::vector<basic::BasicArg>& a);
+    void _cmd_ladd(const std::vector<basic::BasicArg>& a);
+    void _cmd_btn(const std::vector<basic::BasicArg>& a);
+    void _cmd_bsel(const std::vector<basic::BasicArg>& a);
+    void _cmd_draw_op(Op op, const std::vector<basic::BasicArg>& a);
+    void _cmd_lbl(const std::vector<basic::BasicArg>& a);
+    void _cmd_llbl(const std::vector<basic::BasicArg>& a);
+    void _cmd_lbld(const std::vector<basic::BasicArg>& a);
+    void _cmd_img(const std::vector<basic::BasicArg>& a);
+    void _cmd_after(const std::vector<basic::BasicArg>& a);
+    double _func_bkey(const std::vector<basic::BasicArg>& a);
+
+--- NEW ---
+    void _cmd_win(const std::vector<basic::BasicArg>& a);
+    void _cmd_list(const std::vector<basic::BasicArg>& a);
+    void _cmd_ladd(const std::vector<basic::BasicArg>& a);
+    void _cmd_lclr(const std::vector<basic::BasicArg>& a);
+    void _cmd_lscr(const std::vector<basic::BasicArg>& a);
+    void _cmd_btn(const std::vector<basic::BasicArg>& a);
+    void _cmd_bsel(const std::vector<basic::BasicArg>& a);
+    void _cmd_draw_op(Op op, const std::vector<basic::BasicArg>& a);
+    void _cmd_lbl(const std::vector<basic::BasicArg>& a);
+    void _cmd_llbl(const std::vector<basic::BasicArg>& a);
+    void _cmd_lbld(const std::vector<basic::BasicArg>& a);
+    void _cmd_img(const std::vector<basic::BasicArg>& a);
+    void _cmd_icon(const std::vector<basic::BasicArg>& a);
+    void _cmd_after(const std::vector<basic::BasicArg>& a);
+    void _cmd_egg(const std::vector<basic::BasicArg>& a);
+    void _cmd_egglist(const std::vector<basic::BasicArg>& a);
+    ListPanel* _find_list(int id);
+    double _func_bkey(const std::vector<basic::BasicArg>& a);
+
+--- ARGS_JSON ---
+{
+ "file_path": "I:\\Memoria OS\\memoria-os\\components\\memoria_kernel\\modes\\basic_host.hpp",
+ "new_string": "    void _cmd_win(const std::vector<basic::BasicArg>& a);\n    void _cmd_list(const std::vector<basic::BasicArg>& a);\n    void _cmd_ladd(const std::vector<basic::BasicArg>& a);\n    void _cmd_lclr(const std::vector<basic::BasicArg>& a);\n    void _cmd_lscr(const std::vector<basic::BasicArg>& a);\n    void _cmd_btn(const std::vector<basic::BasicArg>& a);\n    void _cmd_bsel(const std::vector<basic::BasicArg>& a);\n    void _cmd_draw_op(Op op, const std::vector<basic::BasicArg>& a);\n    void _cmd_lbl(const std::vector<basic::BasicArg>& a);\n    void _cmd_llbl(const std::vector<basic::BasicArg>& a);\n    void _cmd_lbld(const std::vector<basic::BasicArg>& a);\n    void _cmd_img(const std::vector<basic::BasicArg>& a);\n    void _cmd_icon(const std::vector<basic::BasicArg>& a);\n    void _cmd_after(const std::vector<basic::BasicArg>& a);\n    void _cmd_egg(const std::vector<basic::BasicArg>& a);\n    void _cmd_egglist(const std::vector<basic::BasicArg>& a);\n    ListPanel* _find_list(int id);\n    double _func_bkey(const std::vector<basic::BasicArg>& a);",
+ "old_string": "    void _cmd_win(const std::vector<basic::BasicArg>& a);\n    void _cmd_list(const std::vector<basic::BasicArg>& a);\n    void _cmd_ladd(const std::vector<basic::BasicArg>& a);\n    void _cmd_btn(const std::vector<basic::BasicArg>& a);\n    void _cmd_bsel(const std::vector<basic::BasicArg>& a);\n    void _cmd_draw_op(Op op, const std::vector<basic::BasicArg>& a);\n    void _cmd_lbl(const std::vector<basic::BasicArg>& a);\n    void _cmd_llbl(const std::vector<basic::BasicArg>& a);\n    void _cmd_lbld(const std::vector<basic::BasicArg>& a);\n    void _cmd_img(const std::vector<basic::BasicArg>& a);\n    void _cmd_after(const std::vector<basic::BasicArg>& a);\n    double _func_bkey(const std::vector<basic::BasicArg>& a);"
+}
+
+====================================================================================================
+SESSION=38446540393620738 LINE=471 TOOL=Edit
+FILE_PATH=I:\Memoria OS\memoria-os\components\memoria_kernel\modes\basic_host.hpp
+
+--- OLD ---
+    std::vector<Panel>   _panels;
+    std::vector<Button>  _btns;
+    int      _btn_focus = -1;
+    uint8_t  _btn_press[8] = {};            /* 按钮按下标记（bkey(i) 读后清零） */
+    window::Rect _list_r{};
+    bool     _has_list = false;
+    std::vector<std::string> _list_lines;   /* 已按宽换行的展示行 */
+    int      _list_scroll = 0;              /* 顶部展示行号 */
+    window::Rect _input_r{};
+    bool     _has_input_r = false;
+    std::vector<DrawOp> _ops;               /* 直接绘制语句重放表 */
+    std::vector<Label>  _labels;            /* lbl 文本控件（上限 16，按 id 更新） */
+    std::vector<AfterTimer> _after;         /* after 定时跳转（上限 8，BASIC 任务线程独用） */
+    uint32_t _cur_color = 0xFFFF;           /* RGB565 白 */
+
+--- NEW ---
+    std::vector<Panel>   _panels;
+    std::vector<Button>  _btns;
+    int      _btn_focus = -1;
+    uint8_t  _btn_press[16] = {};           /* 按钮按下标记（bkey(i) 读后清零） */
+    std::vector<ListPanel> _lists;          /* 列表多实例（旧单实例 list 视为 id=0） */
+    window::Rect _input_r{};
+    bool     _has_input_r = false;
+    std::vector<DrawOp> _ops;               /* 直接绘制语句重放表 */
+    std::vector<Label>  _labels;            /* lbl 文本控件（上限 16，按 id 更新） */
+    std::vector<std::vector<std::string>> _custom_icons;  /* 自定义图标点阵（每图标 16 行×16 字符） */
+    std::vector<AfterTimer> _after;         /* after 定时跳转（上限 8，BASIC 任务线程独用） */
+    uint32_t _cur_color = 0xFFFF;           /* RGB565 白 */
+
+--- ARGS_JSON ---
+{
+ "file_path": "I:\\Memoria OS\\memoria-os\\components\\memoria_kernel\\modes\\basic_host.hpp",
+ "new_string": "    std::vector<Panel>   _panels;\n    std::vector<Button>  _btns;\n    int      _btn_focus = -1;\n    uint8_t  _btn_press[16] = {};           /* 按钮按下标记（bkey(i) 读后清零） */\n    std::vector<ListPanel> _lists;          /* 列表多实例（旧单实例 list 视为 id=0） */\n    window::Rect _input_r{};\n    bool     _has_input_r = false;\n    std::vector<DrawOp> _ops;               /* 直接绘制语句重放表 */\n    std::vector<Label>  _labels;            /* lbl 文本控件（上限 16，按 id 更新） */\n    std::vector<std::vector<std::string>> _custom_icons;  /* 自定义图标点阵（每图标 16 行×16 字符） */\n    std::vector<AfterTimer> _after;         /* after 定时跳转（上限 8，BASIC 任务线程独用） */\n    uint32_t _cur_color = 0xFFFF;           /* RGB565 白 */",
+ "old_string": "    std::vector<Panel>   _panels;\n    std::vector<Button>  _btns;\n    int      _btn_focus = -1;\n    uint8_t  _btn_press[8] = {};            /* 按钮按下标记（bkey(i) 读后清零） */\n    window::Rect _list_r{};\n    bool     _has_list = false;\n    std::vector<std::string> _list_lines;   /* 已按宽换行的展示行 */\n    int      _list_scroll = 0;              /* 顶部展示行号 */\n    window::Rect _input_r{};\n    bool     _has_input_r = false;\n    std::vector<DrawOp> _ops;               /* 直接绘制语句重放表 */\n    std::vector<Label>  _labels;            /* lbl 文本控件（上限 16，按 id 更新） */\n    std::vector<AfterTimer> _after;         /* after 定时跳转（上限 8，BASIC 任务线程独用） */\n    uint32_t _cur_color = 0xFFFF;           /* RGB565 白 */"
+}
+
+====================================================================================================
+SESSION=38446540393620738 LINE=483 TOOL=Edit
+FILE_PATH=I:\Memoria OS\memoria-os\components\memoria_kernel\modes\basic_host.hpp
+
+--- OLD ---
+    void _state_reset();                    /* 清控件状态（run 前 / CLEAR） */
+    void _list_add(const std::string& text);
+
+--- NEW ---
+    void _state_reset();                    /* 清控件状态（run 前 / CLEAR） */
+    void _list_add(ListPanel* p, const std::string& text);
+
+--- ARGS_JSON ---
+{
+ "file_path": "I:\\Memoria OS\\memoria-os\\components\\memoria_kernel\\modes\\basic_host.hpp",
+ "new_string": "    void _state_reset();                    /* 清控件状态（run 前 / CLEAR） */\n    void _list_add(ListPanel* p, const std::string& text);",
+ "old_string": "    void _state_reset();                    /* 清控件状态（run 前 / CLEAR） */\n    void _list_add(const std::string& text);"
+}
+
+====================================================================================================
+SESSION=38446540393620738 LINE=499 TOOL=Edit
+FILE_PATH=I:\Memoria OS\memoria-os\components\memoria_kernel\modes\basic_host.hpp
+
+--- OLD ---
+    struct AfterTimer { uint32_t due_ms = 0; int line = 0; };   /* 一次性定时跳转 */
+
+--- NEW ---
+    struct AfterTimer { uint32_t due_ms = 0; int line = 0; };   /* 一次性定时跳转 */
+    struct EggInfo { const char* no; const char* title; const char* hint; const char* where; };
+    struct EggCard { bool active = false; int idx = 0; int16_t x = 0, y = 0; };
+    struct EggGallery { bool active = false; window::Rect r{}; int scroll = 0; };
+
+--- ARGS_JSON ---
+{
+ "file_path": "I:\\Memoria OS\\memoria-os\\components\\memoria_kernel\\modes\\basic_host.hpp",
+ "new_string": "    struct AfterTimer { uint32_t due_ms = 0; int line = 0; };   /* 一次性定时跳转 */\n    struct EggInfo { const char* no; const char* title; const char* hint; const char* where; };\n    struct EggCard { bool active = false; int idx = 0; int16_t x = 0, y = 0; };\n    struct EggGallery { bool active = false; window::Rect r{}; int scroll = 0; };",
+ "old_string": "    struct AfterTimer { uint32_t due_ms = 0; int line = 0; };   /* 一次性定时跳转 */"
+}
+
+====================================================================================================
+SESSION=38446540393620738 LINE=501 TOOL=Edit
+FILE_PATH=I:\Memoria OS\memoria-os\components\memoria_kernel\modes\basic_host.hpp
+
+--- OLD ---
+    void _cmd_after(const std::vector<basic::BasicArg>& a);
+    void _cmd_egg(const std::vector<basic::BasicArg>& a);
+    void _cmd_egglist(const std::vector<basic::BasicArg>& a);
+    ListPanel* _find_list(int id);
+
+--- NEW ---
+    void _cmd_after(const std::vector<basic::BasicArg>& a);
+    void _cmd_egg(const std::vector<basic::BasicArg>& a);
+    void _cmd_egglist(const std::vector<basic::BasicArg>& a);
+    void _cmd_eggscroll(const std::vector<basic::BasicArg>& a);
+    ListPanel* _find_list(int id);
+
+--- ARGS_JSON ---
+{
+ "file_path": "I:\\Memoria OS\\memoria-os\\components\\memoria_kernel\\modes\\basic_host.hpp",
+ "new_string": "    void _cmd_after(const std::vector<basic::BasicArg>& a);\n    void _cmd_egg(const std::vector<basic::BasicArg>& a);\n    void _cmd_egglist(const std::vector<basic::BasicArg>& a);\n    void _cmd_eggscroll(const std::vector<basic::BasicArg>& a);\n    ListPanel* _find_list(int id);",
+ "old_string": "    void _cmd_after(const std::vector<basic::BasicArg>& a);\n    void _cmd_egg(const std::vector<basic::BasicArg>& a);\n    void _cmd_egglist(const std::vector<basic::BasicArg>& a);\n    ListPanel* _find_list(int id);"
+}
+
+====================================================================================================
+SESSION=38446540393620738 LINE=503 TOOL=Edit
+FILE_PATH=I:\Memoria OS\memoria-os\components\memoria_kernel\modes\basic_host.hpp
+
+--- OLD ---
+    std::vector<std::vector<std::string>> _custom_icons;  /* 自定义图标点阵（每图标 16 行×16 字符） */
+    std::vector<AfterTimer> _after;         /* after 定时跳转（上限 8，BASIC 任务线程独用） */
+    uint32_t _cur_color = 0xFFFF;           /* RGB565 白 */
+
+--- NEW ---
+    std::vector<std::vector<std::string>> _custom_icons;  /* 自定义图标点阵（每图标 16 行×16 字符） */
+    std::vector<AfterTimer> _after;         /* after 定时跳转（上限 8，BASIC 任务线程独用） */
+    EggCard _egg_card;                      /* egg id[,x,y] 彩蛋卡 */
+    EggGallery _egg_gallery;                /* egglist 图鉴 */
+    bool _egg_collected[24] = {};           /* 彩蛋收集标记（E01~E21 + C1~C3） */
+    uint32_t _cur_color = 0xFFFF;           /* RGB565 白 */
+
+--- ARGS_JSON ---
+{
+ "file_path": "I:\\Memoria OS\\memoria-os\\components\\memoria_kernel\\modes\\basic_host.hpp",
+ "new_string": "    std::vector<std::vector<std::string>> _custom_icons;  /* 自定义图标点阵（每图标 16 行×16 字符） */\n    std::vector<AfterTimer> _after;         /* after 定时跳转（上限 8，BASIC 任务线程独用） */\n    EggCard _egg_card;                      /* egg id[,x,y] 彩蛋卡 */\n    EggGallery _egg_gallery;                /* egglist 图鉴 */\n    bool _egg_collected[24] = {};           /* 彩蛋收集标记（E01~E21 + C1~C3） */\n    uint32_t _cur_color = 0xFFFF;           /* RGB565 白 */",
+ "old_string": "    std::vector<std::vector<std::string>> _custom_icons;  /* 自定义图标点阵（每图标 16 行×16 字符） */\n    std::vector<AfterTimer> _after;         /* after 定时跳转（上限 8，BASIC 任务线程独用） */\n    uint32_t _cur_color = 0xFFFF;           /* RGB565 白 */"
+}
+
+====================================================================================================
+SESSION=38446540393620738 LINE=557 TOOL=Edit
+FILE_PATH=I:\Memoria OS\memoria-os\components\memoria_kernel\modes\basic_host.hpp
+
+--- OLD ---
+    struct EggCard { bool active = false; int idx = 0; int16_t x = 0, y = 0; };
+    struct EggGallery { bool active = false; window::Rect r{}; int scroll = 0; };
+
+--- NEW ---
+    struct EggCard { bool active = false; int idx = 0; int16_t x = 0, y = 0; };
+    struct EggGallery { bool active = false; window::Rect r{}; int scroll = 0; };
+    static const EggInfo EGGS[24];   /* 教材附录 G 彩蛋数据（cpp 定义） */
+
+--- ARGS_JSON ---
+{
+ "file_path": "I:\\Memoria OS\\memoria-os\\components\\memoria_kernel\\modes\\basic_host.hpp",
+ "new_string": "    struct EggCard { bool active = false; int idx = 0; int16_t x = 0, y = 0; };\n    struct EggGallery { bool active = false; window::Rect r{}; int scroll = 0; };\n    static const EggInfo EGGS[24];   /* 教材附录 G 彩蛋数据（cpp 定义） */",
+ "old_string": "    struct EggCard { bool active = false; int idx = 0; int16_t x = 0, y = 0; };\n    struct EggGallery { bool active = false; window::Rect r{}; int scroll = 0; };"
+}

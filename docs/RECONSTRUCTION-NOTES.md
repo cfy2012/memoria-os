@@ -57,7 +57,22 @@
 | 键盘矩阵接线表 docx | `I:\Memoria OS\键盘矩阵接线表-打印版.docx` | 二极管方向约定在内 |
 | 上述 docx 的生成脚本 | `I:\Memoria OS\电路\_tools\gen_full_docx.py` | |
 
-## 七、只讨论、未落地
+## 七、旧 KiCad 图已知错误（重画接线时避开）
+
+2026-10-27 导出的网表与 `drivers_config.hpp` 比对，6 处确定对不上：
+
+| 信号 | 旧图画成 | 源码实际 | 备注 |
+|------|----------|----------|------|
+| I2S_DOUT | GPIO45 | GPIO15 | 45 是 strapping 脚 |
+| I2S_BCLK | GPIO39 | GPIO18 | 39 后来给了 SDMMC_CMD |
+| MIC_SD | GPIO38 | GPIO16 | 38 是摇杆 SW |
+| JOY_BTN | GPIO16 | GPIO38 | 与 MIC 那行对调 |
+| CHRG_DET | GPIO13 | GPIO42 | 13 是 SPI_MISO |
+| SUBMOS_EN | 画到 EN 复位脚 | GPIO48 | 位置错 |
+
+另有 2 处未能定位到具体信号。旧原理图原件随 I 盘丢失，重画时以本表与 `drivers_config.hpp` 为准，不要沿用旧图。
+
+## 八、只讨论、未落地
 
 - VMware / x86 移植（源码盘点过，未编译、未出 ISO）
 - ILI9486 并口驱动、屏型号取舍（9488 / 9481 / 9486）
@@ -65,7 +80,7 @@
 - 彩蛋 #33 / #35（计算器、文件与成就系统）
 - 5 个 BASIC 游戏的 `.bas` 源文件：预览页有，源文件是否落过盘不确定
 
-## 八、本段新增、1.4.0 里没有的
+## 九、本段新增、1.4.0 里没有的
 
 - `archive/snapshots/`：三份旧快照归档
 - `tools/push_api.py`：Git Data API 推送工具（443 被重置时用），逐提交重建 + blob 逐字节校验，token 只读环境变量
