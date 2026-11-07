@@ -119,3 +119,59 @@
 | `_design/shell-design/Memoria-OS/外壳尺寸规划.html` | `design/shell-design/Memoria-OS外壳尺寸规划.html` |
 | `_docs/硬件采购清单.docx` | `docs/硬件采购清单.docx`（仓内版更新，不要覆盖） |
 | `_simulator/启动CHAT代理.bat` | `simulator/启动CHAT代理.bat` |
+
+## 十一、OTA 分区缺陷与两种修法（未落地，待点头）
+
+**实测现状**（`partitions.csv` 全文）：
+
+| 分区 | 偏移 | 大小 | 结束 |
+|------|------|------|------|
+| nvs | 0x009000 | 0x006000 | 0x00F000 |
+| phy_init | 0x00F000 | 0x001000 | 0x010000 |
+| factory | 0x010000 | 0x2F0000 | 0x300000 |
+| ota_0 | 0x300000 | 0x2F0000 | 0x5F0000 |
+| mem_fat | 0x5F0000 | 0x620000 | 0xC10000 |
+| mem_priv | 0xC10000 | 0x300000 | 0xF10000 |
+
+**没有 `otadata`，也没有 `ota_1`。**
+
+这不只是"第一次能升、第二次失败"。ESP-IDF 的槽位切换靠 `otadata` 记录"下次从哪启动"，缺了这个分区，`esp_ota_set_boot_partition()` 无法生效——能下载、能写进 `ota_1`，但启动仍走原槽。**当前 OTA 链路一次都不成立。**
+
+### 方案 A：保留 factory，从 FAT 切 3MB
+
+| 分区 | 偏移 | 大小 |
+|------|------|------|
+| nvs | 0x009000 | 0x006000 |
+| phy_init | 0x00F000 | 0x001000 |
+| otadata | 0x010000 | 0x002000 |
+| factory | 0x020000 | 0x2E0000 |
+| ota_0 | 0x300000 | 0x2E0000 |
+| ota_1 | 0x5E0000 | 0x2E0000 |
+| mem_fat | 0x8C0000 | 0x350000 |
+| mem_priv | 0xC10000 | 0x300000 |
+
+代价：`mem_fat` 从 6.4MB 缩到 3.3MB。音频、视频、字库都放这儿，大概率不够。
+
+### 方案 B：去掉 factory，FAT 不动（推荐）
+
+| 分区 | 偏移 | 大小 |
+|------|------|------|
+| nvs | 0x009000 | 0x006000 |
+| phy_init | 0x00F000 | 0x001000 |
+| otadata | 0x010000 | 0x002000 |
+| ota_0 | 0x020000 | 0x2F0000 |
+| ota_1 | 0x310000 | 0x2F0000 |
+| mem_fat | 0x600000 | 0x620000 |
+| mem_priv | 0xC20000 | 0x300000 |
+
+`mem_fat` 6.4MB、`mem_priv` 3MB 都不变，app 每槽仍 0x2F0000。第一个 ota 槽就是出厂镜像，不必再留一份一模一样的 factory。
+
+代价：首次烧录 app 地址从 `0x10000` 变 `0x20000`（`idf.py flash` 按分区表自动处理，手写 esptool 命令要改）；没有独立"出厂恢复槽"，恢复靠重烧 `ota_0`。
+
+### 两方案共同要求
+
+1. 改完必须 `erase_flash` 整片重刷，旧分区布局里的数据全部作废。
+2. `sdkconfig.defaults` 加 `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y`，否则升级失败不会自动回滚。
+3. 改完才算真正能做第一次 OTA 验证——目前一次都没跑过。
+
+**没动的原因**：改分区表会改变烧录地址，属于需要先定 FAT 容量的决策，等确认走 A 还是 B 再落。
