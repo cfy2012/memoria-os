@@ -87,8 +87,15 @@ def build_commit(repo, owner, token, commit, parent_remote, parent_tree):
     new_idx = tree_index(repo, commit)
     entries = []
     uploaded = 0
-    for st, path, _old in diff_pairs(repo, commit + "^", commit):
+    for st, path, alt in diff_pairs(repo, commit + "^", commit):
         code = st[0]
+        if code in ("R", "C"):
+            oldpath = path
+            path = alt
+            if code == "R":
+                entries.append({"path": oldpath.decode("utf-8", "surrogateescape"),
+                                "mode": old_idx.get(oldpath, ("100644",))[0],
+                                "type": "blob", "sha": None})
         pstr = path.decode("utf-8", "surrogateescape")
         if code == "D":
             entries.append({"path": pstr, "mode": old_idx.get(path, ("100644",))[0],
