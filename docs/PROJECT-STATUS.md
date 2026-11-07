@@ -1,6 +1,6 @@
 # Memoria OS · 项目现状与待办
 
-> 生成：2026-11-07（v1.6.0 重建基线）· 上一版：2026-10-07（v1.3.0，已归档 `archive/snapshots/PROJECT-STATUS-2026-10-07-v1.3.0.md`）
+> 生成：2026-11-07（v1.6.1，轨迹补丁复原 GUI 之后）· 上一版：2026-10-07（v1.3.0，已归档 `archive/snapshots/PROJECT-STATUS-2026-10-07-v1.3.0.md`）
 > 本文件是项目「当前真实状态」的汇总快照，接手先读。详细账本仍以各原始文档为准。
 
 ## 一、项目一句话
@@ -12,11 +12,11 @@ ESP32-S3 N16R8 上的自研掌机操作系统：内核、窗口、文件系统�
 | 线 | 状态 | 说明 |
 |----|------|------|
 | 仓库落地 | 🟢 完成 | I 盘物理损坏后，从 GitHub 完整回落到 `G:\Memoria OS`；基线 `f2413394`（v1.4.0，54 次提交） |
-| 固件主线 | 🟢 **v1.6.0 编译全绿** | 1261 步构建通过，bin 1,877,248 B / SHA256 `97FB4F04…`，factory 分区余 39% |
+| 固件主线 | 🟢 **v1.6.1 编译全绿** | 零警告零错误，bin 1,884,384 B / SHA256 `59EC2755…`，factory 分区余 39% |
 | 版本账 | 🟢 厘清 | v1.5.0 源码从未推送、随盘丢失，**不补号**；1.6.0 起重新起算 |
 | 引脚/接线 | 🟡 CHRG 与 SDMMC 已定 | CHRG 49→42；新增 SDMMC CLK40/CMD39/D0 41（1-bit）；共占用 26 个 GPIO，47/48 已分给功放使能与次级电源 MOS，**无剩余普通 IO** |
-| OTA 分发 | 🟢 已上传 1.6.0 | `memoria-ota` 远端已收 `memoria_os_1.6.0.bin` + `version.json`(1.6.0)，待真机验证 |
-| 远端仓库 | 🟢 已同步 v1.6.0 | 两个仓远端 main 内容与本地逐字节一致（tree 校验通过）；哈希与本地不同，因本地提交带 SSH 签名，详见六 |
+| OTA 分发 | 🟢 已上传 1.6.1 | `memoria-ota` 远端已收 `memoria_os_1.6.1.bin` + `version.json`(1.6.1)，待真机验证 |
+| 远端仓库 | 🟢 已同步 v1.6.1 | 两个仓远端 main 内容与本地逐字节一致（tree 校验通过）；哈希与本地不同，因本地提交带 SSH 签名，详见六 |
 | 硬件到位 | 🟡 卡在两件料 | 到手屏是 ILI9486 8bit 并口，固件走 ILI9488 SPI；MCP23017 到手 SOIC-28，BOM 要 DIP-28 |
 | 上板实测 | 🟡 进行中 | 烧录/boot/命令行已验；键盘、TF 卡、音频、外设待上 |
 | 稳定性 | 🟢 本轮一轮静态处理 | 见 `docs/CHANGELOG.md` v1.6.0「稳定性处理」与「构建链路修复」两节 |
@@ -48,6 +48,7 @@ ESP32-S3 N16R8 上的自研掌机操作系统：内核、窗口、文件系统�
 | 21 | 深睡眠整套（v1.4.0 起） | `power.cpp` boot_defaults/amp_set_en/subm_rail/NVS 关机标志/deep_sleep_now（EXT0 GPIO2）；`kernel.cpp` 七步关机 |
 | 22 | AudioGuard 音频保护链（v1.4.0 起） | 12Hz 一阶高通 + 软限幅（阈值 0.85，-1.4dB 内直通）+ 热量保护，覆盖 WAV/MP3/M4A/AAC/MJPEG 全播放路径；`docs/audio-guard/` 存 48 首前后对比 |
 | 23 | 硬盘损毁后重建（v1.6.0） | 全量回落 + 构建可复现修复 + 引脚收口 + 26 条带引号脏路径清理 + 旧快照归档 |
+| 24 | 轨迹补丁复原 GUI（v1.6.1） | 40 处 Edit 重放：字模 1~3 倍缩放、列表多实例、按钮 icon/font、按钮上限 8→16、自定义图标 100~139、彩蛋图鉴 24 条；`tools/apply_edits.py` 按 OLD 精确落位 |
 
 ## 四、待办任务表
 
@@ -63,7 +64,7 @@ ESP32-S3 N16R8 上的自研掌机操作系统：内核、窗口、文件系统�
 | 6 | P1 | 摇杆/电池/喇叭/灯带逐项上板验证 | 用户 | 接线 | ⚪ |
 | 7 | P1 | 外壳 3D 建模（卡尺实测后开工） | — | 器件到货 | ⚪ |
 | 8 | P1.5 | 麦克风 INMP441 上板验证 | — | 上板稳定后 | ⚪ |
-| 9 | P2 | OTA 真机验证（等 1.6.0 上线 jsdelivr 后） | 用户 | #1 | ⚪ |
+| 9 | P2 | OTA 真机验证（等 1.6.1 上线 jsdelivr 后） | 用户 | #1 | ⚪ |
 | 10 | P2 | 42 小时挂测 + 72 小时出货验收 | 用户 | 上板稳定 | ⚪ |
 | 11 | P2 | 三复位源排查（BOD 欠压 / task_wdt / StoreProhibited panic），`HEALTH-REPORT.md` 列为最高优先级 | 固件 | 上板复现日志 | ⚪ |
 
@@ -71,11 +72,11 @@ ESP32-S3 N16R8 上的自研掌机操作系统：内核、窗口、文件系统�
 
 | 产物 | 值 | 备注 |
 |------|-----|------|
-| `build/memoria_os.bin` v1.6.0 | 1,877,248 B / SHA256 `97FB4F0471E5FF3B587F7F0A793A5D93B07E0E1EB68BACA8426275400B4949FB` | 1261 步全绿，factory 分区余 39% |
-| `firmware/memoria_os_1.6.0.bin` | 同上，逐字节复制 | 待随 OTA 上线 |
-| `firmware/version.json` | version 1.6.0 / url 指向 `memoria_os_1.6.0.bin` / major false | 已随 OTA 仓上传 |
-| 本地 git | `main` 三个提交：`f2413394`（v1.4.0）→ `d4f3ebf`（重建基线）→ `1ce95d4`（文档与分发） | 远端正本见「六」 |
-| OTA 远端 | firmware 目录：1.0.0 / 1.1.0 / 1.2.1 / 1.4.0 / **1.6.0** 五个 bin + version.json(1.6.0) | 已上传，等真机 OTA 验证 |
+| `build/memoria_os.bin` v1.6.1 | 1,884,384 B / SHA256 `59EC2755863C5BE9C7D97A2C6C42DB6EF1276A327DA8D58BE41B2DD039584D28` | 零警告零错误，factory 分区余 39% |
+| `firmware/memoria_os_1.6.1.bin` | 同上，逐字节复制 | 已随 OTA 仓上传 |
+| `firmware/version.json` | version 1.6.1 / url 指向 `memoria_os_1.6.1.bin` / major false | 已随 OTA 仓上传 |
+| 本地 git | `main` 七个提交：`f2413394`（v1.4.0）→ `d4f3ebf` → `1ce95d4` → `96a9052` → `200283f` → `867dc6f`（1.6.1 补丁复原）→ `6615d7af`（push_api 修 rename） | 远端正本见「六」 |
+| OTA 远端 | firmware 目录：1.0.0 / 1.1.0 / 1.2.1 / 1.4.0 / 1.6.0 / **1.6.1** 六个 bin + version.json(1.6.1) | 已上传，等真机 OTA 验证 |
 | 旧快照归档 | `archive/snapshots/` 三份（MEMORY-SNAPSHOT v1.1.2 / PROJECT-STATUS v1.3.0 / HEALTH-REPORT 10-06） | 原文件保留未删 |
 | 脏目录留档 | `archive/legacy-quoted-dirs-2026-11-07.zip`（26 文件 / 888,962 B） | 三个 `_design`/`_docs`/`_simulator` 已删除 |
 
@@ -87,4 +88,5 @@ ESP32-S3 N16R8 上的自研掌机操作系统：内核、窗口、文件系统�
 - **I2S/TF/MIC 引脚两套口径未定**：代码 `drivers_config.hpp` 是 BCLK18 / WS21 / DOUT15 / MIC16 / TF CS17；记忆里的「最终定版」是 DOUT16 / MIC17 / TF CS18 / BCLK19 / WS22。除 CHRG 外无文档硬证据，本轮只动了 CHRG 与新增 SDMMC，未擅自改这套。
 - **SPI_MISO 不一致**：代码写 13，`docs/WIRING.md` 旧版写 15。本轮 WIRING.md 表格以代码为准保留 13，待实物接线时二次确认。
 - **三复位源未处理**：BOD 欠压 / 看门狗 / StoreProhibited panic 仍挂在 `HEALTH-REPORT.md` 最高优先级，需要上板复现日志才能定位。
-- **v1.6.x 其余改动清单已随盘丢失**：当前 1.6.0 的边界是「v1.4.0 基线 + 记忆清单增量」，不是原 1.6.0 的全貌。
+- **1.6.x 仍有缺口**：10-11 那批 GUI 改动已用轨迹补丁复原（v1.6.1）。仍缺的是 1.5.0 整版的其余内容——系统设置 UI 优化、桌面文件夹重命名/拖出修复等，没有任何代码或 diff 记录，只能等 GLM 线的会话记录或重做。
+- **`tools/pc/basic.cpp` 未恢复**：补丁只有 5 处增量，文件本体从未入库，没有底稿，PC 模拟器仍缺。

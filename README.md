@@ -1,6 +1,6 @@
 # Memoria OS
 
-**Memoria OS v1.6.0** 是一款基于 ESP32-S3（N16R8：16 MB Flash + 8 MB Octal PSRAM）自主设计的掌机操作系统。系统内核、窗口系统、文件系统、脚本引擎、BASIC 解释器与应用商店均为从零自研，不依赖 Linux、LVGL 或任何现成 UI 框架。项目以开源复古计算与嵌入式系统学习为定位，面向希望理解完整嵌入式系统栈的开发者。
+**Memoria OS v1.6.1** 是一款基于 ESP32-S3（N16R8：16 MB Flash + 8 MB Octal PSRAM）自主设计的掌机操作系统。系统内核、窗口系统、文件系统、脚本引擎、BASIC 解释器与应用商店均为从零自研，不依赖 Linux、LVGL 或任何现成 UI 框架。项目以开源复古计算与嵌入式系统学习为定位，面向希望理解完整嵌入式系统栈的开发者。
 
 ## 项目定位
 
@@ -66,11 +66,13 @@ idf.py build
 idf.py -p COMx flash monitor
 ```
 
-构建基线保持全绿，编译选项启用 `-Werror`，当前零警告。v1.6.0 固件二进制约 1.87 MB（app 分区 39% 空闲）。
+构建基线保持全绿，编译选项启用 `-Werror`，当前零警告。v1.6.1 固件二进制约 1.88 MB（app 分区 39% 空闲）。
 
 > **换机器重建必读**：仓库不收录 `sdkconfig`，构建配置全部由 `sdkconfig.defaults` 生成。其中 FreeRTOS 段必须保留
 > `CONFIG_FREERTOS_USE_TRACE_FACILITY=y` 与 `CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y`——`shell` 的 `sys` 命令调用
 > `uxTaskGetSystemState()` 列任务栈水位，这两项关闭时链接期会报 `undefined reference`。
+
+**v1.6.1（2026-11-07，轨迹补丁复原 GUI）**：从会话轨迹补丁重放 40 处 Edit，补回 1.4.0 里没有的 GUI 能力——字模 1~3 倍缩放、列表多实例（`list id,x,y,w,h`）、按钮 icon/font 与上限 8→16、自定义图标 `ICON` 100~139、彩蛋图鉴 `EGG`/`EGGLIST`/`EGGSCROLL` 24 条。
 
 **v1.6.0（2026-11-07，硬盘损毁后重建基线）**：CHRG_DET 49→42、新增 SD 大卡 SDMMC 39/40/41（1-bit，SPI 通路兼容保留）、`sd mmc` 命令、版本串改宏、构建可复现修复、清理 26 条历史脏路径。v1.5.0 源码随盘丢失，不补号。
 
