@@ -27,7 +27,29 @@ GitHub `cfy2012/memoria-os` 完整回落到 `G:\Memoria OS`，基线提交 `f241
 - AudioGuard 音频保护链：12Hz 一阶高通（去 DC 与次声波）+ 软限幅（阈值 0.85，-1.4dB 内直通，超出平滑压回）+ 热量保护，覆盖 WAV / MP3 / M4A / AAC / MJPEG 全部播放路径
 - 低电量保命（3.5V 检测 + 倒计时）、侧面键长按关机、OTA 检查/升级、应用商店 .msp/.MBND 包管理
 
-**验证**：`idf.py build` 全绿（见本节下方构建记录）。
+**构建链路修复（换机器/换盘必踩的坑）**
+
+| 问题 | 修法 |
+|------|------|
+| 链接期 `undefined reference to uxTaskGetSystemState`（`shell.cpp` 145/200 两处） | `sdkconfig.defaults` 的 FreeRTOS 段补 `CONFIG_FREERTOS_USE_TRACE_FACILITY=y` 与 `CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y`。`sys` 命令列任务栈水位依赖该 trace facility，默认关闭时换块盘就链接失败 |
+| 已存在的 `sdkconfig` 不会从 defaults 重新生成 | 同步把 `sdkconfig` 里对应两行置 `y`，保证本次与下次构建口径一致 |
+
+**稳定性处理（本轮静态审查后改动）**
+
+| 位置 | 改动 | 原因 |
+|------|------|------|
+| `power.cpp` 渐暗循环（两处） | 硬编码 `LEDC_CHANNEL_0` → `static_cast<ledc_channel_t>(LEDC_CHN_BACKLIGHT)` | 通道号由 `drivers_config.hpp` 唯一定义；硬编码会让"手动设亮度"与"自动渐暗"在改通道时打到不同通道 |
+
+其余电源链（`boot_defaults()` 功放 EN=0 / 次级 P-MOS 低导通 / KEY_LED 拉低 / 等 50ms；`deep_sleep_now()` EXT0 GPIO2 低唤醒；NVS `pwr`/`shutdown` 标志）逐段复读后确认完好，未改。全仓 21 处 `xTaskCreate*` 的栈与优先级配置复查未见异常。
+
+**验证**
+
+- `idf.py build` 全绿：1261 步，`Project build complete`，退出码 0
+- `build/memoria_os.bin` = **1,877,248 B**（0x1CA500），smallest app partition 0x2F0000，剩余 39%
+- SHA256 `97FB4F0471E5FF3B587F7F0A793A5D93B07E0E1EB68BACA8426275400B4949FB`
+- 分发包已随仓：`firmware/memoria_os_1.6.0.bin`（与上面同一份，逐字节复制）
+
+**未随本版上线（需凭据）**：远端 `cfy2012/memoria-os` 仍是 `f2413394`；`cfy2012/memoria-ota` 的 `version.json` 仍是 1.4.0。本机 HTTPS token 已失效（401）、SSH 账号 `DualBrainOS` 对该仓库只有读权限（push 被 403 拒），推送待补凭据后进行。
 
 ---
 

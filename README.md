@@ -1,6 +1,6 @@
 # Memoria OS
 
-**Memoria OS v1.3.0** 是一款基于 ESP32-S3（N16R8：16 MB Flash + 8 MB Octal PSRAM）自主设计的掌机操作系统。系统内核、窗口系统、文件系统、脚本引擎、BASIC 解释器与应用商店均为从零自研，不依赖 Linux、LVGL 或任何现成 UI 框架。项目以开源复古计算与嵌入式系统学习为定位，面向希望理解完整嵌入式系统栈的开发者。
+**Memoria OS v1.6.0** 是一款基于 ESP32-S3（N16R8：16 MB Flash + 8 MB Octal PSRAM）自主设计的掌机操作系统。系统内核、窗口系统、文件系统、脚本引擎、BASIC 解释器与应用商店均为从零自研，不依赖 Linux、LVGL 或任何现成 UI 框架。项目以开源复古计算与嵌入式系统学习为定位，面向希望理解完整嵌入式系统栈的开发者。
 
 ## 项目定位
 
@@ -66,7 +66,15 @@ idf.py build
 idf.py -p COMx flash monitor
 ```
 
-构建基线保持全绿，编译选项启用 `-Werror`，当前零警告。v1.3.0 固件二进制约 1.84 MB（app 分区 40% 空闲）。
+构建基线保持全绿，编译选项启用 `-Werror`，当前零警告。v1.6.0 固件二进制约 1.87 MB（app 分区 39% 空闲）。
+
+> **换机器重建必读**：仓库不收录 `sdkconfig`，构建配置全部由 `sdkconfig.defaults` 生成。其中 FreeRTOS 段必须保留
+> `CONFIG_FREERTOS_USE_TRACE_FACILITY=y` 与 `CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y`——`shell` 的 `sys` 命令调用
+> `uxTaskGetSystemState()` 列任务栈水位，这两项关闭时链接期会报 `undefined reference`。
+
+**v1.6.0（2026-11-07，硬盘损毁后重建基线）**：CHRG_DET 49→42、新增 SD 大卡 SDMMC 39/40/41（1-bit，SPI 通路兼容保留）、`sd mmc` 命令、版本串改宏、构建可复现修复、清理 26 条历史脏路径。v1.5.0 源码随盘丢失，不补号。
+
+**v1.4.0**：SETUP 模式网络管理界面、shell `wifi connect` 串口连网、AudioGuard 音频保护链归档。
 
 **v1.3.0 新增**：GUI 控件语句集（bkey / lbl / llbl / lbld / img / after / 样式参数）、store MBND 应用包解包安装、商店 .msp-only 政策、shell 错误路径误退出 panic 修复（#86）。
 
@@ -110,7 +118,7 @@ idf.py -p COMx flash monitor
 
 ## 引脚分配
 
-引脚定义的唯一数据来源为 `components/memoria_drivers/include/drivers_config.hpp`，修改硬件接线时应以该文件为准，不在其他位置硬编码 GPIO 编号。接线施工以根目录 **`WIRING.md`** 为准。
+引脚定义的唯一数据来源为 `components/memoria_drivers/include/drivers_config.hpp`，修改硬件接线时应以该文件为准，不在其他位置硬编码 GPIO 编号。接线施工以 **`docs/WIRING.md`** 为准。
 
 | 功能 | GPIO |
 |------|------|
@@ -118,12 +126,19 @@ idf.py -p COMx flash monitor
 | LCD CS / DC / RST / BLK | 10 / 9 / 8 / 14 |
 | 摇杆 X / Y / BTN | 7 / 5 / 38 |
 | 电池电压（ADC1_CH3） | 4 |
-| TF 卡 CS | 17 |
+| 充电检测（TP4056 CHRG） | 42 |
+| TF 卡 CS（SPI 小卡通路） | 17 |
+| SD 大卡座 SDMMC CLK / CMD / D0 | 40 / 39 / 41 |
 | I2S BCLK / WS / DOUT | 18 / 21 / 15 |
 | 麦克风 SD（INMP441，复用 I2S 时钟） | 16 |
 | 键盘 I2C SDA / SCL（0x20 / 0x21） | 1 / 6 |
 | 键盘灯带 WS2812 | 46 |
+| 功放使能 AMP_EN | 47 |
+| 次级电源 MOS 控制 SUBMOS_EN | 48 |
+| 侧面键 / 深睡眠唤醒（EXT0） | 2 |
 | UART0 烧录 / 控制台 | 43 / 44 |
+
+共占用 26 个 GPIO（47/48 已分给功放使能与次级电源 MOS，不是空脚）。当前没有剩余的普通 IO 可用，需要扩展时优先在已有时序空闲的 I2C 总线（SDA1 / SCL6）上挂从设备。
 
 GPIO33~37 被 Octal PSRAM 内部占用，不可使用；ADC2 与 WiFi 冲突，已禁用。
 
