@@ -180,10 +180,12 @@ esp_err_t Kernel::init() {
     /* 4. Power（LEDC PWM 背光 + 空闲检测） */
     MEMORIA_CHECK(drivers::Power::instance()->init());
 
-    /* 5. SD 卡 */
+    /* 5. SD 卡：SDMMC 大卡座优先，未接线或失败回落 SPI 小 TF */
     {
-        esp_err_t ret = drivers::SdCard::instance()->init();
-        ESP_LOGI(TAG, "SD: %s", esp_err_to_name(ret));
+        esp_err_t ret = drivers::SdCard::instance()->init_sdmmc(true);
+        if (ret != ESP_OK) ret = drivers::SdCard::instance()->init();
+        ESP_LOGI(TAG, "SD: %s (%s)", esp_err_to_name(ret),
+                 drivers::SdCard::instance()->is_sdmmc() ? "sdmmc" : "spi");
     }
 
     /* 6. Battery ADC（后台采样任务）+ 低电量回调注册

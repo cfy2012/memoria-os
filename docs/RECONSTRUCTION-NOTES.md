@@ -86,7 +86,7 @@
 
 - `archive/snapshots/`：三份旧快照归档
 - `tools/push_api.py`：Git Data API 推送工具（443 被重置时用），逐提交重建 + blob 逐字节校验，token 只读环境变量
-- `firmware/memoria_os_1.6.1.bin`：1,884,384 B，SHA256 `59EC2755…4D28`（v1.6.0 那份已被 1.6.1 替换）
+- `firmware/memoria_os_1.6.2.bin`：1,884,432 B，SHA256 `613CC65E…8E74`（1.6.1 那份已被 1.6.2 替换）
 - `docs/HEALTH-REPORT.md` 第四节「2026-11-07 复查」
 
 ## 十、归档 zip 26 项核验（2026-11-08）

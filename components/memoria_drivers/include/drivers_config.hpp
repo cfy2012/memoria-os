@@ -154,8 +154,8 @@ static constexpr int AMP_EN_GPIO      = 47;
 
 /* 次级 MOS（AO3401 同款 P-MOS）EN：GPIO48（普通 IO，自由脚池）
  * 控制 5V 轨外围负载（屏/功放/灯带/SD 卡）通断：
- *   高电平 = 外围 5V 供电；低电平 = 深睡眠断电（ESP32 本体 VIN 不过此 MOS，仍供电）
- * 深睡眠时拉低 → 外围全断电，只剩 ESP32 深睡 + MT3608 空载
+ *   低电平 = 外围 5V 供电；高电平 = 深睡眠断电（ESP32 本体 VIN 不过此 MOS，仍供电）
+ * 深睡眠时拉高 → 外围全断电，只剩 ESP32 深睡 + MT3608 空载
  * ⚠ P-MOS 极性：G 低=导通（供电）、G 高=关断（深睡）。G 并 100K 上拉到 5V 节点防上电浮空。
  */
 static constexpr int SUBMOS_EN_GPIO   = 48;
