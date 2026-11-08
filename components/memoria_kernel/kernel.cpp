@@ -37,6 +37,7 @@ extern "C" {
 #include <nvs_flash.h>
 #include <esp_log.h>
 #include <esp_timer.h>
+#include <esp_ota_ops.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 }
@@ -301,6 +302,21 @@ esp_err_t Kernel::init() {
     MEMORIA_CHECK(input::backlight_init());
     ime::ime_init();
     ESP_LOGI(TAG, "Keyboard + LED strip OK");
+
+    /* 18. OTA 自校验：当前若是 OTA 新槽首次启动（PENDING_VERIFY），
+     * 全部初始化通过后才标记有效并取消回滚；失败则下次复位由 bootloader 回退旧槽 */
+    {
+        const esp_partition_t* run = esp_ota_get_running_partition();
+        esp_ota_img_states_t st = ESP_OTA_IMG_UNDEFINED;
+        if (run && esp_ota_get_state_partition(run, &st) == ESP_OK) {
+            if (st == ESP_OTA_IMG_PENDING_VERIFY) {
+                esp_ota_mark_app_valid_cancel_rollback();
+                ESP_LOGI(TAG, "OTA: slot %s verified, rollback cancelled", run->label);
+            } else {
+                ESP_LOGI(TAG, "OTA: slot %s state=%d", run->label, (int)st);
+            }
+        }
+    }
 
     _ready.store(true);
     ESP_LOGI(TAG, "========== Boot complete ==========");

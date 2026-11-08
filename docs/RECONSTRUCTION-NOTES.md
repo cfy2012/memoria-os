@@ -88,7 +88,7 @@
 - `tools/push_api.py`：Git Data API 推送工具（443 被重置时用），逐提交重建 + blob 逐字节校验，token 只读环境变量
 - `firmware/memoria_os_1.6.2.bin`：1,884,432 B，SHA256 `613CC65E…8E74`（1.6.1 那份已被 1.6.2 替换）
 - `firmware/memoria_os_1.6.3.bin`：1,884,752 B，SHA256 `89381211…570D`（启动卡改屏幕 TF 卡槽，SD 大卡降为扩展盘）
-- `firmware/memoria_os_1.6.4.bin`：1,885,344 B，SHA256 `03057803…E9F3`（分区表改 ota_0 + ota_1 双槽，删 factory）
+- `firmware/memoria_os_1.6.4.bin`：1,886,000 B，SHA256 `8AA15DA5…9F7D`（分区表改 ota_0 + ota_1 双槽，删 factory，补 OTA 自校验）
 - `docs/HEALTH-REPORT.md` 第四节「2026-11-07 复查」
 
 ## 十、归档 zip 26 项核验（2026-11-08）

@@ -39,6 +39,7 @@ idf_component_register(
         esp_driver_i2c
         esp_driver_rmt
         esp_http_client
+        app_update
         memoria_drivers
         memoria_window
         memoria_fs

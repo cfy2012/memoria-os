@@ -15,14 +15,16 @@
 | mem_fat | 0x5F0000 / 0x620000 | **0x600000 / 0x620000**（后移 64KB，大小不变） |
 | mem_priv | 0xC10000 / 0x300000 | **0xC20000 / 0x300000**（后移 64KB，大小不变） |
 | nvs / phy_init | 0x9000 / 0xF000 | 不变 |
+| OTA 自校验 | 无 | `kernel.cpp` 第 18 步新增：运行槽处于 `ESP_OTA_IMG_PENDING_VERIFY` 时，等全部初始化通过后才调 `esp_ota_mark_app_valid_cancel_rollback()`，启动失败则下次复位由 bootloader 回退旧槽；`memoria_kernel` 的 REQUIRES 补 `app_update` |
+| 无效配置 | `CONFIG_ESP_HTTPS_OTA_DECRYPT_CB=0` | 删除（kconfgen 一直报它不是合法 bool 值） |
 
-**配置**：`sdkconfig.defaults` 新增 `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y`（升级失败自动回滚）；删掉无效行 `CONFIG_ESP_HTTPS_OTA_DECRYPT_CB=0`——kconfgen 一直报它不是合法 bool 值，那条提示随之消失。
+**配置**：`sdkconfig.defaults` 新增 `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y`（升级失败自动回滚）。
 
 **影响范围**：首次烧录地址从 0x10000 变成 0x20000（`idf.py flash` 自动跟随，手写 esptool 命令要改）；`mem_priv` 整体后移 64KB，旧板上已装的应用包作废；OTA 代码零改动（`esp_https_ota` 自动在 ota_0/ota_1 之间互切）。
 
 **必须整片重刷**：旧布局的数据在新布局里位置全错，先 `idf.py erase-flash` 再 `flash`。
 
-**验证**：`idf.py fullclean` + `build` 零警告零错误；`memoria_os.bin` 1,885,344 B（0x1CC4A0），ota_0 槽余 38.8%；`idf.py partition-table` 实读七行与设计逐项一致。
+**验证**：`idf.py fullclean` + `build` 零警告零错误；`memoria_os.bin` 1,886,000 B（0x1CC730），ota_0 槽余 38.7%；`idf.py partition-table` 实读七行与设计逐项一致。
 
 ## v1.6.3 — 2026-11-08 · 启动卡定为屏幕 TF 卡槽，SD 大卡座降为扩展盘
 
