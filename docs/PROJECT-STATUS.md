@@ -12,11 +12,11 @@ ESP32-S3 N16R8 上的自研掌机操作系统：内核、窗口、文件系统�
 | 线 | 状态 | 说明 |
 |----|------|------|
 | 仓库落地 | 🟢 完成 | I 盘物理损坏后，从 GitHub 完整回落到 `G:\Memoria OS`；基线 `f2413394`（v1.4.0，54 次提交） |
-| 固件主线 | 🟢 **v1.6.3 编译全绿** | 零警告零错误，bin 1,884,752 B / SHA256 `89381211…`，factory 分区余 39% |
+| 固件主线 | 🟢 **v1.6.4 编译全绿** | 零警告零错误，bin 1,885,344 B / SHA256 `03057803…`，ota_0 槽余 39%；分区表已改 ota_0 + ota_1 双槽 |
 | 版本账 | 🟢 厘清 | v1.5.0 源码从未推送、随盘丢失，**不补号**；1.6.0 起重新起算 |
 | 引脚/接线 | 🟡 CHRG 与 SDMMC 已定 | CHRG 49→42；新增 SDMMC CLK40/CMD39/D0 41（1-bit）；共占用 26 个 GPIO，47/48 已分给功放使能与次级电源 MOS，**无剩余普通 IO** |
-| OTA 分发 | 🟢 已上传 1.6.3 | `memoria-ota` 远端已收 `memoria_os_1.6.3.bin` + `version.json`(1.6.3)，待真机验证 |
-| 远端仓库 | 🟢 已同步 v1.6.3 | 两个仓远端 main 内容与本地逐字节一致（tree 校验通过）；哈希与本地不同，因本地提交带 SSH 签名，详见六 |
+| OTA 分发 | 🟢 已上传 1.6.4 | `memoria-ota` 远端已收 `memoria_os_1.6.4.bin` + `version.json`(1.6.4)，待真机验证 |
+| 远端仓库 | 🟢 已同步 v1.6.4 | 两个仓远端 main 内容与本地逐字节一致（tree 校验通过）；哈希与本地不同，因本地提交带 SSH 签名，详见六 |
 | 硬件到位 | 🟡 卡在两件料 | 到手屏是 ILI9486 8bit 并口，固件走 ILI9488 SPI；MCP23017 到手 SOIC-28，BOM 要 DIP-28 |
 | 上板实测 | 🟡 进行中 | 烧录/boot/命令行已验；键盘、TF 卡、音频、外设待上 |
 | 稳定性 | 🟢 本轮一轮静态处理 | 见 `docs/CHANGELOG.md` v1.6.0「稳定性处理」与「构建链路修复」两节 |
@@ -51,6 +51,7 @@ ESP32-S3 N16R8 上的自研掌机操作系统：内核、窗口、文件系统�
 | 24 | 轨迹补丁复原 GUI（v1.6.1） | 40 处 Edit 重放：字模 1~3 倍缩放、列表多实例、按钮 icon/font、按钮上限 8→16、自定义图标 100~139、彩蛋图鉴 24 条；`tools/apply_edits.py` 按 OLD 精确落位 |
 | 25 | 开机 SD 双通道 + SUBMOS 注释纠正（v1.6.2） | `init_sdmmc()` 进入开机挂载路径，失败回落 SPI；注释与 AO3401 P-MOS 极性对齐 |
 | 26 | 启动卡改屏幕 TF 卡槽 + SD 大卡降为扩展（v1.6.3） | 屏幕 TF（SPI/CS17）挂 `/mem_fat` 作启动卡；侧面大卡（SDMMC）挂 `/sd_ext` 作扩展盘，双卡可同时在线，扩展卡禁止自动格式化 |
+| 27 | 分区表 A/B 双槽改造（v1.6.4） | 删掉与 ota_0 重复的 factory，补 `otadata`(0x10000/8K)；ota_0 移到 0x020000，新增 `ota_1`(0x310000/3M)；`mem_fat`/`mem_priv` 各后移 64KB、容量不变；开 `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y`。OTA 首次具备升级与回滚能力 |
 
 ## 四、待办任务表
 
@@ -66,7 +67,7 @@ ESP32-S3 N16R8 上的自研掌机操作系统：内核、窗口、文件系统�
 | 6 | P1 | 摇杆/电池/喇叭/灯带逐项上板验证 | 用户 | 接线 | ⚪ |
 | 7 | P1 | 外壳 3D 建模（卡尺实测后开工） | — | 器件到货 | ⚪ |
 | 8 | P1.5 | 麦克风 INMP441 上板验证 | — | 上板稳定后 | ⚪ |
-| 9 | P2 | OTA 真机验证（等 1.6.3 上线 jsdelivr 后） | 用户 | #1 | ⚪ |
+| 9 | P2 | OTA 真机验证（等 1.6.4 上线 jsdelivr 后，先整片 erase-flash） | 用户 | #1 | ⚪ |
 | 10 | P2 | 42 小时挂测 + 72 小时出货验收 | 用户 | 上板稳定 | ⚪ |
 | 11 | P2 | 三复位源排查（BOD 欠压 / task_wdt / StoreProhibited panic），`HEALTH-REPORT.md` 列为最高优先级 | 固件 | 上板复现日志 | ⚪ |
 
@@ -74,11 +75,11 @@ ESP32-S3 N16R8 上的自研掌机操作系统：内核、窗口、文件系统�
 
 | 产物 | 值 | 备注 |
 |------|-----|------|
-| `build/memoria_os.bin` v1.6.3 | 1,884,752 B / SHA256 `8938121107CB3682E52E002505A65D96D49D8044C182057372FB3B1150B8570D` | 零警告零错误，factory 分区余 39% |
-| `firmware/memoria_os_1.6.3.bin` | 同上，逐字节复制 | 已随 OTA 仓上传 |
-| `firmware/version.json` | version 1.6.3 / url 指向 `memoria_os_1.6.3.bin` / major false | 已随 OTA 仓上传 |
-| 本地 git | `main` 由 `f2413394`（v1.4.0）线性推进至 v1.6.3（重建 → 补丁复原 → 文档 → 本轮） | 远端正本见「六」，tree 逐字节校验通过 |
-| OTA 远端 | firmware 目录：1.0.0 / 1.1.0 / 1.2.1 / 1.4.0 / 1.6.0 / 1.6.2 / **1.6.3** 七个 bin + version.json(1.6.3) | 已上传，等真机 OTA 验证 |
+| `build/memoria_os.bin` v1.6.4 | 1,885,344 B（0x1CC4A0）/ SHA256 `03057803FDE27298F4934977468A9B2DDF33670AB57C764226251782E3EDE9F3` | 零警告零错误，ota_0 槽余 39% |
+| `firmware/memoria_os_1.6.4.bin` | 同上，逐字节复制 | 已随 OTA 仓上传 |
+| `firmware/version.json` | version 1.6.4 / url 指向 `memoria_os_1.6.4.bin` / major false | 已随 OTA 仓上传 |
+| 本地 git | `main` 由 `f2413394`（v1.4.0）线性推进至 v1.6.4（重建 → 补丁复原 → 文档 → 启动卡 → A/B 分区） | 远端正本见「六」，tree 逐字节校验通过 |
+| OTA 远端 | firmware 目录：1.0.0 / 1.1.0 / 1.2.1 / 1.4.0 / 1.6.0 / 1.6.2 / 1.6.3 / **1.6.4** 八个 bin + version.json(1.6.4) | 已上传，等真机 OTA 验证 |
 | 旧快照归档 | `archive/snapshots/` 三份（MEMORY-SNAPSHOT v1.1.2 / PROJECT-STATUS v1.3.0 / HEALTH-REPORT 10-06） | 原文件保留未删 |
 | 脏目录留档 | `archive/legacy-quoted-dirs-2026-11-07.zip`（26 文件 / 888,962 B） | 三个 `_design`/`_docs`/`_simulator` 已删除 |
 

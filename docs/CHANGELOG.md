@@ -2,6 +2,28 @@
 
 > 一条规矩：**改一部分就推一版**。这个文件随每次发版更新，版本号只增不补。
 
+## v1.6.4 — 2026-11-08 · 分区表改 ota_0 + ota_1 双槽，删掉 factory
+
+**背景**：实测确认这块板从建库起一直从 `factory`（0x10000）启动，`ota_0`（0x300000）里的固件从未运行过；分区表缺 `otadata`，`esp_ota_set_boot_partition()` 无处记录"下次从哪起"，OTA 一次都升不上去。另查明 flash 上的 `mem_fat`（6.4MB）全仓没有任何挂载代码，是死区。据此删掉与 `ota_0` 重复的 factory 槽，改成标准 A/B 双槽。
+
+| 分区 | 旧 | 新 |
+|------|-----|-----|
+| factory | 0x010000 / 0x2F0000 | **删除**（出厂镜像即 ota_0） |
+| otadata | 无 | **0x010000 / 0x002000**（8KB，记录下次启动槽） |
+| ota_0 | 0x300000 / 0x2F0000 | **0x020000 / 0x2F0000**（大小不变，整体前移） |
+| ota_1 | 无 | **0x310000 / 0x2F0000**（新增） |
+| mem_fat | 0x5F0000 / 0x620000 | **0x600000 / 0x620000**（后移 64KB，大小不变） |
+| mem_priv | 0xC10000 / 0x300000 | **0xC20000 / 0x300000**（后移 64KB，大小不变） |
+| nvs / phy_init | 0x9000 / 0xF000 | 不变 |
+
+**配置**：`sdkconfig.defaults` 新增 `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y`（升级失败自动回滚）；删掉无效行 `CONFIG_ESP_HTTPS_OTA_DECRYPT_CB=0`——kconfgen 一直报它不是合法 bool 值，那条提示随之消失。
+
+**影响范围**：首次烧录地址从 0x10000 变成 0x20000（`idf.py flash` 自动跟随，手写 esptool 命令要改）；`mem_priv` 整体后移 64KB，旧板上已装的应用包作废；OTA 代码零改动（`esp_https_ota` 自动在 ota_0/ota_1 之间互切）。
+
+**必须整片重刷**：旧布局的数据在新布局里位置全错，先 `idf.py erase-flash` 再 `flash`。
+
+**验证**：`idf.py fullclean` + `build` 零警告零错误；`memoria_os.bin` 1,885,344 B（0x1CC4A0），ota_0 槽余 38.8%；`idf.py partition-table` 实读七行与设计逐项一致。
+
 ## v1.6.3 — 2026-11-08 · 启动卡定为屏幕 TF 卡槽，SD 大卡座降为扩展盘
 
 **背景**：外置 TF 卡座（BOM 第 10 项，自弹式）焊起来太费劲，弃用。屏幕模块自带的 microSD 槽与屏共用 SPI 四线，只多一根 CS，电气上就是同一条路——启动卡改用它。

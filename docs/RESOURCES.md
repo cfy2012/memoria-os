@@ -63,6 +63,6 @@
 
 | 资源 | 用途 |
 |------|------|
-| `partitions.csv` | 分区表（nvs / phy_init / factory / ota_0 / mem_fat / mem_priv） |
+| `partitions.csv` | 分区表（nvs / phy_init / otadata / ota_0 / ota_1 / mem_fat / mem_priv） |
 | `sdkconfig.defaults` | 默认配置：Octal PSRAM 80 MHz / NimBLE only / 关闭 RTTI |
 | `CMakeLists.txt` | 顶层构建入口 |

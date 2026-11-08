@@ -21,7 +21,7 @@
 | power.cpp 渐暗循环 | 187、188 行已改用 `LEDC_CHN_BACKLIGHT` 常量 | ✓ |
 | 版本串 | `CMakeLists.txt`、`system_info.h`、`firmware/version.json` 三处同为 1.6.0 | ✓ |
 | 构建默认配置 | `sdkconfig.defaults` 含 FreeRTOS trace facility 与 coreid 两行 | ✓ |
-| OTA 分区 | `partitions.csv` 只有 `factory` + `ota_0`，无 `ota_1` | ✓（缺陷，见第五节） |
+| OTA 分区 | `partitions.csv` 只有 `factory` + `ota_0`，无 `ota_1` | ✓（缺陷，v1.6.4 已修，见第十一节） |
 
 引脚余量的旧口径「已用 25 个、剩 47、48」不成立：47/48 已分给功放使能与次级电源 MOS，实际共 26 个 GPIO，无剩余普通 IO（以 README 引脚表为准）。
 
@@ -88,6 +88,7 @@
 - `tools/push_api.py`：Git Data API 推送工具（443 被重置时用），逐提交重建 + blob 逐字节校验，token 只读环境变量
 - `firmware/memoria_os_1.6.2.bin`：1,884,432 B，SHA256 `613CC65E…8E74`（1.6.1 那份已被 1.6.2 替换）
 - `firmware/memoria_os_1.6.3.bin`：1,884,752 B，SHA256 `89381211…570D`（启动卡改屏幕 TF 卡槽，SD 大卡降为扩展盘）
+- `firmware/memoria_os_1.6.4.bin`：1,885,344 B，SHA256 `03057803…E9F3`（分区表改 ota_0 + ota_1 双槽，删 factory）
 - `docs/HEALTH-REPORT.md` 第四节「2026-11-07 复查」
 
 ## 十、归档 zip 26 项核验（2026-11-08）
@@ -121,7 +122,7 @@
 | `_docs/硬件采购清单.docx` | `docs/硬件采购清单.docx`（仓内版更新，不要覆盖） |
 | `_simulator/启动CHAT代理.bat` | `simulator/启动CHAT代理.bat` |
 
-## 十一、OTA 分区缺陷与两种修法（未落地，待点头）
+## 十一、OTA 分区缺陷与两种修法（已落地：走方案 B，2026-11-08）
 
 **实测现状**（`partitions.csv` 全文）：
 
@@ -175,4 +176,8 @@
 2. `sdkconfig.defaults` 加 `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y`，否则升级失败不会自动回滚。
 3. 改完才算真正能做第一次 OTA 验证——目前一次都没跑过。
 
-**没动的原因**：改分区表会改变烧录地址，属于需要先定 FAT 容量的决策，等确认走 A 还是 B 再落。
+**落地结果（v1.6.4，2026-11-08）**：按方案 B 写入 `partitions.csv`——删 factory，补 `otadata 0x010000/0x002000`，`ota_0` 移到 0x020000、`ota_1` 落在 0x310000，`mem_fat` 与 `mem_priv` 各后移 64KB（容量不变）。`sdkconfig.defaults` 加 `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y`，同时删掉一直报错的无效行 `CONFIG_ESP_HTTPS_OTA_DECRYPT_CB=0`。`idf.py partition-table` 实读七行与方案 B 表逐项一致，bin 1,885,344 B（0x1CC4A0），ota_0 槽余 39%。
+
+顺带推翻 A 案的前提：flash 上的 `mem_fat` 分区全仓无任何挂载代码（只有 `mem_priv` 由 `private_fs.cpp` 用 `esp_partition_find_first` 取到），6.4MB 一直是死区，"FAT 缩到 3.3MB"这个代价本来就不成立。
+
+**下一步**：整片 `idf.py erase-flash` 重刷后，做第一次真机 OTA 验证（1.6.3 → 1.6.4 或回滚一次），此前一次都没跑过。

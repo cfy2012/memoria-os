@@ -33,7 +33,7 @@
 - **现状**：默认优化档。
 - **改法**：对 `memoria_drivers`（解码）/`memoria_gfx`（渲染）单独 -O3 或开 LTO。
 - **收益**：热循环 10~30%。
-- **风险**：低；-O3 增大固件体积，注意 3MB factory 分区余量。
+- **风险**：低；-O3 增大固件体积，注意 3MB app 槽余量。
 - **状态**：☐ 待窗口
 
 ---
@@ -105,5 +105,5 @@
 ## 风险登记
 
 - **BOD 欠压**：所有频率/背光改动必须沿用 GLM 定案的错峰策略（power.cpp init 半亮 + brownout SEL_1），实测时串口盯 `BOD: Brownout detector` 日志。
-- **固件体积**：-O3/LTO 可能撑大 3MB factory 分区，注意 `idf.py size`。
+- **固件体积**：-O3/LTO 可能撑大 3MB app 槽（ota_0 / ota_1 各 0x2F0000），注意 `idf.py size`。
 - **IRAM 溢出**：IRAM_ATTR 加多了编译报错，只挑热点。

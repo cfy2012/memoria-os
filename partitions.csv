@@ -1,6 +1,10 @@
-nvs,           data,   nvs,      0x00009000,  0x00006000
-phy_init,      data,   phy,      0x0000F000,  0x00001000
-factory,       app,    factory,  0x00010000,  0x002F0000
-ota_0,         app,    ota_0,    0x00300000,  0x002F0000
-mem_fat,       data,   fat,      0x005F0000,  0x00620000
-mem_priv,      data,   spiffs,   0x00C10000,  0x00300000
+# Memoria OS 分区表（16MB flash）
+# ota_0 + ota_1 双槽 A/B，不设 factory：首次烧录落在 ota_0，之后 OTA 在两槽互切
+# Name,    Type, SubType, Offset,   Size
+nvs,       data, nvs,     0x009000, 0x006000
+phy_init,  data, phy,     0x00F000, 0x001000
+otadata,   data, ota,     0x010000, 0x002000
+ota_0,     app,  ota_0,   0x020000, 0x2F0000
+ota_1,     app,  ota_1,   0x310000, 0x2F0000
+mem_fat,   data, fat,     0x600000, 0x620000
+mem_priv,  data, spiffs,  0xC20000, 0x300000
