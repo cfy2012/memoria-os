@@ -1,6 +1,6 @@
 # Memoria OS
 
-**Memoria OS v1.6.7** 是一款基于 ESP32-S3（N16R8：16 MB Flash + 8 MB Octal PSRAM）自主设计的掌机操作系统。系统内核、窗口系统、文件系统、脚本引擎、BASIC 解释器与应用商店均为从零自研，不依赖 Linux、LVGL 或任何现成 UI 框架。项目以开源复古计算与嵌入式系统学习为定位，面向希望理解完整嵌入式系统栈的开发者。
+**Memoria OS v1.6.9** 是一款基于 ESP32-S3（N16R8：16 MB Flash + 8 MB Octal PSRAM）自主设计的掌机操作系统。系统内核、窗口系统、文件系统、脚本引擎、BASIC 解释器与应用商店均为从零自研，不依赖 Linux、LVGL 或任何现成 UI 框架。项目以开源复古计算与嵌入式系统学习为定位，面向希望理解完整嵌入式系统栈的开发者。
 
 > 版本规则：第三位**奇数 = beta 测试版**、**偶数 = stable 稳定版**（1.6.5 起严格执行，细则见 `docs/VERSIONING.md`）。每次 push 由 GitHub Actions 跑 `test/` 的结构校验并完整编译一遍固件，没有板子也能确认"能不能编、分区表有没有被改坏"。
 
@@ -108,11 +108,13 @@ idf.py -p COMx flash monitor
 固件分发物随本仓库 `firmware/` 目录发布，经 jsdelivr CDN 可达：
 
 - 固件 bin：`firmware/memoria_os_<版本>.bin`
-- 版本清单：`firmware/version.json`（含 `version`、`url`、`changelog`、`major` 字段）
+- 版本清单：`firmware/version.json`（含 `version`、`url`、`sha256`、`changelog`、`major` 字段）
 
 设备端升级路径：shell 执行 `ota_url <清单地址>` 设置源后 `ota_firmware` 一键升级；本地/远端版本比对取自 app_desc 版本串（`PROJECT_VER` 显式固定，不受编译时间戳污染）。
 
 三条边界（1.6.7 起）：① 握手要求系统时间已同步（开机 WiFi 连上后由 SNTP 校时，未校时会等 10 秒再拒）；② 只认本项目签名之外的"身份"——镜像里的 `project_name` 必须是 `memoria_os`，且版本不低于当前；③ 新槽第一次启动有 30 秒观察期，期间任何复位都会让 bootloader 退回旧槽。
+
+1.6.9 再加一道：下载边收边算 sha256，与清单不符或 `Content-Length` 对不上就直接 `esp_ota_abort`，`otadata` 不写，重启后还停在原固件。清单漏了 `sha256` 时降级为只验镜像结构，日志里会有 `manifest has no sha256` 告警。
 
 ## 变砖了怎么办
 

@@ -56,6 +56,7 @@ ESP32-S3 N16R8 上的自研掌机操作系统：内核、窗口、文件系统�
 | 29 | 变砖救援手册（2026-11-08） | `docs/RECOVERY.md`：按串口输出分四级判断；app 层先靠 ROLLBACK 自动回退（不盖章就回滚，一次复位生效）；擦 `otadata` 强回 ota_0；两槽全坏走 `erase-flash` 整片重烧；分区↔地址↔长度对照表；烧录地址 app=0x20000 的坑单独标注 |
 | 30 | 用户数据全部搬 TF 卡（v1.6.5） | 新建 `memoria_vault`：七个 NVS 命名空间逐 key 按类型镜像到 `/mem_fat/sys/nvs.bin`（60 秒节流 + 关机前强制 + 全空回灌）；`PrivateFs` 换后端到 `sys/privfs.bin`（布局不变，25 处调用点零改动），首次建文件时把 flash `mem_priv` 3MB 整体迁移；卡不在全量降级 flash；shell 加 `vault`。详见 `docs/STORAGE.md` |
 | 31 | OTA 三处缺口（v1.6.7） | 挂 `crt_bundle_attach`（此前 begin 直接返回 INVALID_ARG，OTA 从未真正跑过）；补系统时间前置检查；`esp_https_ota_finish` 后读新槽 `app_desc` 比对 `project_name`/版本，不符切回旧槽；盖章从 boot 末尾挪到进桌面 30 秒，观察期内复位由 bootloader 自动回退；主动关机先盖章 |
+| 32 | OTA 内容完整性（v1.6.9） | 弃用 `esp_https_ota` 改 `esp_http_client` 流式下载（高层 API 拿不到字节流）；PSA `psa_hash_*` 边收边算（mbedtls 4 已删 `sha256.h`）；状态码 / Content-Length / sha256 三道拦截，任一不符 `esp_ota_abort` 且不写 otadata；清单增 `sha256` 字段并透传到 `ota_firmware(url, sha256)`；`test/checks/firmware.py` 强制清单与 bin 摘要一致；版本比较抽成 `version_util.hpp`（纯 C++）供 CI host 单测 |
 
 ## 四、待办任务表
 
@@ -72,7 +73,7 @@ ESP32-S3 N16R8 上的自研掌机操作系统：内核、窗口、文件系统�
 | 7 | P1 | 外壳 3D 建模（卡尺实测后开工） | — | 器件到货 | ⚪ |
 | 8 | P1.5 | 麦克风 INMP441 上板验证 | — | 上板稳定后 | ⚪ |
 | 9 | P2 | OTA 真机验证（等 1.6.4 上线 jsdelivr 后，先整片 erase-flash） | 用户 | #1 | ⚪ |
-| 9b | P1 | v1.6.7 上板验证：OTA 全链路（证书握手 → 写槽 → 切槽 → 观察期盖章）、身份校验拒绝非本系统镜像、观察期内断电回退、卡上 `sys/` 生成与回灌、拔卡降级 | 用户 | 卡 + 板 + WiFi | ⚪ |
+| 9b | P1 | v1.6.9 上板验证：OTA 全链路（证书握手 → 流式下载 → sha256 比对 → 写槽 → 切槽 → 观察期盖章）、身份校验拒绝非本系统镜像、sha256 不符拒绝、观察期内断电回退、卡上 `sys/` 生成与回灌、拔卡降级 | 用户 | 卡 + 板 + WiFi | ⚪ |
 | 10 | P2 | 42 小时挂测 + 72 小时出货验收 | 用户 | 上板稳定 | ⚪ |
 | 11 | P2 | 三复位源排查（BOD 欠压 / task_wdt / StoreProhibited panic），`HEALTH-REPORT.md` 列为最高优先级 | 固件 | 上板复现日志 | ⚪ |
 
@@ -83,6 +84,8 @@ ESP32-S3 N16R8 上的自研掌机操作系统：内核、窗口、文件系统�
 | `build/memoria_os.bin` v1.6.4 | 1,886,000 B（0x1CC730）/ SHA256 `8AA15DA52C872A5C96F49A5E778A4EEABC909408CD1E064235A3A0BB24FC9F7D` | 零警告零错误，ota_0 槽余 39% |
 | `build/memoria_os.bin` v1.6.5 | 1,893,632 B（0x1CE500）/ SHA256 `883F2ACAF59398D55563DAAE62466FB76A6BB831F31108B83ACAAC65B9A8F248` | 零 C++ 警告，ota_0 槽余 39%，未上板 |
 | `build/memoria_os.bin` v1.6.7 | 1,967,088 B（0x1E03F0）/ SHA256 `F11782BF98134F9AD1F21126DEE2C83991071A2439E7A9C8CC34332E13BBD0B3` | 零 C++ 警告，ota_0 槽余 36%，未上板（含 crt bundle，比 1.6.5 大 73 KB） |
+| `build/memoria_os.bin` v1.6.9 | 1,961,712 B（0x1DEEF0）/ SHA256 `D847F82FBE7DA4CF57B45893C2E760FCA0D31F9151DA68DBD1492788EFAFDA50` | 零 C++ 警告，ota_0 槽余 37%，未上板（弃用 esp_https_ota，比 1.6.7 小 5 KB） |
+| `firmware/memoria_os_1.6.9.bin` | 同上，逐字节复制 | beta，清单带 sha256 |
 | `firmware/memoria_os_1.6.7.bin` | 同上，逐字节复制 | beta |
 | `firmware/memoria_os_1.6.5.bin` | 1,893,632 B，逐字节复制 | beta |
 | `firmware/memoria_os_1.6.4.bin` | 同上，逐字节复制 | 已随 OTA 仓上传 |

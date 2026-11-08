@@ -37,6 +37,8 @@
 
 **身份不符不会走到这一步**：1.6.7 起，OTA 下载完成后会读新槽的 `app_desc`，项目名必须是 `memoria_os`、版本不低于当前，否则直接把启动槽切回原槽并返回 4，根本不重启（串口出现 `OTA rejected, keep booting ota_0`）。
 
+**内容不符更不会走到这一步**：1.6.9 起，下载时边收边算 sha256。HTTP 状态非 200、`Content-Length` 与实际字节数不符、sha256 与清单不符，任一命中都在写 `otadata` 之前 `esp_ota_abort`，串口分别出现 `unexpected http status` / `size mismatch` / `sha256 mismatch`，返回码 1 / 3 / 6。此时 otadata 未改，重启仍是原固件，直接重试即可。
+
 ## 三、盖章之后不想再要这个固件：擦 `otadata`
 
 `otadata` 两个块记录"下次从哪个槽起"。擦掉它，bootloader 找不到有效记录时会按默认走——**有 `factory` 起 `factory`，没有 `factory` 就起 `ota_0`**。我们是后者，所以擦 `otadata` 等于强制回 A 槽，而且不动任何固件内容。

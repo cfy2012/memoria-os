@@ -14,6 +14,7 @@
 | 1.6.4 | stable | 分区表改 `ota_0` + `ota_1` 双槽，删 `factory`，补 OTA 自校验 |
 | 1.6.5 | beta | 用户数据整体搬 TF 卡（`memoria_vault` + PrivateFs 换后端），flash 只留系统 |
 | 1.6.7 | beta | OTA 修通（crt bundle）+ 身份校验（项目名/版本）+ 盖章后移到进桌面 30 秒 |
+| 1.6.9 | beta | OTA 下载全程 sha256 校验（弃用 esp_https_ota 改流式）+ 版本比较抽成 host 可测 + CI 单测 job |
 | 1.6.6 | stable | 顺延：1.6.5 未上板即被 1.6.7 取代，转正号留给 1.6.7 验证通过后 |
 
 ## 为什么要分

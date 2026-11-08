@@ -14,6 +14,7 @@
 #include "ota_updater.hpp"
 #include "package_manager.hpp"
 #include "system_info.h"
+#include "version_util.hpp"
 
 extern "C" {
 #include <esp_log.h>
@@ -52,28 +53,6 @@ static std::string json_find(const std::string& s, const char* key) {
     return "";
 }
 
-/* "x.y.z" 三点版本比较：a>b 返回 1，相等 0，a<b 返回 -1 */
-static int version_cmp(const std::string& a, const std::string& b) {
-    auto part = [](const std::string& v, int idx) {
-        long r = 0;
-        size_t start = 0;
-        for (int i = 0; i < idx; i++) {
-            size_t dot = v.find('.', start);
-            if (dot == std::string::npos) return r;
-            start = dot + 1;
-        }
-        size_t end = v.find('.', start);
-        if (end == std::string::npos) end = v.size();
-        r = std::atol(v.substr(start, end - start).c_str());
-        return r;
-    };
-    for (int i = 0; i < 3; i++) {
-        long x = part(a, i), y = part(b, i);
-        if (x != y) return x > y ? 1 : -1;
-    }
-    return 0;
-}
-
 static std::string firmware_manifest_url() {
     std::string u = get_mirror_url();
     size_t p = u.find_last_of('/');
@@ -99,10 +78,11 @@ bool firmware_check(FirmwareInfo& out) {
     }
     out.latest    = latest;
     out.url       = json_find(body, "url");
+    out.sha256    = json_find(body, "sha256");
     out.changelog = json_find(body, "changelog");
     out.major     = json_find(body, "major") == "true";
 
-    int cmp = version_cmp(latest, firmware_current_version());
+    int cmp = version_cmp(latest.c_str(), firmware_current_version().c_str());
     if (cmp <= 0) {
         out.update_available = false;
         return true;   /* 已是最新 */
@@ -119,14 +99,14 @@ bool firmware_check(FirmwareInfo& out) {
     return true;
 }
 
-bool firmware_apply(const std::string& url) {
+bool firmware_apply(const std::string& url, const std::string& sha256) {
     if (url.empty()) {
         ESP_LOGE(TAG, "firmware_apply: empty url");
         return false;
     }
     set_ota_url(url);
-    /* ota_firmware 内部完成下载→校验→写 OTA 分区→重启，不返回（除非失败） */
-    int rc = ota_firmware(url);
+    /* ota_firmware 内部完成下载→sha256→校验→写 OTA 分区→重启，不返回（除非失败） */
+    int rc = ota_firmware(url, sha256);
     ESP_LOGE(TAG, "firmware_apply failed rc=%d", rc);
     return rc == 0;
 }

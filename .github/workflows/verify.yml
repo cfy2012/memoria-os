@@ -24,6 +24,17 @@ jobs:
           python-version: "3.11"
       - run: python test/run_all.py
 
+  host:
+    name: 版本逻辑单测
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 编译并运行 version_cmp
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror -I components/memoria_package/include \
+              test/host/test_version_cmp.cpp -o /tmp/test_version_cmp
+          /tmp/test_version_cmp
+
   build:
     name: 固件编译
     runs-on: ubuntu-latest

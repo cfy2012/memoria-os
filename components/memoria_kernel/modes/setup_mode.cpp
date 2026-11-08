@@ -27,6 +27,7 @@ extern "C" {
 
 #include <string>
 #include <vector>
+#include <utility>
 #include <algorithm>
 
 namespace memoria {
@@ -225,6 +226,7 @@ private:
             _upd_msg = "发现新版本 " + info.latest + (info.major ? "（大版本）" : "");
             _upd_ready = true;
             _upd_url = info.url;
+            _upd_sha = info.sha256;
         } else {
             _upd_msg = "已是最新 " + info.latest;
             _upd_ready = false;
@@ -235,14 +237,15 @@ private:
     void _apply_update() {
         if (!_upd_ready || _upd_url.empty()) { _upd_msg = "先检查更新"; return; }
         _upd_msg = "下载更新中…";
-        std::string* url = new std::string(_upd_url);
+        typedef std::pair<std::string, std::string> OtaJob;
+        OtaJob* job = new OtaJob(_upd_url, _upd_sha);
         BaseType_t ok = xTaskCreate([](void* arg) {
-            std::string* u = static_cast<std::string*>(arg);
-            package::firmware_apply(*u);   /* 成功即重启，不返回 */
-            delete u;
+            OtaJob* j = static_cast<OtaJob*>(arg);
+            package::firmware_apply(j->first, j->second);   /* 成功即重启，不返回 */
+            delete j;
             vTaskDelete(nullptr);
-        }, "fw_ota", 8192, url, 3, nullptr);
-        if (ok != pdPASS) { delete url; _upd_msg = "任务创建失败"; }
+        }, "fw_ota", 8192, job, 3, nullptr);
+        if (ok != pdPASS) { delete job; _upd_msg = "任务创建失败"; }
     }
 
     std::string _source_domain() {
@@ -541,6 +544,7 @@ private:
     uint8_t _sleep_min = 3;
     std::string _upd_msg;      /* 更新状态缓存 */
     std::string _upd_url;
+    std::string _upd_sha;      /* 清单里的固件 sha256，空 = 清单没给 */
     bool _upd_ready = false;
 
     /* 网络管理子界面状态 */

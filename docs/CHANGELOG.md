@@ -4,6 +4,25 @@
 >
 > 版本号第三位**奇数 = beta**、**偶数 = stable**，规则见 [`VERSIONING.md`](VERSIONING.md)。1.6.5 起严格执行，1.6.4 名义 stable、实为未上板验证的激进改造。
 
+## v1.6.9 — 2026-11-08 · OTA 下载全程 sha256 校验 + 版本逻辑上单测（beta）
+
+**背景**：v1.6.7 堵住的是"这固件是不是我的、版本够不够新"，但传输层只靠 TLS——TLS 保证端到端没被中间人改，不保证 CDN 给的就是清单里那个文件，也不保证给全了。半截文件、缓存串版、发布时 bin 与 version.json 不同步，都能过 `esp_ota_end`（它只验镜像结构和段校验和）。清单里没有摘要，就没有"下载完对不对"这一环。
+
+| 改动 | 内容 |
+|---|---|
+| 弃用 `esp_https_ota` | 高层 API 自己读 chunk 写槽，外部拿不到字节流，算不了摘要。改成 `esp_http_client` 逐块读 → `esp_ota_write` → 同块喂哈希 |
+| sha256 实现 | mbedtls 4 已删 `mbedtls/sha256.h`（legacy MD 接口整体移除），改用 PSA：`psa_crypto_init` + `psa_hash_setup/update/finish`，走 IDF 的 PSA 加密驱动 |
+| 三道拦截 | ① HTTP 状态非 200 ② `Content-Length` 与实际字节数不符 ③ sha256 与清单不符。任一命中都 `esp_ota_abort()`，**otadata 一个字节不写**，重启后还在原固件 |
+| 清单 | `firmware/version.json` 增 `sha256`；`FirmwareInfo` 增同名字段，检查完一路透传到 `firmware_apply(url, sha256)` → `ota_firmware(url, sha256)`；清单缺摘要时降级为只靠镜像校验，并打 `W` 日志 |
+| 发版一致性 | `test/checks/firmware.py` 强制校验清单里的 sha256 与 `firmware/memoria_os_<ver>.bin` 实际摘要一致，长度必须是 64 位十六进制。改了 bin 忘改清单，CI 直接红 |
+| 版本比较去重 | 原先 `ota_updater.cpp` 与 `firmware_update.cpp` 各有一份三点比较。抽成 `include/version_util.hpp` 的 `version_cmp()`：纯 C++、不 include 任何 IDF 头，host 可直接编译 |
+| CI 新 job | `版本逻辑单测`：g++ `-Wall -Wextra -Werror` 编译 `test/host/test_version_cmp.cpp` 并运行，18 条用例覆盖 `1.6.7 vs 1.6.70`、`1.6.10 vs 1.6.9`、缺段、非数字尾巴、空指针 |
+| 返回码 | 新增 6 = sha256 不符；3 的语义扩为"传输中断/长度不符" |
+
+**没解决**：① 盖章之后（进桌面满 30 秒）再崩仍不回滚——要彻底兜住得靠 NVS 启动计数在极早期主动作废本槽，本轮没做；② `esp_ota_write` 是顺序追加，断了不会断点续传，只能整包重下；③ 分区表仍是 `mem_fat` 6.4 MB + `mem_priv` 3 MB 占着，两槽各 2.9 MB。
+
+**产物**：`build/memoria_os.bin` = 1,961,712 B（0x1DEEF0），SHA256 `D847F82FBE7DA4CF57B45893C2E760FCA0D31F9151DA68DBD1492788EFAFDA50`；`ota_0` 槽余 37%。编译零 C++ 警告，结构校验 4/4 通过。**未上板验证**。
+
 ## v1.6.7 — 2026-11-08 · OTA 三处缺口补齐：证书校验 / 身份校验 / 盖章后移（beta）
 
 **背景**：查 IDF 源码发现 OTA 链路其实一次都没跑过——`esp_https_ota_begin()` 进门先查有没有服务器校验手段（`esp_https_ota.c:299-327`），`cert_pem` / `use_global_ca_store` / `crt_bundle_attach` 一个都没配，而 `CONFIG_ESP_HTTPS_OTA_ALLOW_HTTP` 未开，于是第一次调用就返回 `ESP_ERR_INVALID_ARG`。另外 bootloader 只验"这是一块 ESP32-S3 的合法 app 镜像"，从不比对项目名；盖章点在 boot 末尾，进桌面之后崩了不会回退。
