@@ -43,6 +43,7 @@ idf_component_register(
         memoria_drivers
         memoria_window
         memoria_fs
+        memoria_vault
         memoria_package
         memoria_script
         memoria_basic

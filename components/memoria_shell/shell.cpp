@@ -14,6 +14,7 @@
 #include "wifi_manager.hpp"
 #include "ble_manager.hpp"
 #include "sdcard.hpp"
+#include "vault.hpp"
 #include "power.hpp"
 #include "system_info.h"
 #include "i2s_audio.hpp"
@@ -66,6 +67,7 @@ static void _print_help(bool safe) {
             "sd                   SD card mount status\n"
             "sd mount             retry TF card mount\n"
             "sd format            ERASE ALL DATA on TF card and re-mount\n"
+            "vault                user-data storage backend (card / flash)\n"
             "reboot               restart ESP32\n"
             "quit                 exit shell\n"
             "(no TF card: desktop runs normally, SD features show 'insert card')\n");
@@ -82,6 +84,7 @@ static void _print_help(bool safe) {
         "memoria> sd                   SD card mount status\n"
         "memoria> sd mount             retry TF card mount\n"
         "memoria> sd format            ERASE ALL DATA on TF card and re-mount\n"
+        "memoria> vault                user-data storage backend, 'vault save' forces NVS mirror\n"
         "memoria> scripts              list all scripts in /mem_fat/scripts\n"
         "memoria> script <name>        run a .msp script from /mem_fat/scripts\n"
         "memoria> solve <expr>         solve equations (3x+5=20 | x^2-5x+6=0 | 2x+y=5,x-y=1)\n"
@@ -290,6 +293,22 @@ int Shell::execute(const std::string& line, bool safe) {
     if (cmd == "ble") {
         auto* b = drivers::BleManager::instance();
         std::fprintf(stdout, "ble: conn=%s\n", b->connected() ? "on" : "off");
+        return 0;
+    }
+
+    if (cmd == "vault") {
+        std::fprintf(stdout, "vault    : %s\n", vault::state());
+        if (vault::ready()) {
+            std::fprintf(stdout, "root     : %s\n", vault::root().c_str());
+            std::fprintf(stdout, "files    : nvs.bin + privfs.bin\n");
+            if (args.size() > 1 && args[1] == "save") {
+                std::fprintf(stdout, "mirror   : %s\n",
+                             vault::mirror_save() ? "saved" : "failed");
+            }
+        } else {
+            std::fprintf(stdout, "root     : flash (NVS partition + mem_priv)\n");
+            std::fprintf(stdout, "hint     : insert TF card and 'sd mount' to move user data to card\n");
+        }
         return 0;
     }
 

@@ -12,6 +12,7 @@ idf_component_register(
         esp_driver_tsens
         memoria_kernel
         memoria_fs
+        memoria_vault
         memoria_drivers
         memoria_script
         memoria_package

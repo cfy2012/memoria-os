@@ -11,11 +11,13 @@
  */
 
 #include "private_fs.hpp"
+#include "vault.hpp"
 
 extern "C" {
 #include <esp_partition.h>
 #include <esp_log.h>
 #include <esp_heap_caps.h>
+#include <sys/stat.h>
 #include <time.h>
 }
 
@@ -59,9 +61,17 @@ uint32_t PrivateFs::_crc32(const void* data, size_t len) {
 }
 
 /* ============================================================
- *  Flash 读写封装（带 4 字节对齐检查日志）
+ *  底层 I/O
+ *    卡后端：读写 /<mount>/sys/privfs.bin，短读按 0xFF 补齐（等价擦除态）
+ *    flash 后端：mem_priv 分区（卡不在时的降级路径）
  * ============================================================ */
 esp_err_t PrivateFs::_flash_read(uint32_t off, void* buf, size_t size) {
+    if (_card && _fp) {
+        if (std::fseek(_fp, static_cast<long>(off), SEEK_SET) != 0) return ESP_FAIL;
+        size_t n = std::fread(buf, 1, size, _fp);
+        if (n < size) std::memset(static_cast<uint8_t*>(buf) + n, 0xFF, size - n);
+        return ESP_OK;
+    }
     return esp_partition_read(_partition, off, buf, size);
 }
 
@@ -71,15 +81,103 @@ esp_err_t PrivateFs::_flash_write(uint32_t off, const void* buf, size_t size) {
         ESP_LOGE(TAG, "flash_write 4-byte align failed: off=0x%X size=%zu", off, size);
         return ESP_ERR_INVALID_ARG;
     }
+    if (_card && _fp) {
+        if (std::fseek(_fp, static_cast<long>(off), SEEK_SET) != 0) return ESP_FAIL;
+        if (std::fwrite(buf, 1, size, _fp) != size) return ESP_FAIL;
+        std::fflush(_fp);
+        return ESP_OK;
+    }
     return esp_partition_write(_partition, off, buf, size);
 }
 
 esp_err_t PrivateFs::_flash_erase_range(uint32_t off, size_t size) {
+    if (_card && _fp) {
+        uint8_t chunk[512];
+        std::memset(chunk, 0xFF, sizeof(chunk));
+        size_t done = 0;
+        while (done < size) {
+            size_t n = (size - done) < sizeof(chunk) ? (size - done) : sizeof(chunk);
+            if (std::fseek(_fp, static_cast<long>(off + done), SEEK_SET) != 0) return ESP_FAIL;
+            if (std::fwrite(chunk, 1, n, _fp) != n) return ESP_FAIL;
+            done += n;
+        }
+        std::fflush(_fp);
+        return ESP_OK;
+    }
     return esp_partition_erase_range(_partition, off, size);
 }
 
 esp_err_t PrivateFs::_flash_erase_all() {
+    if (_card) {
+        if (_fp) { std::fclose(_fp); _fp = nullptr; }
+        ::remove(_path.c_str());
+        _fp = std::fopen(_path.c_str(), "w+b");
+        if (!_fp) {
+            ESP_LOGE(TAG, "erase_all: card file reopen failed");
+            _card = false;
+            return ESP_FAIL;
+        }
+        return ESP_OK;
+    }
     return esp_partition_erase_range(_partition, 0, _partition->size);
+}
+
+/* ============================================================
+ *  卡后端：打开 /<mount>/sys/privfs.bin，首次创建时把 flash 老数据整体搬过来
+ * ============================================================ */
+esp_err_t PrivateFs::_open_card_backend() {
+    std::string p = vault::path("privfs.bin");
+    if (p.empty()) return ESP_FAIL;
+
+    bool fresh = false;
+    _fp = std::fopen(p.c_str(), "r+b");
+    if (!_fp) {
+        _fp = std::fopen(p.c_str(), "w+b");
+        fresh = (_fp != nullptr);
+    }
+    if (!_fp) return ESP_FAIL;
+
+    _card = true;
+    _path = p;
+    ESP_LOGI(TAG, "backend: card %s", p.c_str());
+    if (fresh) _migrate_from_flash();
+    return ESP_OK;
+}
+
+esp_err_t PrivateFs::_migrate_from_flash() {
+    if (!_partition) {
+        ESP_LOGI(TAG, "migrate: no mem_priv partition, start empty");
+        return ESP_OK;
+    }
+    uint32_t magic = 0;
+    if (esp_partition_read(_partition, 0, &magic, 4) != ESP_OK || magic != MAGIC) {
+        ESP_LOGI(TAG, "migrate: flash copy empty, nothing to move");
+        return ESP_OK;
+    }
+
+    const size_t kChunk = 4096;
+    uint8_t* buf = static_cast<uint8_t*>(std::malloc(kChunk));
+    if (!buf) return ESP_ERR_NO_MEM;
+
+    uint32_t total = _partition->size;
+    ESP_LOGW(TAG, "migrate: moving %u KB from flash to card (one time)",
+             static_cast<unsigned>(total / 1024));
+    for (uint32_t off = 0; off < total; off += kChunk) {
+        size_t n = (total - off) < kChunk ? (total - off) : kChunk;
+        if (esp_partition_read(_partition, off, buf, n) != ESP_OK) {
+            std::free(buf);
+            return ESP_FAIL;
+        }
+        if (std::fseek(_fp, static_cast<long>(off), SEEK_SET) != 0 ||
+            std::fwrite(buf, 1, n, _fp) != n) {
+            std::free(buf);
+            return ESP_FAIL;
+        }
+    }
+    std::fflush(_fp);
+    std::free(buf);
+    ESP_LOGI(TAG, "migrate: done");
+    return ESP_OK;
 }
 
 /* ============================================================
@@ -112,12 +210,16 @@ esp_err_t PrivateFs::init() {
     _partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA,
                                            ESP_PARTITION_SUBTYPE_ANY,
                                            "mem_priv");
-    if (!_partition) {
-        ESP_LOGE(TAG, "partition 'mem_priv' not found");
-        return ESP_ERR_NOT_FOUND;
+    _capacity = _partition ? _partition->size : 0x300000;
+
+    if (_open_card_backend() != ESP_OK) {
+        if (!_partition) {
+            ESP_LOGE(TAG, "no card backend and no mem_priv partition");
+            return ESP_ERR_NOT_FOUND;
+        }
+        ESP_LOGW(TAG, "card unavailable -> fallback to flash mem_priv (%u KB)",
+                 static_cast<unsigned>(_capacity / 1024));
     }
-    ESP_LOGI(TAG, "mem_priv: %u KB (0x%X)",
-             (unsigned)(_partition->size / 1024), _partition->address);
 
     /* 读 Superblock */
     esp_err_t ret = _flash_read(0, &_sb, sizeof(_sb));
@@ -147,8 +249,8 @@ esp_err_t PrivateFs::init() {
     _sb.used_entries = used;
 
     _sb.data_area_start = DATA_OFFSET;
-    _sb.data_area_size  = _partition->size - DATA_OFFSET;
-    if (_sb.next_free_offset < DATA_OFFSET || _sb.next_free_offset > _partition->size) {
+    _sb.data_area_size  = _capacity - DATA_OFFSET;
+    if (_sb.next_free_offset < DATA_OFFSET || _sb.next_free_offset > _capacity) {
         ESP_LOGW(TAG, "next_free_offset out of range → reset to DATA_OFFSET");
         _sb.next_free_offset = DATA_OFFSET;
     }
@@ -169,7 +271,7 @@ esp_err_t PrivateFs::format() {
     _sb.version            = VERSION;
     _sb.total_entries      = MAX_ENTRIES;
     _sb.data_area_start    = DATA_OFFSET;
-    _sb.data_area_size     = _partition->size - DATA_OFFSET;
+    _sb.data_area_size     = _capacity - DATA_OFFSET;
     _sb.next_free_offset   = DATA_OFFSET;
 
     std::memset(_entries, 0, sizeof(_entries));
@@ -224,9 +326,9 @@ esp_err_t PrivateFs::create(FileType type, const std::string& name,
 
     /* 数据堆空间检查：Data Heap 写是 4 字节对齐的 */
     uint32_t size_aligned = (size + 3) & ~3U;  /* round up to 4B */
-    if (_sb.next_free_offset + size_aligned > _partition->size) {
+    if (_sb.next_free_offset + size_aligned > _capacity) {
         ESP_LOGE(TAG, "data heap exhausted (need %u, free 0x%X..0x%X)",
-                 size, _sb.next_free_offset, (unsigned)_partition->size);
+                 size, _sb.next_free_offset, (unsigned)_capacity);
         return ESP_ERR_NO_MEM;
     }
 
@@ -337,7 +439,7 @@ int PrivateFs::write(FileHandle& handle, const void* buf, uint32_t len) {
     }
 
     /* 扩展：写新数据 + 更新 Superblock.next_free_offset */
-    if (cur_end_aligned + flash_write_size > _partition->size) {
+    if (cur_end_aligned + flash_write_size > _capacity) {
         ESP_LOGE(TAG, "data heap full during extend (need 0x%X)",
                  cur_end_aligned + flash_write_size);
         return -1;
@@ -383,7 +485,7 @@ esp_err_t PrivateFs::close(FileHandle& handle) {
 void PrivateFs::stats(uint32_t& used_bytes, uint32_t& total_bytes,
                       uint32_t& used_entries, uint32_t& total_entries) const {
     used_bytes    = _sb.next_free_offset - DATA_OFFSET;
-    total_bytes   = _partition ? _partition->size : 0;
+    total_bytes   = _capacity;
     used_entries  = _sb.used_entries;
     total_entries = _sb.total_entries;
 }

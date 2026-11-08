@@ -12,7 +12,7 @@
 | 1.6.2 | stable | 双挂载点前置修复 |
 | 1.6.3 | beta | 启动卡改屏幕 TF 卡槽，SD 大卡降为 `/sd_ext` 扩展盘 |
 | 1.6.4 | stable | 分区表改 `ota_0` + `ota_1` 双槽，删 `factory`，补 OTA 自校验 |
-| 1.6.5 | beta | 下一个实验位 |
+| 1.6.5 | beta | 用户数据整体搬 TF 卡（`memoria_vault` + PrivateFs 换后端），flash 只留系统 |
 | 1.6.6 | stable | 1.6.5 验证通过后的定版 |
 
 ## 为什么要分

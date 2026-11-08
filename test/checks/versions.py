@@ -42,8 +42,8 @@ def run(root):
         errs.append("version 格式非 X.Y.Z：%s" % c)
         return errs
 
-    minor = int(m.group(2))
-    want = "stable" if minor % 2 == 0 else "beta"
+    patch = int(m.group(3))
+    want = "stable" if patch % 2 == 0 else "beta"
 
     p = os.path.join(root, "firmware", "version.json")
     d = json.load(open(p, encoding="utf-8"))

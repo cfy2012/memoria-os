@@ -4,6 +4,33 @@
 >
 > 版本号第三位**奇数 = beta**、**偶数 = stable**，规则见 [`VERSIONING.md`](VERSIONING.md)。1.6.5 起严格执行，1.6.4 名义 stable、实为未上板验证的激进改造。
 
+## v1.6.5 — 2026-11-08 · 用户数据全部搬到 TF 卡，flash 只留系统（beta）
+
+**背景**：要求"所有东西都存 TF 卡、flash 里只有系统"。查代码确认 OTA 全程不碰数据分区（只写另一个 app 槽），真正抹掉数据的是整片 `erase-flash`，以及 1.6.4 分区表挪位后旧 `mem_priv` 数据还在原地址但新代码去新地址读。
+
+**做法**：不动七个 NVS 调用点、不动 25 处 `PrivateFs` 调用点，在存储层加一层拦截。
+
+| 改动 | 内容 |
+|---|---|
+| 新组件 `memoria_vault` | 卡上数据根 `<mount>/sys`；七个命名空间按 key 逐个按类型取样写成 `sys/nvs.bin`；`tick()` 60 秒节流自动镜像 |
+| 镜像安全 | `nvs.tmp` → 删旧 → rename；只镜像我方七个命名空间，不碰 `nvs.net80211` 等 IDF 内部状态 |
+| 回灌 | 开机发现 flash 七个命名空间全空、卡上有镜像 → 逐条写回并 commit（擦 `nvs`、换核心板都能恢复） |
+| `PrivateFs` 换后端 | 二进制布局完全不变（Superblock 4096 / Entry 64 / 1024 条 / DATA_OFFSET 69632），只换底层读写；卡上文件短读按 `0xFF` 补齐，等价擦除态 |
+| 一次性迁移 | `sys/privfs.bin` 首次创建时把 flash `mem_priv` 3 MB 分块整体搬进卡；flash 那份不删，作为兜底 |
+| 降级 | 卡不在 → NVS 走 `nvs` 分区、PrivateFs 走 `mem_priv`，开机照常进桌面 |
+| 关机保护 | `power_off_now()` 第 0 步先 `mirror_save()`，再关外设 |
+| shell | 新增 `vault`（看后端/路径）、`vault save`（立刻镜像） |
+| 依赖 | `memoria_fs` / `memoria_kernel` / `memoria_shell` 的 REQUIRES 补 `memoria_vault` |
+| 校验脚本 | `test/checks/versions.py` 的奇偶判据从第二位改成**第三位**（原先 1.6.x 的 minor 恒为 6，等于永远判 stable） |
+
+**数据落点**：`sys/nvs.bin`（设置 / 桌面 / 商店索引 / WiFi / OTA 地址 / 电源 / BLE）与 `sys/privfs.bin`（应用包、存档、笔记、照片、录音）。详见 [`STORAGE.md`](STORAGE.md)。
+
+**明确没做**：`nvs` 分区整体删（WiFi PHY 校准与 IDF 组件依赖它，删了起不来）；PrivateFs 掉电事务（自研简易 FS 只有"只扩不回收"的数据堆）；分区表收缩（`mem_fat` 6.4 MB 死区与 `mem_priv` 3 MB 暂留，改表要整片重烧）。
+
+**已知取舍**：最多丢最近 60 秒的设置变更；卡写数据过程中掉电可能留半截文件；卡和 flash 是两份独立数据，不自动合并，以卡为准。
+
+**产物**：`build/memoria_os.bin` = 1,893,632 B（0x1CE500），SHA256 `883F2ACA…B9A8F248`；`ota_0` 槽余 39%。结构校验 4/4 通过，编译零 C++ 警告。**未上板验证**——beta 号。
+
 ## 工程基础设施 — 2026-11-08
 
 不含固件改动，纯工具链与规范。

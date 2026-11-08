@@ -10,6 +10,7 @@
 #include <esp_err.h>
 #include <cstdint>
 #include <cstddef>
+#include <cstdio>
 #include <cstring>
 #include <string>
 #include <functional>
@@ -124,6 +125,10 @@ private:
     esp_err_t _flash_erase_range(uint32_t off, size_t size);
     esp_err_t _flash_erase_all();
 
+    /* 卡后端：/<mount>/sys/privfs.bin 承载全部数据；卡不在时退回 mem_priv 分区 */
+    esp_err_t _open_card_backend();
+    esp_err_t _migrate_from_flash();
+
     esp_err_t _sb_save();
     esp_err_t _et_save();
 
@@ -133,6 +138,11 @@ private:
 
     const esp_partition_t* _partition = nullptr;
     bool _inited = false;
+
+    FILE*       _fp = nullptr;
+    bool        _card = false;
+    uint32_t    _capacity = 0;
+    std::string _path;
 
     Superblock _sb{};
     Entry      _entries[MAX_ENTRIES]{};

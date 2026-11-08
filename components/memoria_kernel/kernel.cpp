@@ -24,6 +24,7 @@
 #include "gb2312_font.hpp"
 
 #include "private_fs.hpp"
+#include "vault.hpp"
 #include "fat_scanner.hpp"
 #include "update_scheduler.hpp"
 #include "mode_manager.hpp"
@@ -62,6 +63,9 @@ Kernel* Kernel::instance() {
  * deep_sleep_now() 不返回。 */
 static void power_off_now() {
     ESP_LOGW(TAG, "=== POWER OFF SEQUENCE ===");
+
+    /* 0. 先落盘用户数据（卡仍在挂载状态，这是最后一次可靠写入机会） */
+    vault::mirror_save();
 
     /* 1. 功放 EN 关（先停播放，避免 I2S 还在推数据） */
     if (drivers::I2sAudio::instance()->is_playing()) {
@@ -188,6 +192,18 @@ esp_err_t Kernel::init() {
         esp_err_t ext_ret  = sd->init_sdmmc(true);
         ESP_LOGI(TAG, "SD: TF %s @%s, ext %s", esp_err_to_name(main_ret),
                  sd->mount_point().c_str(), esp_err_to_name(ext_ret));
+    }
+
+    /* 5b. 用户数据保管：TF 卡 /mem_fat/sys 承载设置镜像与私有 FS，
+     *     卡不在时全部降级回 flash（NVS + mem_priv），系统照常启动 */
+    {
+        auto* sd = drivers::SdCard::instance();
+        if (sd->is_mounted()) {
+            esp_err_t vr = vault::prepare(sd->mount_point().c_str());
+            ESP_LOGI(TAG, "Vault: %s @%s", esp_err_to_name(vr), vault::root().c_str());
+        } else {
+            ESP_LOGW(TAG, "Vault: TF card missing, user data stays in flash");
+        }
     }
 
     /* 6. Battery ADC（后台采样任务）+ 低电量回调注册
@@ -345,6 +361,7 @@ void Kernel::main_loop() {
         /* SD 热插拔轮询（约每 1s 一次：20ms × 50） */
         if (++tick % 50 == 0) {
             drivers::SdCard::instance()->poll();
+            vault::tick();   /* 距上次镜像超 60s 则落盘一次 */
         }
 
         /* 渲染所有窗口 + 状态栏每 1s 刷新 */

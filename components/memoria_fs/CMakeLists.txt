@@ -10,4 +10,5 @@ idf_component_register(
         esp_driver_sdmmc
         heap
         memoria_drivers
+        memoria_vault
 )

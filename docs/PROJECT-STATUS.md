@@ -54,6 +54,7 @@ ESP32-S3 N16R8 上的自研掌机操作系统：内核、窗口、文件系统�
 | 27 | 分区表 A/B 双槽改造（v1.6.4） | 删掉与 ota_0 重复的 factory，补 `otadata`(0x10000/8K)；ota_0 移到 0x020000，新增 `ota_1`(0x310000/3M)；`mem_fat`/`mem_priv` 各后移 64KB、容量不变；开 `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y`。OTA 首次具备升级与回滚能力 |
 | 28 | CI + 结构校验 + 版本规则（2026-11-08） | `.github/workflows/verify.yml` 两个 job（Python 结构校验 / ESP-IDF 6.1 编译）；`test/` 四项检查（分区表、版本三处同步、version.json、组件依赖），每项都用负例验证过能抓错；版本号奇偶规则落 `docs/VERSIONING.md`，`version.json` 加 `channel` |
 | 29 | 变砖救援手册（2026-11-08） | `docs/RECOVERY.md`：按串口输出分四级判断；app 层先靠 ROLLBACK 自动回退（不盖章就回滚，一次复位生效）；擦 `otadata` 强回 ota_0；两槽全坏走 `erase-flash` 整片重烧；分区↔地址↔长度对照表；烧录地址 app=0x20000 的坑单独标注 |
+| 30 | 用户数据全部搬 TF 卡（v1.6.5） | 新建 `memoria_vault`：七个 NVS 命名空间逐 key 按类型镜像到 `/mem_fat/sys/nvs.bin`（60 秒节流 + 关机前强制 + 全空回灌）；`PrivateFs` 换后端到 `sys/privfs.bin`（布局不变，25 处调用点零改动），首次建文件时把 flash `mem_priv` 3MB 整体迁移；卡不在全量降级 flash；shell 加 `vault`。详见 `docs/STORAGE.md` |
 
 ## 四、待办任务表
 
@@ -70,6 +71,7 @@ ESP32-S3 N16R8 上的自研掌机操作系统：内核、窗口、文件系统�
 | 7 | P1 | 外壳 3D 建模（卡尺实测后开工） | — | 器件到货 | ⚪ |
 | 8 | P1.5 | 麦克风 INMP441 上板验证 | — | 上板稳定后 | ⚪ |
 | 9 | P2 | OTA 真机验证（等 1.6.4 上线 jsdelivr 后，先整片 erase-flash） | 用户 | #1 | ⚪ |
+| 9b | P1 | v1.6.5 上板验证：卡上生成 `sys/`、改设置 60 秒内落盘、拔卡降级、擦 `nvs` 后回灌 | 用户 | 卡 + 板 | ⚪ |
 | 10 | P2 | 42 小时挂测 + 72 小时出货验收 | 用户 | 上板稳定 | ⚪ |
 | 11 | P2 | 三复位源排查（BOD 欠压 / task_wdt / StoreProhibited panic），`HEALTH-REPORT.md` 列为最高优先级 | 固件 | 上板复现日志 | ⚪ |
 
@@ -78,6 +80,8 @@ ESP32-S3 N16R8 上的自研掌机操作系统：内核、窗口、文件系统�
 | 产物 | 值 | 备注 |
 |------|-----|------|
 | `build/memoria_os.bin` v1.6.4 | 1,886,000 B（0x1CC730）/ SHA256 `8AA15DA52C872A5C96F49A5E778A4EEABC909408CD1E064235A3A0BB24FC9F7D` | 零警告零错误，ota_0 槽余 39% |
+| `build/memoria_os.bin` v1.6.5 | 1,893,632 B（0x1CE500）/ SHA256 `883F2ACAF59398D55563DAAE62466FB76A6BB831F31108B83ACAAC65B9A8F248` | 零 C++ 警告，ota_0 槽余 39%，未上板 |
+| `firmware/memoria_os_1.6.5.bin` | 同上，逐字节复制 | beta |
 | `firmware/memoria_os_1.6.4.bin` | 同上，逐字节复制 | 已随 OTA 仓上传 |
 | `firmware/version.json` | version 1.6.4 / url 指向 `memoria_os_1.6.4.bin` / major false | 已随 OTA 仓上传 |
 | 本地 git | `main` 由 `f2413394`（v1.4.0）线性推进至 v1.6.4（重建 → 补丁复原 → 文档 → 启动卡 → A/B 分区） | 远端正本见「六」，tree 逐字节校验通过 |
