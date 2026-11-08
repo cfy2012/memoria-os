@@ -21,6 +21,8 @@
 
 四个检查都用负例验证过：故意改坏对应文件，全部转 FAIL；还原后 4/4 通过。
 
+**首次真实运行（2026-11-08，commit `f28a07b7`）**：两个 job 全部 success。`checks` 在干净 ubuntu 上几秒跑完；`build` 从零 clone `release/v6.1`、装 `esp32s3` 工具链、完整编译，产物 `memoria_os.bin` 上传成功。这意味着 GitHub 上的源码是自足的——换一台干净的机器就能编出同样的固件，不再依赖本机环境。
+
 ## v1.6.4 — 2026-11-08 · 分区表改 ota_0 + ota_1 双槽，删掉 factory
 
 **背景**：实测确认这块板从建库起一直从 `factory`（0x10000）启动，`ota_0`（0x300000）里的固件从未运行过；分区表缺 `otadata`，`esp_ota_set_boot_partition()` 无处记录"下次从哪起"，OTA 一次都升不上去。另查明 flash 上的 `mem_fat`（6.4MB）全仓没有任何挂载代码，是死区。据此删掉与 `ota_0` 重复的 factory 槽，改成标准 A/B 双槽。
