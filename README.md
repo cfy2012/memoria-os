@@ -112,6 +112,22 @@ idf.py -p COMx flash monitor
 
 设备端升级路径：shell 执行 `ota_url <清单地址>` 设置源后 `ota_firmware` 一键升级；本地/远端版本比对取自 app_desc 版本串（`PROJECT_VER` 显式固定，不受编译时间戳污染）。
 
+## 变砖了怎么办
+
+先看清楚是哪一级坏了，别第一步就 `erase-flash`——那会把 WiFi 和 OTA 地址一起清掉。
+
+| 现象 | 怎么办 |
+|---|---|
+| 屏幕黑，但串口有 `ESP-ROM:esp32s3` 之后的输出 | **什么都别做，断电重启一次**。新固件没盖章，bootloader 会自动回退旧槽 |
+| 已经盖章、不想要这个固件了 | 擦 `otadata`：`python -m esptool -p COMx erase-region 0x10000 0x2000`，复位即回 `ota_0` |
+| 两槽都坏、反复回滚、串口没 boot 日志 | `idf.py -p COMx erase-flash` → `idf.py flash monitor`，整片重烧 |
+| 只想重置网络 / 应用数据 | 局部擦 `nvs`(0x9000/0x6000) 或 `mem_priv`(0xC20000/0x300000) |
+| 电脑认不到串口 | 按住核心板 BOOT + 按一下 RST 进下载模式；USB 不行就换 UART 43/44 排针 |
+
+**手写烧录地址时注意**：app 现在在 **0x20000**（bootloader `0x0`、分区表 `0x8000`）。按老的 `0x10000` 烧会把 app 写进 `otadata`，越烧越砖。
+
+完整的判断流程、分区分长度对照表、各条命令、救完后的确认清单，见 [`docs/RECOVERY.md`](docs/RECOVERY.md)。
+
 ## 硬件要求
 
 | 模块 | 规格 | 说明 |
@@ -197,6 +213,8 @@ memoria-os/
 | `docs/BASIC-OOP.md` | struct/class/容器扩展层设计 |
 | `docs/MSP-DEPLOY.md` | 应用打包三步部署指南 |
 | `docs/PROJECT-STATUS.md` | 项目当前状态快照（接手先读） |
+| `docs/RECOVERY.md` | 变砖救援：分级判断、自动回滚、局部擦除地址表、重烧命令 |
+| `docs/VERSIONING.md` | 版本规则：奇数 beta / 偶数 stable 与发布流程 |
 | `docs/CONTRIBUTING.md` | 开发约定与代码规范 |
 | `docs/WIRING.md` | 硬件接线账本 |
 | `docs/HARDWARE-BOM.md` / `HARDWARE-DIMENSIONS.md` | 硬件采购清单 / 外壳与器件尺寸标准 |
