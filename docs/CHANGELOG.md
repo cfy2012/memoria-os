@@ -4,6 +4,29 @@
 >
 > 版本号第三位**奇数 = beta**、**偶数 = stable**，规则见 [`VERSIONING.md`](VERSIONING.md)。1.6.5 起严格执行，1.6.4 名义 stable、实为未上板验证的激进改造。
 
+## v1.6.11 — 2026-11-08 · 裸核心板能跑到 OTA（beta）
+
+**背景**：手上只有一块 ESP32-S3 核心板（无屏、无键盘、无摇杆、无电池），要上板验 OTA。逐行核对 boot 序列后发现真正会"自杀"的不是屏，而是电池采样。
+
+| 实际行为 | 结论 |
+|---|---|
+| `Ili9341::init()`（第 3 步） | 只往 SPI 写初始化命令，**从不读面板 ID**，接不接屏都返回 `ESP_OK`；framebuffer 从 PSRAM 分配（核心板 8 MB 够），也不失败。裸板照常过 |
+| `keyboard_input_init()`（第 17 步） | 内部 `keyboard_init()` 的返回值被丢弃，`keyboard_start()` 也不回传，函数**恒返回 `ESP_OK`**。MCP23017 无应答只影响按键，不阻断 boot |
+| `RtcClock::init()`（第 8 步） | 纯 `localtime` 封装，没有 I2C 硬件，恒返回 `ESP_OK` |
+| `BatteryAdc`（第 6 步） | init 成功，但采样任务会读悬空引脚 → 电压持续 < 3.5V → **约 30 秒后触发 EmergencyShutdown → 深睡眠**。裸板没有 GPIO2 唤醒键，等于变砖 |
+
+| 改动 | 内容 |
+|---|---|
+| 电池存在性探测 | `BatteryAdc::init()` 配完通道立刻连采 5 次（间隔 5 ms），算均值与峰峰值。均值 < 1.5 V（任何锂电都不可能）或峰峰 > 400 mV（真电池不会这么抖）判为"没接电池" |
+| 保命链降级 | `_present == false` 时只刷新 `_voltage` / `_percent`，低电量与保命两个回调整段跳过；串口打 `battery NOT DETECTED (guard off)` |
+| 真机不变 | 接上电池后均值 ≥ 1.5 V 且抖动 < 400 mV，`_present = true`，crit / emergency 逻辑与 1.6.9 逐字相同 |
+| 新增接口 | `BatteryAdc::is_present()`，供后续 UI 区分"电池没电"和"没装电池" |
+| 串口 OTA 入口 | shell 加 `fw_check`（拉清单，打印 latest / sha256 / url / changelog）与 `fw_update`（清单 → `firmware_apply(url, sha256)` 走完整校验链）。裸板没有屏幕和键盘，这两条是无外设时唯一能验下载校验的通道；同时把 `ota_firmware` 的失败码注释从旧的 1/2/3 修正为 1–6 |
+
+**没解决**：① 悬空摇杆仍会产生随机导航事件（不影响 OTA，只是把窗口乱切）；② 裸板没有唤醒键，一旦进了深睡眠只能整片重烧，所以本轮只处理电池这条路；③ 屏在但背光不在时没有亮度反馈；④ `fw_check` 依赖默认 package mirror 派生出的 `/firmware/version.json`，若此前用 `pkg_mirror` 改过地址需先改回。
+
+**产物**：`build/memoria_os.bin` = 1,963,312 B（0x1DF530），SHA256 `D9F329031D854F5E01DB8F667449F83A1F6D71DEF50999B84DC0DCD73432CDBC`；`ota_0` 槽余 37%。编译零 C++ 警告，结构校验 4/4 通过。**未上板验证**。
+
 ## v1.6.9 — 2026-11-08 · OTA 下载全程 sha256 校验 + 版本逻辑上单测（beta）
 
 **背景**：v1.6.7 堵住的是"这固件是不是我的、版本够不够新"，但传输层只靠 TLS——TLS 保证端到端没被中间人改，不保证 CDN 给的就是清单里那个文件，也不保证给全了。半截文件、缓存串版、发布时 bin 与 version.json 不同步，都能过 `esp_ota_end`（它只验镜像结构和段校验和）。清单里没有摘要，就没有"下载完对不对"这一环。

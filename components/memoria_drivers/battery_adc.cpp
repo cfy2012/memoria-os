@@ -53,6 +53,29 @@ esp_err_t BatteryAdc::init() {
 
     static adc_oneshot_unit_handle_t s_handle = handle;
 
+    /* 电池存在性探测：裸核心板 / 分压电阻没焊时引脚悬空，读数既低又乱。
+     * 采 5 次看均值与峰峰值，判为"没接电池"就只更新读数、禁用低电量回调，
+     * 否则悬空读数会在 30 秒后触发保命关机（裸板没有唤醒键，等于变砖） */
+    {
+        int mn = 4096, mx = 0;
+        int32_t sum = 0;
+        constexpr int PROBE = 5;
+        for (int i = 0; i < PROBE; i++) {
+            int raw = 0;
+            adc_oneshot_read(handle, static_cast<adc_channel_t>(BATTERY_ADC_CHANNEL), &raw);
+            if (raw < mn) mn = raw;
+            if (raw > mx) mx = raw;
+            sum += raw;
+            vTaskDelay(pdMS_TO_TICKS(5));
+        }
+        float avg_mv  = (static_cast<float>(sum) / PROBE / 4096.0f) * 3300.0f * BATTERY_DIV_RATIO;
+        float span_mv = (static_cast<float>(mx - mn) / 4096.0f) * 3300.0f * BATTERY_DIV_RATIO;
+        _present = (avg_mv >= 1500.0f) && (span_mv <= 400.0f);
+        _voltage = avg_mv / 1000.0f;
+        ESP_LOGI(TAG, "probe %.2fV span %.0fmV -> battery %s",
+                 _voltage, span_mv, _present ? "present" : "NOT DETECTED (guard off)");
+    }
+
     BaseType_t ok = xTaskCreate([](void* arg) {
         adc_oneshot_unit_handle_t h = *static_cast<adc_oneshot_unit_handle_t*>(arg);
         static BatteryAdc* self = BatteryAdc::instance();
@@ -84,23 +107,26 @@ esp_err_t BatteryAdc::init() {
             /* 充电状态：CHRG 低 = 充电中 */
             self->_charging = (gpio_get_level(static_cast<gpio_num_t>(CHRG_DET_GPIO)) == 0);
 
-            /* 低电量防抖链：< 临界持续 → crit 回调；< 3.5V 持续 ~30s → 保命关机 */
-            if (vbat < BATTERY_LOW_CRIT_VOL) {
-                if (++crit_rounds >= 5) {   /* ~10s 连续临界低 → UI 低电量 */
+            /* 低电量防抖链：< 临界持续 → crit 回调；< 3.5V 持续 ~30s → 保命关机
+             * 没探到电池（裸板/分压未接）时整段跳过，否则悬空读数会误触发关机 */
+            if (self->_present) {
+                if (vbat < BATTERY_LOW_CRIT_VOL) {
+                    if (++crit_rounds >= 5) {   /* ~10s 连续临界低 → UI 低电量 */
+                        crit_rounds = 0;
+                        if (BatteryAdc::s_crit_cb) BatteryAdc::s_crit_cb();
+                    }
+                } else {
                     crit_rounds = 0;
-                    if (BatteryAdc::s_crit_cb) BatteryAdc::s_crit_cb();
                 }
-            } else {
-                crit_rounds = 0;
-            }
-            if (vbat < BATTERY_EMERGENCY_VOL) {
-                if (++emergency_rounds >= 15) {   /* ~30s 连续 <3.5V → 保命深睡眠 */
-                    ESP_LOGW(TAG, "battery %.2fV < %.1fV for ~30s — emergency shutdown", vbat, BATTERY_EMERGENCY_VOL);
+                if (vbat < BATTERY_EMERGENCY_VOL) {
+                    if (++emergency_rounds >= 15) {   /* ~30s 连续 <3.5V → 保命深睡眠 */
+                        ESP_LOGW(TAG, "battery %.2fV < %.1fV for ~30s — emergency shutdown", vbat, BATTERY_EMERGENCY_VOL);
+                        emergency_rounds = 0;
+                        if (BatteryAdc::s_emergency_cb) BatteryAdc::s_emergency_cb();
+                    }
+                } else {
                     emergency_rounds = 0;
-                    if (BatteryAdc::s_emergency_cb) BatteryAdc::s_emergency_cb();
                 }
-            } else {
-                emergency_rounds = 0;
             }
 
             vTaskDelay(pdMS_TO_TICKS(2000));

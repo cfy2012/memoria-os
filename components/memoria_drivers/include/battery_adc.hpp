@@ -42,6 +42,8 @@ public:
     static void set_emergency_cb(LowBatteryCb cb) { s_emergency_cb = cb; }
 
     bool is_inited() const { return _inited; }
+    /* 探到有效电池分压才为 true；裸板/分压未接时为 false，低电量回调全部禁用 */
+    bool is_present() const { return _present; }
 
 private:
     BatteryAdc() = default;
@@ -51,6 +53,7 @@ private:
     uint8_t _percent = 80;
     bool    _charging = false;
     bool    _inited = false;
+    bool    _present = true;
 
     static LowBatteryCb s_crit_cb;
     static LowBatteryCb s_emergency_cb;

@@ -21,6 +21,7 @@
 #include "kernel.hpp"   /* reboot */
 #include "evaluator.hpp"
 #include "package_manager.hpp"
+#include "firmware_update.hpp"
 #include "ota_updater.hpp"
 #include "math_solver.hpp"
 
@@ -68,6 +69,8 @@ static void _print_help(bool safe) {
             "sd mount             retry TF card mount\n"
             "sd format            ERASE ALL DATA on TF card and re-mount\n"
             "vault                user-data storage backend (card / flash)\n"
+            "fw_check             pull version.json: latest version / sha256 / url\n"
+            "fw_update            check manifest then OTA with sha256 (reboot on success)\n"
             "reboot               restart ESP32\n"
             "quit                 exit shell\n"
             "(no TF card: desktop runs normally, SD features show 'insert card')\n");
@@ -93,6 +96,8 @@ static void _print_help(bool safe) {
         "memoria> pkg_cfg              show current package config\n"
         "memoria> ota_url <url>        set firmware OTA URL (persistent)\n"
         "memoria> ota_firmware         start firmware OTA now (reboot on success)\n"
+        "memoria> fw_check             pull version.json: latest version / sha256 / url\n"
+        "memoria> fw_update            check manifest then OTA with sha256 (reboot on success)\n"
         "memoria> rec start            start INMP441 recording -> /mem_fat/rec.wav\n"
         "memoria> rec stop             stop recording, finalize WAV header\n"
         "memoria> reboot               restart ESP32\n"
@@ -404,9 +409,51 @@ int Shell::execute(const std::string& line, bool safe) {
 
     if (cmd == "ota_firmware") {
         std::fprintf(stdout, "starting firmware OTA...\n");
-        /* #86：OTA 失败码（1/2/3）只打印不冒泡；成功路径在 ota_firmware 内部直接 esp_restart */
+        std::fflush(stdout);
+        /* 失败码：1 HTTP，2 分区/begin/end，3 传输中断或长度不符，4 身份不符，5 时间未同步，6 sha256 不符
+         * 只打印不冒泡；成功路径在 ota_firmware 内部直接 esp_restart */
         int r = package::ota_firmware();
         if (r != 0) std::fprintf(stdout, "ota: failed (code %d)\n", r);
+        return 0;
+    }
+
+    if (cmd == "fw_check") {
+        /* 走清单（默认 package mirror 派生 /firmware/version.json），拿到 url + sha256 */
+        package::FirmwareInfo info;
+        package::firmware_check(info);
+        std::fprintf(stdout, "fw: current=%s latest=%s update=%s\n",
+                     package::firmware_current_version().c_str(), info.latest.c_str(),
+                     info.update_available ? "yes" : "no");
+        if (!info.sha256.empty())
+            std::fprintf(stdout, "fw: sha256=%.16s... (%u hex)\n",
+                         info.sha256.c_str(), (unsigned)info.sha256.size());
+        else if (info.update_available)
+            std::fprintf(stdout, "fw: manifest has no sha256 -> image check only\n");
+        if (!info.url.empty())  std::fprintf(stdout, "fw: url=%s\n", info.url.c_str());
+        if (!info.changelog.empty()) std::fprintf(stdout, "fw: %s\n", info.changelog.c_str());
+        if (!info.error.empty()) std::fprintf(stdout, "fw: error=%s\n", info.error.c_str());
+        return 0;
+    }
+
+    if (cmd == "fw_update") {
+        /* 清单 + sha256 全链路：裸核心板（无屏无键盘）验 OTA 的主入口 */
+        package::FirmwareInfo info;
+        if (!package::firmware_check(info)) {
+            std::fprintf(stdout, "fw_update: check failed (%s)\n", info.error.c_str());
+            return 0;
+        }
+        if (!info.update_available) {
+            std::fprintf(stdout, "fw_update: already up to date (%s)\n",
+                         package::firmware_current_version().c_str());
+            return 0;
+        }
+        std::fprintf(stdout, "fw_update: %s -> %s, sha256=%s\n",
+                     package::firmware_current_version().c_str(), info.latest.c_str(),
+                     info.sha256.empty() ? "(none)" : info.sha256.c_str());
+        std::fflush(stdout);
+        package::firmware_apply(info.url, info.sha256);   /* 成功内部重启，不返回 */
+        std::fprintf(stdout, "fw_update: aborted, still on %s\n",
+                     package::firmware_current_version().c_str());
         return 0;
     }
 
