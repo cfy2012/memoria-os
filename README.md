@@ -1,6 +1,6 @@
 # Memoria OS
 
-**Memoria OS v1.6.2** 是一款基于 ESP32-S3（N16R8：16 MB Flash + 8 MB Octal PSRAM）自主设计的掌机操作系统。系统内核、窗口系统、文件系统、脚本引擎、BASIC 解释器与应用商店均为从零自研，不依赖 Linux、LVGL 或任何现成 UI 框架。项目以开源复古计算与嵌入式系统学习为定位，面向希望理解完整嵌入式系统栈的开发者。
+**Memoria OS v1.6.3** 是一款基于 ESP32-S3（N16R8：16 MB Flash + 8 MB Octal PSRAM）自主设计的掌机操作系统。系统内核、窗口系统、文件系统、脚本引擎、BASIC 解释器与应用商店均为从零自研，不依赖 Linux、LVGL 或任何现成 UI 框架。项目以开源复古计算与嵌入式系统学习为定位，面向希望理解完整嵌入式系统栈的开发者。
 
 ## 项目定位
 
@@ -66,12 +66,13 @@ idf.py build
 idf.py -p COMx flash monitor
 ```
 
-构建基线保持全绿，编译选项启用 `-Werror`，当前零警告。v1.6.2 固件二进制约 1.88 MB（app 分区 39% 空闲）。
+构建基线保持全绿，编译选项启用 `-Werror`，当前零警告。v1.6.3 固件二进制约 1.88 MB（app 分区 39% 空闲）。
 
 > **换机器重建必读**：仓库不收录 `sdkconfig`，构建配置全部由 `sdkconfig.defaults` 生成。其中 FreeRTOS 段必须保留
 > `CONFIG_FREERTOS_USE_TRACE_FACILITY=y` 与 `CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y`——`shell` 的 `sys` 命令调用
 > `uxTaskGetSystemState()` 列任务栈水位，这两项关闭时链接期会报 `undefined reference`。
 
+**v1.6.3（2026-11-08，启动卡改屏幕 TF 卡槽）**：外置 TF 卡座弃用，启动卡改用屏幕模块自带的 microSD 槽——与屏共用 SPI 四线（SCK/MOSI/MISO = 12/11/13），只多一根 CS 17，挂 `/mem_fat`，字库/store/脚本/音频仍在这张卡上。侧面 SD 大卡座（SDMMC 40/39/41）降为扩展盘，挂 `/sd_ext`，后插导照片；两卡可同时在线，扩展卡挂载失败不会被格式化，主卡缺失时才由大卡接管 `/mem_fat` 兜底。
 **v1.6.2（2026-11-08，开机 SD 双通道 + 注释纠正）**：`kernel.cpp` 开机改为先试 SDMMC 大卡座、失败回落 SPI（此前 `init_sdmmc()` 只在 `shell sd mmc` 里被调用，开机永远走 SPI）；`drivers_config.hpp` 的 SUBMOS 注释改成与 P-MOS 极性一致（低电平供电、深睡眠拉高），GPIO48 电平逻辑未动。
 **v1.6.1（2026-11-07，轨迹补丁复原 GUI）**：从会话轨迹补丁重放 40 处 Edit，补回 1.4.0 里没有的 GUI 能力——字模 1~3 倍缩放、列表多实例（`list id,x,y,w,h`）、按钮 icon/font 与上限 8→16、自定义图标 `ICON` 100~139、彩蛋图鉴 `EGG`/`EGGLIST`/`EGGSCROLL` 24 条。
 

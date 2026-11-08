@@ -167,11 +167,12 @@ static constexpr int SUBMOS_EN_GPIO   = 48;
 static constexpr int CHRG_DET_GPIO    = 42;
 
 /* ============================================================
- * SD 大卡座 SDMMC（1-bit）—— 2026-10-11 定版
- * 小 TF 卡继续走 SPI（SD_CS_GPIO=17），两套并存互不干扰：
- *   - SPI 路：SPI2_HOST 共享总线，CS=17，兼容任意 TF 转接板
- *   - SDMMC 路：专用外设，1-bit 只需 CLK/CMD/D0 三线，速度远高于 SPI
- * 固件优先尝试 SDMMC，失败回落 SPI。
+ * SD 大卡座 SDMMC（1-bit）—— 2026-11-08 分工定版
+ *   - 启动卡 = 屏幕上的 TF 卡槽，走 SPI（SD_CS_GPIO=17），挂 /mem_fat
+ *     字库 /mem_fat/font、store、脚本、音频都在这张卡上
+ *   - 扩展卡 = 侧面 SD 大卡座，走 SDMMC 1-bit（CLK/CMD/D0 三线），挂 /sd_ext
+ *     开机后再插卡导照片/数据，不占用启动卡
+ * 两卡可同时在线；扩展卡没插不影响启动，主卡缺失时才由大卡接管 /mem_fat。
  * ============================================================ */
 static constexpr int SDMMC_CLK_GPIO = 40;
 static constexpr int SDMMC_CMD_GPIO = 39;

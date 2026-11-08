@@ -87,9 +87,12 @@ esp_err_t SdCard::init(bool quiet) {
 }
 
 /* SD 大卡座：SDMMC 1-bit 专用外设通路（2026-10-11 定版）
- * 与 SPI 路共用 /mem_fat 挂载点，互斥；卡座未接线时返回超时，调用方回落 SPI。 */
+ * 主卡（屏幕 TF）在位 → 挂 /sd_ext 当扩展盘；主卡不在 → 接管 /mem_fat 兜底。 */
 esp_err_t SdCard::init_sdmmc(bool quiet) {
-    if (_mounted) return ESP_OK;
+    if (_ext_mounted) return ESP_OK;
+
+    bool as_ext = _mounted;
+    const std::string& path = as_ext ? _ext_mount : _mount_point;
 
     /* 日志压制口径与 SPI init 一致：无卡探测期间 sdmmc/gpio 层会刷屏 */
     esp_log_level_t lv_sdmmc = esp_log_level_get("sdmmc_sd");
@@ -110,13 +113,14 @@ esp_err_t SdCard::init_sdmmc(bool quiet) {
     slot_cfg.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
 
     esp_vfs_fat_mount_config_t mount_cfg{};
-    mount_cfg.format_if_mount_failed = _format_next;
+    /* 扩展卡上可能是照片，绝不允许 "挂不上就格式化" */
+    mount_cfg.format_if_mount_failed = as_ext ? false : _format_next;
     mount_cfg.max_files = 16;
     mount_cfg.allocation_unit_size = 32 * 1024;
 
     sdmmc_card_t* card = nullptr;
     esp_err_t ret = esp_vfs_fat_sdmmc_mount(
-        _mount_point.c_str(), &host, &slot_cfg, &mount_cfg, &card);
+        path.c_str(), &host, &slot_cfg, &mount_cfg, &card);
 
     esp_log_level_set("sdmmc_sd", lv_sdmmc);
     esp_log_level_set("vfs_fat_sdmmc", lv_vfs);
@@ -128,10 +132,16 @@ esp_err_t SdCard::init_sdmmc(bool quiet) {
         return ret;
     }
 
-    _card = card;
-    _mounted = true;
-    _sdmmc = true;
-    ESP_LOGI(TAG, "FAT mounted at %s (SDMMC 1-bit)", _mount_point.c_str());
+    if (as_ext) {
+        _ext_card    = card;
+        _ext_mounted = true;
+        ESP_LOGI(TAG, "ext SD mounted at %s (SDMMC 1-bit)", _ext_mount.c_str());
+    } else {
+        _card    = card;
+        _mounted = true;
+        _sdmmc   = true;
+        ESP_LOGI(TAG, "FAT mounted at %s (SDMMC 1-bit, fallback)", _mount_point.c_str());
+    }
     return ESP_OK;
 }
 
@@ -150,20 +160,33 @@ esp_err_t SdCard::deinit() {
     return ret;
 }
 
-bool SdCard::present() {
-    FILE* f = fopen(_mount_point.c_str(), "r");
+esp_err_t SdCard::deinit_sdmmc() {
+    if (!_ext_mounted) return ESP_OK;
+    esp_err_t ret = esp_vfs_fat_sdcard_unmount(_ext_mount.c_str(), _ext_card);
+    if (ret == ESP_OK) { _ext_mounted = false; _ext_card = nullptr; }
+    return ret;
+}
+
+static bool dir_openable(const std::string& p) {
+    FILE* f = fopen(p.c_str(), "r");
     if (f) { fclose(f); return true; }
     return false;
+}
+
+bool SdCard::present() {
+    return dir_openable(_mount_point);
 }
 
 void SdCard::poll() {
     /* #83：未挂载时不自动重试——每次 mount 尝试阻塞主循环 ~4s（无卡探测超时）
      * 且产生 GPIO CS conflict 噪音。挂卡后由 shell 'sd mount' 手动挂载。 */
-    if (!_mounted) return;
-    /* 已挂载：探测卡是否仍存在（拔出则卸载 VFS，避免读写悬空错误） */
-    if (!present()) {
-        ESP_LOGW(TAG, "card removed, unmounting");
+    if (_mounted && !dir_openable(_mount_point)) {
+        ESP_LOGW(TAG, "main card removed, unmounting");
         deinit();
+    }
+    if (_ext_mounted && !dir_openable(_ext_mount)) {
+        ESP_LOGW(TAG, "ext SD removed, unmounting");
+        deinit_sdmmc();
     }
 }
 

@@ -303,8 +303,12 @@ int Shell::execute(const std::string& line, bool safe) {
         }
         if (args.size() >= 2 && args[1] == "mmc") {
             esp_err_t e = s->init_sdmmc(false);   /* SD 大卡座：SDMMC 1-bit 通路 */
-            if (e == ESP_OK) std::fprintf(stdout, "sd mmc: OK, mounted at %s (SDMMC 1-bit)\n", s->mount_point().c_str());
-            else             std::fprintf(stdout, "sd mmc: failed (%s) - check CLK/CMD/D0 wiring\n", esp_err_to_name(e));
+            if (e == ESP_OK) {
+                const std::string& p = s->ext_mounted() ? s->ext_mount_point() : s->mount_point();
+                std::fprintf(stdout, "sd mmc: OK, mounted at %s (SDMMC 1-bit)\n", p.c_str());
+            } else {
+                std::fprintf(stdout, "sd mmc: failed (%s) - check CLK/CMD/D0 wiring\n", esp_err_to_name(e));
+            }
             return 0;
         }
         if (args.size() >= 2 && args[1] == "format") {
@@ -314,8 +318,10 @@ int Shell::execute(const std::string& line, bool safe) {
             else             std::fprintf(stdout, "sd format: failed (%s)\n", esp_err_to_name(e));
             return 0;
         }
-        std::fprintf(stdout, "sd: mounted=%s bus=%s\n", s->is_mounted() ? "yes" : "no",
-                     s->is_sdmmc() ? "SDMMC" : "SPI");
+        std::fprintf(stdout, "sd: main=%s bus=%s | ext=%s\n",
+                     s->is_mounted() ? "yes" : "no",
+                     s->is_sdmmc() ? "SDMMC" : "SPI",
+                     s->ext_mounted() ? "yes" : "no");
         return 0;
     }
 
