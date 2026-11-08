@@ -52,6 +52,7 @@ ESP32-S3 N16R8 上的自研掌机操作系统：内核、窗口、文件系统�
 | 25 | 开机 SD 双通道 + SUBMOS 注释纠正（v1.6.2） | `init_sdmmc()` 进入开机挂载路径，失败回落 SPI；注释与 AO3401 P-MOS 极性对齐 |
 | 26 | 启动卡改屏幕 TF 卡槽 + SD 大卡降为扩展（v1.6.3） | 屏幕 TF（SPI/CS17）挂 `/mem_fat` 作启动卡；侧面大卡（SDMMC）挂 `/sd_ext` 作扩展盘，双卡可同时在线，扩展卡禁止自动格式化 |
 | 27 | 分区表 A/B 双槽改造（v1.6.4） | 删掉与 ota_0 重复的 factory，补 `otadata`(0x10000/8K)；ota_0 移到 0x020000，新增 `ota_1`(0x310000/3M)；`mem_fat`/`mem_priv` 各后移 64KB、容量不变；开 `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y`。OTA 首次具备升级与回滚能力 |
+| 28 | CI + 结构校验 + 版本规则（2026-11-08） | `.github/workflows/verify.yml` 两个 job（Python 结构校验 / ESP-IDF 6.1 编译）；`test/` 四项检查（分区表、版本三处同步、version.json、组件依赖），每项都用负例验证过能抓错；版本号奇偶规则落 `docs/VERSIONING.md`，`version.json` 加 `channel` |
 
 ## 四、待办任务表
 

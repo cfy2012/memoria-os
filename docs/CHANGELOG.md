@@ -1,6 +1,25 @@
 # Memoria OS 版本记录
 
 > 一条规矩：**改一部分就推一版**。这个文件随每次发版更新，版本号只增不补。
+>
+> 版本号第三位**奇数 = beta**、**偶数 = stable**，规则见 [`VERSIONING.md`](VERSIONING.md)。1.6.5 起严格执行，1.6.4 名义 stable、实为未上板验证的激进改造。
+
+## 工程基础设施 — 2026-11-08
+
+不含固件改动，纯工具链与规范。
+
+**CI**：`.github/workflows/verify.yml`，两个 job。`checks` 在 ubuntu-latest 上跑纯 Python 结构校验；`build` 拉 `release/v6.1` 的 ESP-IDF 编 `esp32s3`，编完再跑一遍校验，`build/memoria_os.bin` 作为 artifact 上传。没有板子、没有本机环境时，也能知道"这次 push 能不能编过、分区表有没有被改坏"。
+
+**结构校验**：`test/run_all.py`，四项，纯标准库，本机直接可跑（本机没有 cmake，所以不做 C++ host 测试，不摆空架子）。
+
+| 项 | 抓什么 |
+|---|---|
+| `partitions` | 对齐 / 重叠 / 越界 / `otadata` 缺失 / `ota_0` `ota_1` 不对称 / 槽装不下 bin / 占用超 85% |
+| `versions` | 三处版本号不同步、`channel` 与奇偶规则不符 |
+| `firmware` | `version.json` 字段缺失、url 与版本号错位、`major` 写成布尔 |
+| `includes` | 用了 `esp_ota_ops.h` 等头却没在 CMakeLists 声明依赖（1.6.4 踩过的 `EXIT=2`） |
+
+四个检查都用负例验证过：故意改坏对应文件，全部转 FAIL；还原后 4/4 通过。
 
 ## v1.6.4 — 2026-11-08 · 分区表改 ota_0 + ota_1 双槽，删掉 factory
 

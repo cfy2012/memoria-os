@@ -1,0 +1,71 @@
+name: verify
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IDF_REF: release/v6.1
+
+jobs:
+  checks:
+    name: 结构校验
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python test/run_all.py
+
+  build:
+    name: 固件编译
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 缓存 IDF 与工具链
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/esp-idf
+            ~/.espressif
+          key: idf-${{ env.IDF_REF }}-esp32s3-v1
+
+      - name: 拉取 ESP-IDF
+        run: |
+          if [ ! -d ~/esp-idf/.git ]; then
+            git clone -b "$IDF_REF" --depth 1 --recursive https://github.com/espressif/esp-idf.git ~/esp-idf
+          else
+            git -C ~/esp-idf fetch --depth 1 origin "$IDF_REF" && git -C ~/esp-idf checkout FETCH_HEAD
+          fi
+
+      - name: 安装工具链
+        run: |
+          cd ~/esp-idf
+          ./install.sh esp32s3
+
+      - name: 编译
+        run: |
+          . ~/esp-idf/export.sh
+          idf.py build
+
+      - name: 校验产物与分区表
+        run: |
+          . ~/esp-idf/export.sh
+          idf.py partition-table > /tmp/pt.txt
+          cat /tmp/pt.txt
+          ls -l build/memoria_os.bin
+          python test/run_all.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: memoria_os-bin
+          path: build/memoria_os.bin
+          if-no-files-found: error
