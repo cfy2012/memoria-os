@@ -17,6 +17,9 @@ idf_component_register(
         esp_wifi
         esp_http_client
         esp_https_ota
+        app_update
+        esp_app_format
+        mbedtls
         bootloader_support
         memoria_fs
         memoria_drivers

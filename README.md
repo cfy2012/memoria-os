@@ -1,6 +1,6 @@
 # Memoria OS
 
-**Memoria OS v1.6.4** 是一款基于 ESP32-S3（N16R8：16 MB Flash + 8 MB Octal PSRAM）自主设计的掌机操作系统。系统内核、窗口系统、文件系统、脚本引擎、BASIC 解释器与应用商店均为从零自研，不依赖 Linux、LVGL 或任何现成 UI 框架。项目以开源复古计算与嵌入式系统学习为定位，面向希望理解完整嵌入式系统栈的开发者。
+**Memoria OS v1.6.7** 是一款基于 ESP32-S3（N16R8：16 MB Flash + 8 MB Octal PSRAM）自主设计的掌机操作系统。系统内核、窗口系统、文件系统、脚本引擎、BASIC 解释器与应用商店均为从零自研，不依赖 Linux、LVGL 或任何现成 UI 框架。项目以开源复古计算与嵌入式系统学习为定位，面向希望理解完整嵌入式系统栈的开发者。
 
 > 版本规则：第三位**奇数 = beta 测试版**、**偶数 = stable 稳定版**（1.6.5 起严格执行，细则见 `docs/VERSIONING.md`）。每次 push 由 GitHub Actions 跑 `test/` 的结构校验并完整编译一遍固件，没有板子也能确认"能不能编、分区表有没有被改坏"。
 
@@ -33,7 +33,7 @@ BASIC 源码（.bas 文本）
 - **多媒体**：WAV、MP3、M4A（AAC）解码播放，MJPG 视频解码，GB2312 中文点阵渲染；INMP441 麦克风录音 + `httpup` 语音上传、`httpdl` 流式下载（chat.bas 语音聊天已落地）。
 - **解方程（v1.2.1）**：`solve` 命令支持一元一次/二次、二元/三元方程组，CALC 键盘扩展 x/y/^/,。
 - **应用商店**：仅认 `.msp` 应用包，CRC 校验、断点续传、多源切换；MBND 应用包解包安装（v1.3.0）。
-- **固件 OTA**：`version.json` + bin 双文件结构，经 jsdelivr CDN 分发，设备端 `ota_url` / `ota_firmware` 命令即可在线升级。
+- **固件 OTA**：`version.json` + bin 双文件结构，经 jsdelivr CDN 分发，HTTPS 走内置根证书包；下完盘先认镜像身份（`project_name` = `memoria_os`、版本不低于当前），不符就切回旧槽不重启；新槽首次启动跑满 30 秒才盖章，期间崩了自动回退。
 - **桌面管理**：图标移动、文件夹嵌套，布局通过 NVS 持久化。
 - **无线连接**：WiFi STA 联网、BLE 串口透传；射频按需启动（boot 期零射频，系统设置或 `wifistat()` 触发），程序禁止自行联网，网络凭据由系统环境变量注入。
 - **系统监控**：`sys` 命令一次看全 CPU 主频/温度/双核负载/内存/射频/电池；配套 PC 端 `talk_gui` 仪表盘监视器。
@@ -111,6 +111,8 @@ idf.py -p COMx flash monitor
 - 版本清单：`firmware/version.json`（含 `version`、`url`、`changelog`、`major` 字段）
 
 设备端升级路径：shell 执行 `ota_url <清单地址>` 设置源后 `ota_firmware` 一键升级；本地/远端版本比对取自 app_desc 版本串（`PROJECT_VER` 显式固定，不受编译时间戳污染）。
+
+三条边界（1.6.7 起）：① 握手要求系统时间已同步（开机 WiFi 连上后由 SNTP 校时，未校时会等 10 秒再拒）；② 只认本项目签名之外的"身份"——镜像里的 `project_name` 必须是 `memoria_os`，且版本不低于当前；③ 新槽第一次启动有 30 秒观察期，期间任何复位都会让 bootloader 退回旧槽。
 
 ## 变砖了怎么办
 

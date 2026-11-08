@@ -4,6 +4,23 @@
 >
 > 版本号第三位**奇数 = beta**、**偶数 = stable**，规则见 [`VERSIONING.md`](VERSIONING.md)。1.6.5 起严格执行，1.6.4 名义 stable、实为未上板验证的激进改造。
 
+## v1.6.7 — 2026-11-08 · OTA 三处缺口补齐：证书校验 / 身份校验 / 盖章后移（beta）
+
+**背景**：查 IDF 源码发现 OTA 链路其实一次都没跑过——`esp_https_ota_begin()` 进门先查有没有服务器校验手段（`esp_https_ota.c:299-327`），`cert_pem` / `use_global_ca_store` / `crt_bundle_attach` 一个都没配，而 `CONFIG_ESP_HTTPS_OTA_ALLOW_HTTP` 未开，于是第一次调用就返回 `ESP_ERR_INVALID_ARG`。另外 bootloader 只验"这是一块 ESP32-S3 的合法 app 镜像"，从不比对项目名；盖章点在 boot 末尾，进桌面之后崩了不会回退。
+
+| 改动 | 内容 |
+|---|---|
+| HTTPS | `http_cfg.crt_bundle_attach = esp_crt_bundle_attach`，挂上 ESP-IDF 内置根证书包（组件依赖补 `mbedtls`）；镜像因此增大 ~73 KB |
+| 时间前置检查 | 证书有效期要靠系统时间，开机 RTC 从 1970 起。OTA 前若年份 < 2020，最多等 10 秒 SNTP，仍不对则返回 5 并拒绝发起（否则握手必失败） |
+| 身份校验 | `esp_https_ota_finish` 成功后读新槽 `esp_app_desc_t`：`project_name` 必须是 `memoria_os`，`version` 不得低于当前；不符则 `esp_ota_set_boot_partition()` 把启动槽切回运行槽再返回 4，不重启 |
+| 盖章后移 | `kernel.cpp` 第 18 步只记录 `PENDING_VERIFY` 并起算观察期；主循环 30 秒后才 `esp_ota_mark_app_valid_cancel_rollback()`。观察期内任何复位（panic / 看门狗 / 掉电）由 bootloader 判 `ABORTED` 并自动回退旧槽 |
+| 关机保护 | `power_off_now()` 先盖章再落盘：观察期内主动关机视为用户认可当前固件，避免"升级后关机一次就被回退" |
+| 返回码 | 1 = begin 失败（证书/网络），2 = finish 失败（镜像校验不过），3 = perform 中断，4 = 身份不符已切回，5 = 系统时间未同步 |
+
+**没解决**：盖章之后（进桌面满 30 秒）再崩仍然不回滚，bootloader 会一直起这个槽；要彻底兜住，需要在运行期检测到自身异常时主动调 `esp_ota_mark_app_invalid_rollback_and_reboot()`，本轮未做。`ANTI_ROLLBACK` 与 Secure Boot V2 仍未开。
+
+**产物**：`build/memoria_os.bin` = 1,967,088 B（0x1E03F0），SHA256 `F11782BF…13BBD0B3`；`ota_0` 槽余 36%。结构校验 4/4 通过，编译零 C++ 警告。**未上板验证**。
+
 ## v1.6.5 — 2026-11-08 · 用户数据全部搬到 TF 卡，flash 只留系统（beta）
 
 **背景**：要求"所有东西都存 TF 卡、flash 里只有系统"。查代码确认 OTA 全程不碰数据分区（只写另一个 app 槽），真正抹掉数据的是整片 `erase-flash`，以及 1.6.4 分区表挪位后旧 `mem_priv` 数据还在原地址但新代码去新地址读。

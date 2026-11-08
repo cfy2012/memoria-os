@@ -17,20 +17,25 @@
 判断 app 层最直接的一条：串口里搜 `OTA: slot`。
 
 - `OTA: slot ota_0 state=` → 起来了，跑的是 A 槽
-- `OTA: slot ota_0 verified, rollback cancelled` → 起来了，且这次盖章通过
+- `OTA: slot ota_0 pending verify, hold stamp 30 s` → 新固件第一次起来，还在观察期（1.6.7 起）
+- `OTA: slot ota_0 verified (...), rollback cancelled` → 观察期满盖章通过
 - 反复出现 `Loading app from ...` 但永远到不了 `========== Boot complete ==========` → app 初始化挂在中间
 
 ## 二、app 层挂了：第一件事是什么都别做，断电重启一次
 
 `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y` 的语义是：新固件第一次启动处于 `PENDING_VERIFY`，程序必须主动调 `esp_ota_mark_app_valid_cancel_rollback()` 才算"我活了"。**没有盖章就复位，bootloader 会把这一槽标成失败并回退另一个槽**。不需要连按三次复位，一次就够。
 
-固件里的盖章点在 `kernel.cpp` 第 18 步——键盘、屏幕、TF、字库全部初始化成功之后。所以：
+盖章点（1.6.7 起）在**进桌面并稳定运行 30 秒之后**，由 `kernel.cpp` 主循环触发，不再放在 boot 末尾。所以：
 
 - 屏幕初始化失败 → 不盖章 → 复位自动回退，屏幕就回来了
 - 字库文件缺失 → 不盖章 → 同上
-- 能跑完初始化但界面有 bug → **已经盖章了，不会再回滚**，往下走
+- 进桌面 30 秒内 panic / 看门狗 / 掉电 → 不盖章 → 复位自动回退
+- 观察期内主动关机 → `power_off_now()` **先盖章再关机**，算作认可当前固件，不会被回退
+- 跑满 30 秒之后才出的 bug → **已经盖章了，不会再回滚**，往下走
 
 断电重启（拔电池或长按电源键关机再开）之后，串口里会看到它从另一个槽启动，`OTA: slot ota_1 ...`。
+
+**身份不符不会走到这一步**：1.6.7 起，OTA 下载完成后会读新槽的 `app_desc`，项目名必须是 `memoria_os`、版本不低于当前，否则直接把启动槽切回原槽并返回 4，根本不重启（串口出现 `OTA rejected, keep booting ota_0`）。
 
 ## 三、盖章之后不想再要这个固件：擦 `otadata`
 

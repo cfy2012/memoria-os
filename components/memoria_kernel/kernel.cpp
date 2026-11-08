@@ -52,6 +52,22 @@ namespace kernel {
 
 static const char* TAG = "KERNEL";
 
+/* OTA 首次启动观察期：boot 全过 ≠ 稳定，进桌面跑够这么久才盖章。
+ * 盖章前任何复位（panic / 看门狗 / 掉电）都会让 bootloader 把本槽标 ABORTED
+ * 并自动回退旧槽；盖章后再崩就不回滚了，这是有意的取舍。 */
+static const int64_t OTA_QUIET_US = 30LL * 1000 * 1000;
+static bool    s_ota_pending  = false;
+static int64_t s_ota_boot_us  = 0;
+
+static void ota_stamp(const char* why) {
+    if (!s_ota_pending) return;
+    const esp_partition_t* run = esp_ota_get_running_partition();
+    if (!run) return;
+    s_ota_pending = false;
+    esp_ota_mark_app_valid_cancel_rollback();
+    ESP_LOGI(TAG, "OTA: slot %s verified (%s), rollback cancelled", run->label, why);
+}
+
 Kernel* Kernel::instance() {
     static Kernel inst;
     return &inst;
@@ -63,6 +79,10 @@ Kernel* Kernel::instance() {
  * deep_sleep_now() 不返回。 */
 static void power_off_now() {
     ESP_LOGW(TAG, "=== POWER OFF SEQUENCE ===");
+
+    /* 还处在 OTA 观察期就主动关机，视为用户认可当前固件，先盖章；
+     * 否则下次开机 bootloader 会把本槽判 ABORTED 并回退，等于升级白做 */
+    ota_stamp("power off");
 
     /* 0. 先落盘用户数据（卡仍在挂载状态，这是最后一次可靠写入机会） */
     vault::mirror_save();
@@ -319,15 +339,18 @@ esp_err_t Kernel::init() {
     ime::ime_init();
     ESP_LOGI(TAG, "Keyboard + LED strip OK");
 
-    /* 18. OTA 自校验：当前若是 OTA 新槽首次启动（PENDING_VERIFY），
-     * 全部初始化通过后才标记有效并取消回滚；失败则下次复位由 bootloader 回退旧槽 */
+    /* 18. OTA 首次启动：这里只记录状态，不盖章。
+     *     盖章推迟到进桌面稳定运行 OTA_QUIET_US 之后（主循环），
+     *     中间崩了就让 bootloader 自动回退旧槽 */
     {
         const esp_partition_t* run = esp_ota_get_running_partition();
         esp_ota_img_states_t st = ESP_OTA_IMG_UNDEFINED;
         if (run && esp_ota_get_state_partition(run, &st) == ESP_OK) {
             if (st == ESP_OTA_IMG_PENDING_VERIFY) {
-                esp_ota_mark_app_valid_cancel_rollback();
-                ESP_LOGI(TAG, "OTA: slot %s verified, rollback cancelled", run->label);
+                s_ota_pending = true;
+                s_ota_boot_us = esp_timer_get_time();
+                ESP_LOGW(TAG, "OTA: slot %s pending verify, hold stamp %lld s",
+                         run->label, (long long)(OTA_QUIET_US / 1000000));
             } else {
                 ESP_LOGI(TAG, "OTA: slot %s state=%d", run->label, (int)st);
             }
@@ -362,6 +385,11 @@ void Kernel::main_loop() {
         if (++tick % 50 == 0) {
             drivers::SdCard::instance()->poll();
             vault::tick();   /* 距上次镜像超 60s 则落盘一次 */
+        }
+
+        /* OTA 观察期满：进桌面稳定跑了这么久，盖章取消回滚 */
+        if (s_ota_pending && esp_timer_get_time() - s_ota_boot_us >= OTA_QUIET_US) {
+            ota_stamp("quiet period");
         }
 
         /* 渲染所有窗口 + 状态栏每 1s 刷新 */
