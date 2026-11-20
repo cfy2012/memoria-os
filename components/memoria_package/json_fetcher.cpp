@@ -17,6 +17,7 @@
 
 extern "C" {
 #include <esp_http_client.h>
+#include <esp_crt_bundle.h>
 #include <esp_log.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -49,15 +50,22 @@ static esp_err_t _http_event_handler(esp_http_client_event_t* evt) {
 std::string json_fetcher::fetch(const std::string& url, uint32_t resume_from) {
     esp_http_client_config_t cfg = {};
     cfg.url = url.c_str();
-    cfg.timeout_ms = 5000;
+    cfg.timeout_ms = 10000;   /* 5s 对 jsdelivr 的 DNS+TLS 握手偏紧 */
     cfg.event_handler = _http_event_handler;
     /* 恢复主机名校验：原 skip=true 时可被中间人注入 manifest 与安装包。
        若自配 mirror 证书 SAN 不全导致连接失败，可改用域名白名单方案。 */
     cfg.skip_cert_common_name_check = false;
+    cfg.crt_bundle_attach = esp_crt_bundle_attach;   /* HTTPS 必须挂 CA 包，否则 0x8017 */
     cfg.buffer_size = 4096;
 
     esp_http_client_handle_t h = esp_http_client_init(&cfg);
     if (!h) { ESP_LOGE(TAG, "http_client_init failed"); return ""; }
+
+    /* GitHub API 走 raw 通道：不加这两个头会拿到 base64 包装的 JSON 或被 403 */
+    if (url.find("api.github.com") != std::string::npos) {
+        esp_http_client_set_header(h, "Accept", "application/vnd.github.raw");
+        esp_http_client_set_header(h, "User-Agent", "memoria-os");
+    }
 
     /* 断点续传 Range header */
     if (resume_from > 0) {
@@ -73,8 +81,10 @@ std::string json_fetcher::fetch(const std::string& url, uint32_t resume_from) {
         return "";
     }
 
-    int status = esp_http_client_get_status_code(h);
+    /* 顺序不能反：open 之后响应头还没解析，此时 get_status_code() 固定返回 0，
+     * 必须先用 fetch_headers() 把状态行读进来。 */
     int len = esp_http_client_fetch_headers(h);
+    int status = esp_http_client_get_status_code(h);
     ESP_LOGI(TAG, "HTTP %d len=%d resume=%lu", status, len, (unsigned long)resume_from);
 
     if (status != 200 && status != 206) {

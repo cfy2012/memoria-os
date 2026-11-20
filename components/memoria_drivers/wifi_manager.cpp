@@ -55,7 +55,7 @@ esp_err_t WifiManager::init() {
     return ESP_OK;
 }
 
-esp_err_t WifiManager::start_rf() {
+esp_err_t WifiManager::start_rf(bool auto_connect) {
     if (_rf_started) return ESP_OK;
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
@@ -65,14 +65,23 @@ esp_err_t WifiManager::start_rf() {
     ESP_LOGI(TAG, "WiFi RF started (on-demand)");
 
     /* 有保存凭据则自动重连（reconnect 不写 NVS） */
-    esp_err_t r = reconnect();
-    if (r != ESP_OK && r != ESP_ERR_NOT_FOUND) {
-        ESP_LOGW(TAG, "auto reconnect: %s", esp_err_to_name(r));
+    if (auto_connect) {
+        esp_err_t r = reconnect();
+        if (r != ESP_OK && r != ESP_ERR_NOT_FOUND) {
+            ESP_LOGW(TAG, "auto reconnect: %s", esp_err_to_name(r));
+        }
     }
     return ESP_OK;
 }
 
 esp_err_t WifiManager::connect(const std::string& ssid, const std::string& password) {
+    /* boot 期不开射频：从界面/shell 直接连接时射频可能还没上电，
+     * 不先拉起来 set_config 必返回 ESP_ERR_WIFI_NOT_INIT，表现为点了没反应 */
+    if (!_rf_started) {
+        esp_err_t e = start_rf();
+        if (e != ESP_OK) return e;
+    }
+
     wifi_config_t cfg = {};
     std::strncpy((char*)cfg.sta.ssid, ssid.c_str(), 32);
     std::strncpy((char*)cfg.sta.password, password.c_str(), 64);
@@ -80,8 +89,18 @@ esp_err_t WifiManager::connect(const std::string& ssid, const std::string& passw
     cfg.sta.pmf_cfg.capable = true;
     cfg.sta.pmf_cfg.required = false;
 
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &cfg));
-    esp_err_t ret = esp_wifi_connect();
+    /* esp_wifi_start() 之后 STA 会按 NVS 里的旧配置自动发起连接，
+     * 此时再 set_config 必然返回 ESP_ERR_WIFI_STATE(0x3006)。先断开再设，
+     * 失败只返回错误码，绝不能 ESP_ERROR_CHECK 把整机 abort 掉。 */
+    esp_wifi_disconnect();
+    vTaskDelay(pdMS_TO_TICKS(20));
+
+    esp_err_t ret = esp_wifi_set_config(WIFI_IF_STA, &cfg);
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "set_config: %s", esp_err_to_name(ret));
+        return ret;
+    }
+    ret = esp_wifi_connect();
     if (ret != ESP_OK) return ret;
 
     /* 保存到 NVS */
@@ -144,6 +163,10 @@ bool WifiManager::has_saved(const char* ssid) const {
 }
 
 esp_err_t WifiManager::scan() {
+    if (!_rf_started) {
+        esp_err_t e = start_rf();
+        if (e != ESP_OK) return e;
+    }
     wifi_scan_config_t sc = {};
     sc.show_hidden = false;
     esp_err_t ret = esp_wifi_scan_start(&sc, true);   /* 阻塞扫描 */
@@ -172,6 +195,13 @@ esp_err_t WifiManager::scan() {
 }
 
 esp_err_t WifiManager::start_ap(const std::string& ssid, const std::string& password) {
+    /* 射频未上电时 esp_wifi_stop() 会返回错误，旧代码用 ESP_ERROR_CHECK 包着，
+     * 在设置界面点"开热点"会直接 abort 重启。这里先按需拉起射频（只上电，不连 STA） */
+    if (!_rf_started) {
+        esp_err_t e = start_rf(false);
+        if (e != ESP_OK) return e;
+    }
+
     nvs_handle_t h;
     if (nvs_open(NVS_NS, NVS_READWRITE, &h) == ESP_OK) {
         nvs_set_str(h, "ap_ssid", ssid.c_str());
@@ -188,10 +218,13 @@ esp_err_t WifiManager::start_ap(const std::string& ssid, const std::string& pass
     cfg.ap.max_connection = 4;
     cfg.ap.authmode = password.empty() ? WIFI_AUTH_OPEN : WIFI_AUTH_WPA2_PSK;
 
-    ESP_ERROR_CHECK(esp_wifi_stop());
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &cfg));
-    esp_err_t ret = esp_wifi_start();
+    esp_err_t ret = esp_wifi_stop();
+    if (ret != ESP_OK && ret != ESP_ERR_WIFI_STATE) return ret;   /* 已停止也算成功 */
+    ret = esp_wifi_set_mode(WIFI_MODE_APSTA);
+    if (ret != ESP_OK) return ret;
+    ret = esp_wifi_set_config(WIFI_IF_AP, &cfg);
+    if (ret != ESP_OK) return ret;
+    ret = esp_wifi_start();
     if (ret == ESP_OK) _ap_active = true;
     return ret;
 }
@@ -207,10 +240,15 @@ void WifiManager::set_ap_config(const std::string& ssid, const std::string& pass
 }
 
 void WifiManager::stop_ap() {
-    ESP_ERROR_CHECK(esp_wifi_stop());
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-    ESP_ERROR_CHECK(esp_wifi_start());
     _ap_active = false;
+    if (!_rf_started) return;   /* 射频没开过，没有 AP 可关，不能 abort */
+    esp_err_t e = esp_wifi_stop();
+    if (e != ESP_OK && e != ESP_ERR_WIFI_STATE) {
+        ESP_LOGW(TAG, "stop_ap: %s", esp_err_to_name(e));
+        return;
+    }
+    esp_wifi_set_mode(WIFI_MODE_STA);
+    esp_wifi_start();
     reconnect();   /* 尝试回连已存网络 */
 }
 

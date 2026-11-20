@@ -7,7 +7,6 @@
 #include "input_queue.hpp"
 #include "keyboard_driver.hpp"
 #include "keyboard_keymap.hpp"
-#include "backlight.hpp"
 #include "event_bus.hpp"
 #include "drivers_config.hpp"
 #include "esp_log.h"
@@ -62,9 +61,6 @@ bool s_caps_prev = false;
 KeyHandler s_handler = nullptr;
 
 void on_raw(const RawKeyEvent& evt) {
-    /* 按下沿：触发键盘灯带打光 */
-    if (evt.pressed) backlight_flash();
-
     uint16_t key = resolve_key(evt.row, evt.col, s_shift, s_caps);
 
     /* Shift / Caps 状态维护 */
@@ -82,8 +78,7 @@ void on_raw(const RawKeyEvent& evt) {
     if (evt.pressed) {
         switch (key) {
             case K_BACKLIGHT:
-                backlight_toggle();
-                return;
+                return;   /* 灯带已删，键位保留吞掉 */
             case K_ONOFF:
                 ESP_LOGI(TAG, "ON/OFF key (side) pressed");
                 return;   /* 电源管理后续接入 */

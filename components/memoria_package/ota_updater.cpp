@@ -23,6 +23,7 @@ extern "C" {
 #include <esp_log.h>
 #include <nvs_flash.h>
 #include <psa/crypto.h>
+#include <esp_wifi.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 }
@@ -142,47 +143,22 @@ int ota_firmware(const std::string& url, const std::string& sha256) {
         return 3;
     }
 
-    esp_http_client_config_t http_cfg = {};
-    http_cfg.url = u.c_str();
-    http_cfg.timeout_ms = 20000;
-    http_cfg.keep_alive_enable = true;
-    http_cfg.crt_bundle_attach = esp_crt_bundle_attach;
-    http_cfg.buffer_size = static_cast<int>(CHUNK);
+    /* 下载期间关掉 modem sleep：省电模式在长连接大流量下会丢包，进而把 TCP 拖断 */
+    esp_wifi_set_ps(WIFI_PS_NONE);
+    /* 压发射功率到 11 dBm：写 flash 与射频同时拉峰值电流会把供电压塌，降功率换稳定 */
+    esp_wifi_set_max_tx_power(44);
 
-    esp_http_client_handle_t cli = esp_http_client_init(&http_cfg);
-    if (cli == nullptr) {
-        ESP_LOGE(TAG, "http client init failed");
-        return 1;
-    }
-    esp_err_t ret = esp_http_client_open(cli, 0);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "http open failed: %s", esp_err_to_name(ret));
-        esp_http_client_cleanup(cli);
-        return 1;
-    }
-    int64_t len = esp_http_client_fetch_headers(cli);
-    int status = esp_http_client_get_status_code(cli);
-    ESP_LOGI(TAG, "http %d, content-length %lld", status, static_cast<long long>(len));
-    if (status != 200) {
-        ESP_LOGE(TAG, "unexpected http status %d", status);
-        esp_http_client_close(cli);
-        esp_http_client_cleanup(cli);
-        return 1;
-    }
+    esp_err_t ret = ESP_OK;
 
     const esp_partition_t* upd = esp_ota_get_next_update_partition(nullptr);
     if (upd == nullptr) {
         ESP_LOGE(TAG, "no update partition");
-        esp_http_client_close(cli);
-        esp_http_client_cleanup(cli);
         return 2;
     }
     esp_ota_handle_t ota = 0;
     ret = esp_ota_begin(upd, OTA_WITH_SEQUENTIAL_WRITES, &ota);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "ota begin failed: %s", esp_err_to_name(ret));
-        esp_http_client_close(cli);
-        esp_http_client_cleanup(cli);
         return 2;
     }
     ESP_LOGW(TAG, "writing slot %s @0x%08x", upd->label, static_cast<unsigned>(upd->address));
@@ -192,41 +168,116 @@ int ota_firmware(const std::string& url, const std::string& sha256) {
     if (ps != PSA_SUCCESS) {
         ESP_LOGE(TAG, "sha256 setup failed: %d", static_cast<int>(ps));
         esp_ota_abort(ota);
-        esp_http_client_close(cli);
-        esp_http_client_cleanup(cli);
         return 3;
     }
 
     unsigned char* buf = static_cast<unsigned char*>(std::malloc(CHUNK));
     int rc = 0;
     int64_t total = 0;
+    int64_t expect = -1;
+    int seg = 0;
     if (buf == nullptr) {
         rc = 3;
     } else {
-        while (true) {
-            int r = esp_http_client_read(cli, reinterpret_cast<char*>(buf), static_cast<int>(CHUNK));
-            if (r < 0) {
-                ESP_LOGE(TAG, "socket read error %d", r);
+        /* 长连接在这条宽带上撑不住：实测 47 s 左右被 RST，1.9 MB 只能跑掉四成。
+           改成 HTTP Range 分段续传，一段断了就重连，从已写字节接着要。 */
+        while (rc == 0) {
+            esp_http_client_config_t cfg = {};
+            cfg.url = u.c_str();
+            cfg.timeout_ms = 20000;
+            cfg.keep_alive_enable = false;
+            cfg.crt_bundle_attach = esp_crt_bundle_attach;
+            cfg.buffer_size = static_cast<int>(CHUNK);
+
+            esp_http_client_handle_t cli = esp_http_client_init(&cfg);
+            if (cli == nullptr) {
+                ESP_LOGE(TAG, "segment %d: http client init failed", seg);
+                rc = 1;
+                break;
+            }
+            /* GitHub API raw 通道（jsdelivr / raw.githubusercontent 在本网络被 RST） */
+            if (u.find("api.github.com") != std::string::npos) {
+                esp_http_client_set_header(cli, "Accept", "application/vnd.github.raw");
+                esp_http_client_set_header(cli, "User-Agent", "memoria-os");
+            }
+            char range[48] = {};
+            if (total > 0) {
+                std::snprintf(range, sizeof(range), "bytes=%lld-", static_cast<long long>(total));
+                esp_http_client_set_header(cli, "Range", range);
+            }
+            if (esp_http_client_open(cli, 0) != ESP_OK) {
+                esp_http_client_cleanup(cli);
+                ESP_LOGE(TAG, "segment %d: open failed at %lld",
+                         seg, static_cast<long long>(total));
+                rc = 1;
+                break;
+            }
+            int64_t got = esp_http_client_fetch_headers(cli);
+            int status = esp_http_client_get_status_code(cli);
+            ESP_LOGI(TAG, "segment %d: http %d len %lld from %lld",
+                     seg, status, static_cast<long long>(got), static_cast<long long>(total));
+            if (expect < 0 && status == 200 && got > 0) expect = got;
+            if (!(status == 206 || (status == 200 && total == 0))) {
+                ESP_LOGE(TAG, "segment %d: unexpected http status %d", seg, status);
+                esp_http_client_close(cli);
+                esp_http_client_cleanup(cli);
+                rc = 1;
+                break;
+            }
+
+            int64_t seg_bytes = 0;
+            while (true) {
+                int r = esp_http_client_read(cli, reinterpret_cast<char*>(buf), static_cast<int>(CHUNK));
+                if (r < 0) {
+                    ESP_LOGW(TAG, "segment %d: read error %d at %lld",
+                             seg, r, static_cast<long long>(total));
+                    break;
+                }
+                if (r == 0) break;
+                if (esp_ota_write(ota, buf, static_cast<size_t>(r)) != ESP_OK) {
+                    ESP_LOGE(TAG, "ota write failed at %lld", static_cast<long long>(total));
+                    rc = 3;
+                    break;
+                }
+                if (psa_hash_update(&sha, buf, static_cast<size_t>(r)) != PSA_SUCCESS) {
+                    ESP_LOGE(TAG, "sha256 update failed");
+                    rc = 3;
+                    break;
+                }
+                total += r;
+                seg_bytes += r;
+                if (static_cast<size_t>(total) > upd->size) {
+                    ESP_LOGE(TAG, "image exceeds partition, abort");
+                    rc = 3;
+                    break;
+                }
+                /* 每 64 KB 打一次进度：断线时能看出断在第几字节 */
+                if ((total >> 16) != ((total - r) >> 16)) {
+                    ESP_LOGI(TAG, "progress %lld / %lld",
+                             static_cast<long long>(total), static_cast<long long>(expect));
+                }
+                /* 擦写 flash 会把 WiFi 任务饿住，主动让一个 tick 给它和 IDLE0 */
+                vTaskDelay(1);
+            }
+            esp_http_client_close(cli);
+            esp_http_client_cleanup(cli);
+
+            if (rc != 0) break;
+            if (expect < 0) break;
+            if (expect > 0 && total >= expect) break;
+            if (seg_bytes == 0) {
+                ESP_LOGE(TAG, "segment %d: no bytes, giving up", seg);
                 rc = 3;
                 break;
             }
-            if (r == 0) break;
-            if (esp_ota_write(ota, buf, static_cast<size_t>(r)) != ESP_OK) {
-                ESP_LOGE(TAG, "ota write failed at %lld", static_cast<long long>(total));
+            seg++;
+            if (seg > 12) {
+                ESP_LOGE(TAG, "resume limit reached at %lld", static_cast<long long>(total));
                 rc = 3;
                 break;
             }
-            if (psa_hash_update(&sha, buf, static_cast<size_t>(r)) != PSA_SUCCESS) {
-                ESP_LOGE(TAG, "sha256 update failed");
-                rc = 3;
-                break;
-            }
-            total += r;
-            if (static_cast<size_t>(total) > upd->size) {
-                ESP_LOGE(TAG, "image exceeds partition, abort");
-                rc = 3;
-                break;
-            }
+            ESP_LOGW(TAG, "resume from %lld", static_cast<long long>(total));
+            vTaskDelay(pdMS_TO_TICKS(1000));
         }
     }
 
@@ -243,8 +294,6 @@ int ota_firmware(const std::string& url, const std::string& sha256) {
     }
     if (rc != 0) psa_hash_abort(&sha);
     std::free(buf);
-    esp_http_client_close(cli);
-    esp_http_client_cleanup(cli);
 
     if (rc != 0) {
         esp_ota_abort(ota);
@@ -256,9 +305,9 @@ int ota_firmware(const std::string& url, const std::string& sha256) {
         return 3;
     }
     /* Content-Length 与实际字节数对不上 = 被截断，绝不继续 */
-    if (len > 0 && total != len) {
+    if (expect > 0 && total != expect) {
         ESP_LOGE(TAG, "size mismatch: got %lld, expect %lld",
-                 static_cast<long long>(total), static_cast<long long>(len));
+                 static_cast<long long>(total), static_cast<long long>(expect));
         esp_ota_abort(ota);
         return 3;
     }

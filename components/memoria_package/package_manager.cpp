@@ -55,7 +55,10 @@ static const char* KEY_MIRROR = "mirror";
 static const char* KEY_AUTO   = "auto_upd";
 static const char* KEY_HOUR   = "auto_hour";
 static const char* KEY_MIN    = "auto_min";
-static const char* DEFAULT_MIRROR = "https://cdn.jsdelivr.net/gh/cfy2012/memoria-ota@main/manifest.json";
+/* 2026-11-08 实测：cdn.jsdelivr.net 与 raw.githubusercontent.com 在本网络均被 RST，
+ * 只有 api.github.com（Accept: application/vnd.github.raw）可通，故默认源改走 GitHub API。
+ * 注意 URL 不能带 ?ref=，否则 test/checks/firmware.py 的 basename 校验会失败。 */
+static const char* DEFAULT_MIRROR = "https://api.github.com/repos/cfy2012/memoria-ota/contents/manifest.json";
 
 /* 计算 CRC32（复用 private_fs 里已有的查表实现） */
 extern uint32_t crc32_compute(const uint8_t* data, size_t len);

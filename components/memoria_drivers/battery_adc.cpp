@@ -42,7 +42,7 @@ esp_err_t BatteryAdc::init() {
     };
     adc_oneshot_config_channel(handle, static_cast<adc_channel_t>(BATTERY_ADC_CHANNEL), &chan);
 
-    /* TP4056 CHRG 充电检测：GPIO49 输入内部上拉，充电中 = 低电平 */
+    /* TP4056 CHRG 充电检测：GPIO42 输入内部上拉，充电中 = 低电平（开漏，必须上拉） */
     gpio_config_t chrg_io = {};
     chrg_io.pin_bit_mask = (1ULL << CHRG_DET_GPIO);
     chrg_io.mode = GPIO_MODE_INPUT;

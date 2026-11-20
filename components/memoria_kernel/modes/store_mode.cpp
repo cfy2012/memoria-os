@@ -173,12 +173,12 @@ private:
     void _reload_remote() {
         _remote.clear();
         _online = drivers::WifiManager::instance()->connected();
-        if (!_online) { _hint = "WiFi 未连接 · 先连网再刷新"; return; }
+        if (!_online) { _hint = "WiFi 未连接 | 先连网再刷新"; return; }
         _hint = "正在获取软件列表...";
 
         std::string src = _load_source();
         std::string json = package::json_fetcher::fetch(src);
-        if (json.empty()) { _hint = "获取列表失败 · 检查源地址"; return; }
+        if (json.empty()) { _hint = "获取列表失败 | 检查源地址"; return; }
 
         /* 极简 manifest 解析：[{"name":"..","version":"..","size":..,"crc":0x..,"url":".."}] */
         size_t pos = 0;
@@ -224,7 +224,7 @@ private:
 
         _cur = std::min(_cur, (int)_remote.size() - 1);
         char buf[40];
-        snprintf(buf, sizeof(buf), "列表 %d 项 · Enter 安装", (int)_remote.size());
+        snprintf(buf, sizeof(buf), "列表 %d 项 | Enter 安装", (int)_remote.size());
         _hint = buf;
     }
 
@@ -314,7 +314,7 @@ private:
         if (_remote.empty()) return;
         if (!_online) { _hint = "WiFi 未连接"; return; }
         RemoteItem& it = _remote[_cur];
-        if (it.installed) { _hint = it.name + " 已安装 · 可到已装页卸载"; return; }
+        if (it.installed) { _hint = it.name + " 已安装 | 可到已装页卸载"; return; }
         /* 包名白名单：仅 [A-Za-z0-9_.-]，防 manifest 恶意/错误 name 路径穿越 */
         bool name_ok = !it.name.empty() && it.name != "." && it.name != "..";
         for (char ch : it.name) {
@@ -327,11 +327,11 @@ private:
         if (data.empty()) { _hint = "下载失败"; return; }
         /* 安装包显式上限 1MB（脚本包合理上限；json_fetcher 侧另有 4MB 上限校验，防止恶意服务器） */
         const size_t MAX_INSTALL = 1024 * 1024;
-        if (data.size() > MAX_INSTALL) { _hint = "包过大（>1MB）· 已拒绝"; return; }
+        if (data.size() > MAX_INSTALL) { _hint = "包过大（>1MB）| 已拒绝"; return; }
         if (it.crc != 0) {
             uint32_t actual = package::crc32_compute(
                 reinterpret_cast<const uint8_t*>(data.data()), data.size());
-            if (actual != it.crc) { _hint = "CRC 校验失败 · 已丢弃"; return; }
+            if (actual != it.crc) { _hint = "CRC 校验失败 | 已丢弃"; return; }
         }
 
         /* MBND 应用包判定：MSPACK 50B 头 + payload 前 4 字节 'MBND' → 解包落盘
@@ -356,7 +356,7 @@ private:
         std::string path = std::string("/mem_fat/scripts/") + it.name;
         if (is_app) path += ".msp";   /* 应用包保留原包：兼容卸载/信息页/重装 */
         FILE* f = std::fopen(path.c_str(), "wb");
-        if (!f) { _hint = "写入失败 · 检查 TF 卡"; return; }
+        if (!f) { _hint = "写入失败 | 检查 TF 卡"; return; }
         std::fwrite(data.data(), 1, data.size(), f);
         std::fclose(f);
 
@@ -378,7 +378,7 @@ private:
         struct stat st{};
         if (stat(p.c_str(), &st) == 0) {
             char buf[48];
-            snprintf(buf, sizeof(buf), "%s · %u B", _installed[_cur].c_str(), (unsigned)st.st_size);
+            snprintf(buf, sizeof(buf), "%s | %u B", _installed[_cur].c_str(), (unsigned)st.st_size);
             _hint = buf;
         }
     }
@@ -390,47 +390,85 @@ private:
     }
 
     /* ================= 渲染 ================= */
+    /* 包卡片行：应用名 + 版本(弱化) + 右侧状态 chip（8px 高圆角小块） */
+    void _pkg_row(window::UIRenderer* ui, int y, const std::string& name, const std::string& ver,
+                  const char* status, uint16_t chip, bool sel) {
+        const int x = 6, w = SCREEN_W - 12, h = 28;
+        window::Rect rc{static_cast<int16_t>(x), static_cast<int16_t>(y),
+                        static_cast<int16_t>(w), static_cast<int16_t>(h)};
+        ui->fill_round_rect(rc, 8, sel ? COLOR_CARD_HI : COLOR_CARD);
+        ui->draw_round_rect(rc, 8, sel ? _accent : COLOR_STROKE, sel ? 2 : 1);
+        if (sel)
+            ui->fill_round_rect({static_cast<int16_t>(x + 5), static_cast<int16_t>(y + 9),
+                                 3, 10}, 1, _accent);
+
+        const int right = x + w - 12;
+        window::Rect chip_rc{static_cast<int16_t>(right - 14), static_cast<int16_t>(y + 10), 14, 8};
+        ui->fill_round_rect(chip_rc, 4, chip);
+
+        const int sw = window::UIRenderer::text_width_utf8(status);
+        ui->draw_text_fit(static_cast<int16_t>(chip_rc.x - 6 - sw), static_cast<int16_t>(y + 6),
+                          status, COLOR_TEXT_DIM, sw);
+
+        int ver_right = chip_rc.x - 6 - sw - 8;
+        std::string vt = ver.empty() ? std::string() : ("v" + ver);
+        int vmax = 0;
+        if (!vt.empty()) {
+            vmax = std::min(window::UIRenderer::text_width_utf8(vt), 64);
+            ui->draw_text_fit(static_cast<int16_t>(ver_right - vmax), static_cast<int16_t>(y + 6),
+                              vt, COLOR_TEXT_DIM, vmax);
+            ver_right -= vmax + 8;
+        }
+        ui->draw_text_fit(static_cast<int16_t>(x + 14), static_cast<int16_t>(y + 6), name,
+                          COLOR_TEXT, ver_right - (x + 14));
+    }
+
     void _render_remote(window::UIRenderer* ui, bool focused) {
-        if (!_online) { draw_hint(ui, focused ? "WiFi 未连接 · 请先联网" : ""); return; }
-        if (_remote.empty()) { draw_hint(ui, focused ? "列表为空 · F2 刷新" : ""); return; }
+        if (!_online) { draw_hint(ui, focused ? "WiFi 未连接 | 请先联网" : ""); return; }
+        if (_remote.empty()) { draw_hint(ui, focused ? "列表为空 | F2 刷新" : ""); return; }
+        const int start = _cur > 7 ? _cur - 7 : 0;
         int y = 34;
-        int start = std::max(0, _cur - 7);
-        for (int i = start; i < (int)_remote.size() && y < SCREEN_H - 34; i++, y += 12) {
-            std::string line = (i == _cur ? ">" : " ") + std::string(" ") + _remote[i].name +
-                               (_remote[i].installed ? " *" : "") + " v" + _remote[i].version;
-            ui->draw_text(2, y, line, i == _cur ? COLOR_YELLOW : COLOR_WHITE);
+        for (int i = start; i < (int)_remote.size() && y + 28 <= SCREEN_H - 38; i++, y += 31) {
+            const RemoteItem& it = _remote[i];
+            _pkg_row(ui, y, it.name, it.version, it.installed ? "已装" : "未装",
+                     it.installed ? COLOR_OK : COLOR_ACCENT, i == _cur);
         }
     }
 
     void _render_installed(window::UIRenderer* ui, bool focused) {
-        if (_installed.empty()) { draw_hint(ui, focused ? "没有已安装应用 · 到在线页安装" : ""); return; }
+        if (_installed.empty()) { draw_hint(ui, focused ? "没有已安装应用 | 到在线页安装" : ""); return; }
+        const int start = _cur > 7 ? _cur - 7 : 0;
         int y = 34;
-        int start = std::max(0, _cur - 8);
-        for (int i = start; i < (int)_installed.size() && y < SCREEN_H - 34; i++, y += 12) {
-            std::string line = (i == _cur ? ">" : " ") + std::string(" ") + _installed[i];
-            ui->draw_text(2, y, line, i == _cur ? COLOR_YELLOW : COLOR_WHITE);
+        for (int i = start; i < (int)_installed.size() && y + 28 <= SCREEN_H - 38; i++, y += 31) {
+            _pkg_row(ui, y, _installed[i], "", "已装", COLOR_OK, i == _cur);
         }
     }
 
     void _render_source(window::UIRenderer* ui) {
         std::string src = _load_source();
-        ui->draw_text(6, 40, "当前软件源", COLOR_LIGHT_GRAY);
-        /* 逐行折行显示 URL */
-        int y = 56;
+        window::Rect box{6, 34, static_cast<int16_t>(SCREEN_W - 12), 150};
+        ui->card(box, 8, COLOR_CARD, COLOR_STROKE);
+        ui->draw_text_fit(16, 44, "当前软件源", COLOR_TEXT_DIM, box.w - 20);
+        ui->divider_h(16, 62, static_cast<int16_t>(box.w - 32), COLOR_STROKE);
+
+        /* 按像素宽度折行显示 URL（ASCII 8px/字符，避免越界） */
+        int y = 72;
         std::string rest = src;
-        while (!rest.empty() && y < 160) {
+        const int max_px = box.w - 24;
+        const int max_chars = std::max(1, max_px / window::UIRenderer::FONT_W);
+        while (!rest.empty() && y + 12 <= box.y + box.h - 6) {
             size_t cut = rest.size();
-            if (rest.size() > 26) {
-                cut = rest.find('/', 26);
-                if (cut == std::string::npos) cut = rest.size();
+            if (window::UIRenderer::text_width_utf8(rest) > max_px) {
+                cut = std::min(rest.size(), (size_t)max_chars);
+                size_t slash = rest.rfind('/', cut);
+                if (slash != std::string::npos && slash > cut / 2) cut = slash;
             }
-            std::string seg = rest.substr(0, cut);
-            ui->draw_text(6, y, seg.c_str(), COLOR_WHITE);
-            y += 12;
+            ui->draw_text_fit(16, static_cast<int16_t>(y), rest.substr(0, cut), COLOR_TEXT, max_px);
+            y += 14;
             rest = (cut < rest.size()) ? rest.substr(cut) : "";
         }
-        ui->draw_text(6, 176, "换源：TF 卡 store_url.txt", COLOR_YELLOW);
-        ui->draw_text(6, 190, "或 设置 → 软件源", COLOR_LIGHT_GRAY);
+        ui->draw_text_fit(8, 196, "换源：TF 卡 store_url.txt", COLOR_WARN, SCREEN_W - 16);
+        ui->draw_text_fit(8, 214, "或 设置 > 软件源", COLOR_TEXT_DIM, SCREEN_W - 16);
     }
 
     int _page = 0;

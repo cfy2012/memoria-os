@@ -30,7 +30,6 @@
 #include "mode_manager.hpp"
 #include "keyboard_input.hpp"
 #include "keyboard_driver.hpp"
-#include "backlight.hpp"
 #include "input_queue.hpp"
 #include "ime.hpp"
 
@@ -94,23 +93,20 @@ static void power_off_now() {
         drivers::Power::instance()->amp_set_en(false);
     }
 
-    /* 2. WS2812 灯带全灭（停 flash 定时器 + 全 0 帧） */
-    input::backlight_off();
-
-    /* 3. 屏幕 Sleep In + 背光关 */
+    /* 2. 屏幕 Sleep In + 背光关（LED 灯带已废弃，见 drivers_config.hpp） */
     drivers::Ili9341::instance()->sleep();
     drivers::Power::instance()->set_backlight(0);
 
-    /* 4. MCP23017 全引脚转输入（高阻）+ 输出清零 → 最低功耗态 */
+    /* 3. MCP23017 全引脚转输入（高阻）+ 输出清零 → 最低功耗态 */
     input::keyboard_reset();
 
-    /* 5. 次级 MOS 关：外围 5V 轨断电（屏/功放/灯带/SD） */
+    /* 4. 次级 MOS 关：外围 5V 轨断电（屏/功放/SD） */
     drivers::Power::instance()->subm_rail(false);
 
-    /* 6. NVS 存"正常关机"标志（boot 时读取清除，区分异常复位） */
+    /* 5. NVS 存"正常关机"标志（boot 时读取清除，区分异常复位） */
     drivers::Power::instance()->set_shutdown_flag();
 
-    /* 7. 深睡眠（GPIO2 EXT0 唤醒，不返回） */
+    /* 6. 深睡眠（GPIO2 EXT0 唤醒，不返回） */
     drivers::Power::instance()->deep_sleep_now();
 }
 
@@ -333,11 +329,10 @@ esp_err_t Kernel::init() {
     package::start_scheduler();
     ESP_LOGI(TAG, "Package scheduler OK");
 
-    /* 17. 矩阵键盘（2× MCP23017 I2C 扫描，硬件定版将换 TCA8418） + 背光灯带 + 拼音输入法 */
+    /* 17. 矩阵键盘（2× MCP23017 I2C 扫描，硬件定版将换 TCA8418） + 拼音输入法 */
     MEMORIA_CHECK(input::keyboard_input_init());
-    MEMORIA_CHECK(input::backlight_init());
     ime::ime_init();
-    ESP_LOGI(TAG, "Keyboard + LED strip OK");
+    ESP_LOGI(TAG, "Keyboard + IME OK");
 
     /* 18. OTA 首次启动：这里只记录状态，不盖章。
      *     盖章推迟到进桌面稳定运行 OTA_QUIET_US 之后（主循环），

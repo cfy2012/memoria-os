@@ -106,16 +106,56 @@ public:
             return;
         }
 
-        draw_title(ui, "VIDEO 视频", _files.empty() ? "0 个" : std::to_string(_files.size()).c_str());
-        if (_files.empty()) { draw_hint(ui, "空 · 把 .mjpg 放进 /mem_fat/video"); return; }
-        int y = 34;
-        int start = std::max(0, _cur - 8);
-        for (int i = start; i < (int)_files.size() && y < SCREEN_H - 16 - 12; i++, y += 12) {
-            std::string line = (i == _cur ? "> " : "  ") + _files[i];
-            ui->draw_text(2, y, line, i == _cur ? COLOR_YELLOW : COLOR_WHITE);
+        draw_title(ui, "VIDEO 视频",
+                   _files.empty() ? "0 个" : (std::to_string(_files.size()) + " 个").c_str());
+        if (_files.empty()) { draw_hint(ui, "空 | 把 .mjpg 放进 /mem_fat/video"); return; }
+
+        auto* lcd = Ili9341::instance();
+
+        /* 播放器预览卡片：画面区（深底圆角）+ 居中播放键 + 进度/时间 */
+        ui->card({6, 34, 468, 112}, 8, COLOR_CARD, COLOR_STROKE);
+        ui->fill_round_rect({12, 40, 456, 64}, 6, COLOR_BG);
+        ui->draw_round_rect({12, 40, 456, 64}, 6, COLOR_STROKE, 1);
+
+        /* 播放键：浅色圆 + 三角形（无 alpha，用颜色层级表达层次） */
+        lcd->fill_circle(240, 72, 18, COLOR_CARD_HI);
+        lcd->draw_circle(240, 72, 18, COLOR_STROKE_HI);
+        lcd->draw_line(235, 64, 249, 72, _accent);
+        lcd->draw_line(249, 72, 235, 80, _accent);
+        lcd->draw_line(235, 80, 235, 64, _accent);
+
+        /* 画面区左下角显示当前文件名 */
+        ui->draw_text_fit(20, 90, _files[_cur], COLOR_TEXT_DIM, 240);
+
+        ui->progress({12, 112, 456, 6}, 0, _accent, COLOR_BG_SOFT, 3);
+        ui->draw_text(12, 122, "0:00", COLOR_TEXT_DIM);
+        ui->draw_text(426, 122, "0:00", COLOR_TEXT_DIM);
+
+        /* 视频列表：卡片行（与 MUSIC 一致的行式样） */
+        const int visible = 5;
+        const int n = static_cast<int>(_files.size());
+        int start = _cur - 2;
+        if (start > n - visible) start = n - visible;
+        if (start < 0) start = 0;
+
+        int16_t y = 150;
+        for (int i = start; i < n && i < start + visible; i++, y += 26) {
+            const bool sel = (i == _cur);
+            const window::Rect row{6, y, 468, 24};
+            ui->card(row, 8, sel ? COLOR_CARD_HI : COLOR_CARD,
+                     sel ? COLOR_CARD_HI : COLOR_STROKE);
+            if (sel) ui->draw_round_rect(row, 8, _accent, 2);
+
+            ui->fill_round_rect({12, static_cast<int16_t>(y + 3), 18, 18}, 6, _accent);
+            ui->draw_text_fit(38, static_cast<int16_t>(y + 6), _files[i], COLOR_TEXT, 400);
+
+            const std::string idx = (i + 1 < 10 ? "0" : "") + std::to_string(i + 1);
+            ui->draw_text(static_cast<int16_t>(466 - window::UIRenderer::text_width_utf8(idx)),
+                          static_cast<int16_t>(y + 6), idx, COLOR_TEXT_DIM);
         }
+
         if (!_hint.empty()) draw_hint(ui, _hint.c_str());
-        else draw_hint(ui, "Enter 播放 · 上下选择");
+        else draw_hint(ui, "Enter 播放 | 上下选择");
     }
 
     bool mode_nav(const window::NavInput& ni) override {
@@ -151,7 +191,7 @@ public:
             case 2: _cur = std::min((int)_files.size() - 1, _cur + 1); break;
             case 3: _hint = "快进 +5s（当前帧流按序循环）"; break;
             case 4: _stop_play(); break;
-            case 5: _hint = "目录 /mem_fat/video · 支持 .mjpg"; break;
+            case 5: _hint = "目录 /mem_fat/video | 支持 .mjpg"; break;
         }
     }
 

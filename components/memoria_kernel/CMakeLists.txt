@@ -9,7 +9,6 @@ idf_component_register(
         input_queue.cpp
         ime.cpp
         pinyin_dict.cpp
-        backlight.cpp
         modes/modes_bootstrap.cpp
         modes/photo_mode.cpp
         modes/music_mode.cpp

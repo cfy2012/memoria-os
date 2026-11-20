@@ -181,6 +181,15 @@ public:
     void fill_rect(const Rect& r, Color c);
     void draw_rect(const Rect& r, Color c, uint16_t thickness = 1);
 
+    /* 圆角图元（整数像素，无 alpha）：卡片/键帽/胶囊/进度条 */
+    void fill_round_rect(const Rect& r, int radius, Color c);
+    void draw_round_rect(const Rect& r, int radius, Color c, uint16_t thickness = 1);
+    void card(const Rect& r, int radius, Color fill, Color stroke);
+    /* 进度条：permille 0~1000，r 为整条外框 */
+    void progress(const Rect& r, int permille, Color fg, Color bg, int radius = 3);
+    /* 垂直/水平分隔线 */
+    void divider_h(int16_t x, int16_t y, int16_t w, Color c = drivers::COLOR_STROKE);
+
     /* 光标（聚焦框：1~2px 厚度） */
     void draw_cursor(const Rect& r, Color c, uint16_t thickness = 2);
 
@@ -197,6 +206,10 @@ public:
     void draw_text_utf8(int16_t x, int16_t y, const std::string& text, Color c, int scale);
     static int text_width_utf8(const std::string& text);   /* 绘制前宽度计算（ASCII 8 / 中文 16） */
     static int text_width_utf8(const std::string& text, int scale);   /* 缩放宽度（scale 1~3） */
+
+    /* 按像素宽度裁剪文本（超出时尾部改成 ..），用于键帽/列表行等定宽区域 */
+    static std::string clip_text(const std::string& text, int max_px);
+    void draw_text_fit(int16_t x, int16_t y, const std::string& text, Color c, int max_px);
 
     /* 字体尺寸 */
     static constexpr int FONT_W = 8;

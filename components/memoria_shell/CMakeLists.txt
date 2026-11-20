@@ -17,4 +17,5 @@ idf_component_register(
         memoria_script
         memoria_package
         memoria_math
+        memoria_netfile
 )

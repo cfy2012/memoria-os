@@ -32,15 +32,51 @@ DesktopManager* DesktopManager::instance() {
  *  当前层
  * ============================================================ */
 std::vector<Cell>* DesktopManager::_layer() {
-    if (_stack.empty()) return &_root;
-    auto it = _folders.find(_stack.back());
-    return it != _folders.end() ? &it->second : &_root;
+    if (!_stack.empty()) {
+        auto it = _folders.find(_stack.back());
+        if (it != _folders.end()) return &it->second;
+    }
+    return _page_layer(_page);
+}
+
+std::vector<Cell>* DesktopManager::_page_layer(int p) {
+    if (p <= 0) return &_root;
+    const int i = p - 1;
+    if (i >= static_cast<int>(_more.size())) return &_root;
+    return &_more[i];
+}
+
+const std::vector<Cell>* DesktopManager::_page_layer(int p) const {
+    if (p <= 0) return &_root;
+    const int i = p - 1;
+    if (i >= static_cast<int>(_more.size())) return &_root;
+    return &_more[i];
 }
 
 const std::vector<Cell>& DesktopManager::cells() const {
-    if (_stack.empty()) return _root;
-    auto it = _folders.find(_stack.back());
-    return it != _folders.end() ? it->second : _root;
+    if (!_stack.empty()) {
+        auto it = _folders.find(_stack.back());
+        if (it != _folders.end()) return it->second;
+    }
+    return *_page_layer(_page);
+}
+
+void DesktopManager::set_page(int p) {
+    if (p < 0) p = 0;
+    if (p > page_count() - 1) p = page_count() - 1;
+    _page = p;
+}
+
+bool DesktopManager::next_page() {
+    if (_page + 1 >= page_count()) return false;
+    _page++;
+    return true;
+}
+
+bool DesktopManager::prev_page() {
+    if (_page <= 0) return false;
+    _page--;
+    return true;
 }
 
 const std::string& DesktopManager::folder_name(int fid) const {
@@ -121,6 +157,24 @@ void DesktopManager::load() {
         }
         if (nvs_get_u16(h, "seq", (uint16_t*)&_seq) == ESP_OK) { if (_seq < 1) _seq = 1; }
 
+        /* 读第 2 页起：pcnt = 总页数 */
+        _more.clear();
+        _page = 0;
+        uint16_t pcnt = 1;
+        if (nvs_get_u16(h, "pcnt", &pcnt) != ESP_OK || pcnt < 1) pcnt = 1;
+        for (int p = 1; p < (int)pcnt && p < 8; p++) {
+            char key[16];
+            snprintf(key, sizeof(key), "p%d", p);
+            len = 0;
+            if (nvs_get_str(h, key, nullptr, &len) == ESP_OK && len > 1 && len <= sizeof(buf)) {
+                if (nvs_get_str(h, key, buf, &len) == ESP_OK) {
+                    std::vector<Cell> pc;
+                    _decode(std::string(buf, len - 1), pc);
+                    _more.push_back(pc);
+                }
+            }
+        }
+
         /* 读文件夹：遍历 seq 范围内可能存在的 key */
         for (int i = 1; i <= _seq; i++) {
             char key[16];
@@ -160,6 +214,13 @@ void DesktopManager::save() {
     std::string root = _encode(_root);
     nvs_set_str(h, "root", root.c_str());
     nvs_set_u16(h, "seq", (uint16_t)_seq);
+    nvs_set_u16(h, "pcnt", (uint16_t)page_count());
+    for (int p = 1; p < page_count(); p++) {
+        char key[16];
+        snprintf(key, sizeof(key), "p%d", p);
+        std::string enc = _encode(_more[p - 1]);
+        nvs_set_str(h, key, enc.c_str());
+    }
     for (auto& kv : _folders) {
         char key[16];
         snprintf(key, sizeof(key), "f%d", kv.first);
@@ -268,10 +329,13 @@ void DesktopManager::scan_bas_apps() {
     if (found.empty()) return;
     std::sort(found.begin(), found.end());
 
-    /* has(n)：是否已上桌（根 + 所有文件夹） */
+    /* has(n)：是否已上桌（所有页 + 所有文件夹） */
     auto has = [&](const std::string& n) -> bool {
         for (auto& c : _root)
             if (c.type == CellType::BasApp && c.app_id == n) return true;
+        for (auto& pv : _more)
+            for (auto& c : pv)
+                if (c.type == CellType::BasApp && c.app_id == n) return true;
         for (auto& kv : _folders)
             for (auto& c : kv.second)
                 if (c.type == CellType::BasApp && c.app_id == n) return true;
@@ -282,39 +346,26 @@ void DesktopManager::scan_bas_apps() {
     for (auto& n : found) {
         if (has(n)) continue;
 
-        /* 根桌第一个空位直放 */
-        int slot = -1;
-        for (int i = 0; i < (int)_root.size(); i++)
-            if (_root[i].type == CellType::Empty) { slot = i; break; }
-        if (slot >= 0) {
-            Cell c;
-            c.type = CellType::BasApp;
-            c.app_id = n;
-            _root[slot] = c;
-            changed = true;
-            continue;
+        /* 按页找第一个空位；整桌都满则自动新开一页（往下滑即可到） */
+        int slot = -1, pg = 0;
+        for (int p = 0; p < page_count() && slot < 0; p++) {
+            auto* pv = _page_layer(p);
+            for (int i = 0; i < (int)pv->size(); i++)
+                if ((*pv)[i].type == CellType::Empty) { slot = i; pg = p; break; }
+        }
+        if (slot < 0) {
+            _more.push_back(std::vector<Cell>(kCells));
+            pg = page_count() - 1;
+            slot = 0;
         }
 
-        /* 根桌满：优先「BASIC」文件夹，其次任意文件夹 */
-        int fid = -1;
-        for (auto& kv : _folder_names)
-            if (kv.second == "BASIC") { fid = kv.first; break; }
-        if (fid < 0)
-            for (auto& c : _root)
-                if (c.type == CellType::Folder) { fid = c.folder_id; break; }
-
-        auto fit = _folders.find(fid);
-        if (fit == _folders.end()) continue;   /* 全满且无文件夹：丢弃 */
-        for (auto& fc : fit->second) {
-            if (fc.type == CellType::Empty) {
-                Cell c;
-                c.type = CellType::BasApp;
-                c.app_id = n;
-                fc = c;
-                changed = true;
-                break;
-            }
-        }
+        auto* pv = _page_layer(pg);
+        if (slot < 0 || slot >= (int)pv->size()) continue;
+        Cell c;
+        c.type = CellType::BasApp;
+        c.app_id = n;
+        (*pv)[slot] = c;
+        changed = true;
     }
     if (changed) save();
 }

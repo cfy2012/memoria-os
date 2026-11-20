@@ -142,7 +142,7 @@ public:
     void _ime_toggle_cn() {
         ime::ime_toggle();
         _hint = ime::ime_mode() == ime::Mode::CN
-                    ? "中文输入 · Ctrl+Shift 切英文" : "英文输入 · Ctrl+Shift 切中文";
+                    ? "中文输入 | Ctrl+Shift 切英文" : "英文输入 | Ctrl+Shift 切中文";
     }
 
     void _ime_commit(const char* utf8, size_t len) {
@@ -257,7 +257,7 @@ private:
             _ui()->fill_rect(r, _fg);
         });
         _interp.add_cmd("CLEAR", [this](const std::vector<basic::BasicArg>&) {
-            _ui()->clear(COLOR_BLACK);
+            _ui()->clear(COLOR_BG);
         });
         _interp.add_cmd("COLOR", [this](const std::vector<basic::BasicArg>& a) {
             if (a.size() < 3) return;
@@ -383,18 +383,34 @@ private:
     window::UIRenderer* _ui() { return window::UIRenderer::instance(); }
 
     /* ================= 列表页 ================= */
+    /* 程序卡片行：选中 = 提亮面 + 2px 强调描边 + 左侧竖条，右侧标类型 */
+    void _list_row(window::UIRenderer* ui, int x, int y, int w, int h,
+                   const std::string& name, const char* tag, bool sel) {
+        window::Rect rc{static_cast<int16_t>(x), static_cast<int16_t>(y),
+                        static_cast<int16_t>(w), static_cast<int16_t>(h)};
+        ui->fill_round_rect(rc, 8, sel ? COLOR_CARD_HI : COLOR_CARD);
+        ui->draw_round_rect(rc, 8, sel ? _accent : COLOR_STROKE, sel ? 2 : 1);
+        if (sel)
+            ui->fill_round_rect({static_cast<int16_t>(x + 5), static_cast<int16_t>(y + h / 2 - 5),
+                                 3, 10}, 1, _accent);
+        const int tw = window::UIRenderer::text_width_utf8(tag);
+        ui->draw_text_fit(static_cast<int16_t>(x + 14), static_cast<int16_t>(y + (h - 12) / 2),
+                          name, COLOR_TEXT, w - 26 - tw - 8);
+        ui->draw_text_fit(static_cast<int16_t>(x + w - 12 - tw), static_cast<int16_t>(y + (h - 12) / 2),
+                          tag, sel ? _accent : COLOR_TEXT_DIM, tw);
+    }
+
     void _render_list(window::UIRenderer* ui) {
         char right[16];
         snprintf(right, sizeof(right), "%d 个", (int)_files.size());
         draw_title(ui, "PRGM 编程", right);
-        if (_files.empty()) { draw_hint(ui, "空 · F3 新建第一个程序"); return; }
+        if (_files.empty()) { draw_hint(ui, "空 | F3 新建第一个程序"); return; }
+        const int row_h = 22, gap = 3;
+        const int start = std::max(0, _cur - 9);
         int y = 34;
-        int start = std::max(0, _cur - 10);
-        for (int i = start; i < (int)_files.size() && y < SCREEN_H - 48; i++, y += 12) {
-            bool bas = _is_bas(_files[i]);
-            std::string line = (i == _cur ? "> " : "  ") + _files[i] +
-                               (bas ? "  [BASIC]" : "  [ms]");
-            ui->draw_text_utf8(2, y, line, i == _cur ? COLOR_YELLOW : (bas ? COLOR_WHITE : COLOR_LIGHT_GRAY));
+        for (int i = start; i < (int)_files.size() && y + row_h <= SCREEN_H - 36; i++, y += row_h + gap) {
+            const bool bas = _is_bas(_files[i]);
+            _list_row(ui, 6, y, SCREEN_W - 12, row_h, _files[i], bas ? "BASIC" : "MS", i == _cur);
         }
     }
 
@@ -452,7 +468,7 @@ private:
         if (_files.empty()) return;
         _run_out_buf.clear();
         _run_lines.clear();
-        _fg = COLOR_WHITE;
+        _fg = COLOR_TEXT;
         std::string path = "/mem_fat/scripts/" + _files[_cur];
 
         if (_is_bas(_files[_cur])) {
@@ -460,12 +476,12 @@ private:
             if (!_interp.load_file(path)) { _hint = "读取失败"; return; }
             _inject_env();
             _view = Run;
-            _ui()->clear(COLOR_BLACK);
+            _ui()->clear(COLOR_BG);
             int rc = _interp.run(100000);
             _run_out("--- 结束: " + std::string(rc == 0 ? "正常" : (rc == 1 ? "超时保护" : "错误")) + " ---");
         } else {
             _view = Run;
-            _ui()->clear(COLOR_BLACK);
+            _ui()->clear(COLOR_BG);
             int rc = script::run_file_out(path, [this](const std::string& s) { _run_out(s); });
             _run_out("--- 结束: " + std::to_string(rc) + " ---");
         }
@@ -477,7 +493,7 @@ private:
         if (_run_out_buf.size() + s.size() > BUF_MAX) {
             size_t drop = _run_out_buf.size() + s.size() - BUF_MAX;
             _run_out_buf.erase(0, drop);
-            _run_out_buf += "\n[输出过长 · 已丢弃开头]\n";
+            _run_out_buf += "\n[输出过长 | 已丢弃开头]\n";
         }
         /* 追加 + 按 \n 拆行，只保留最近 RUN_ROWS 行 */
         _run_out_buf += s;
@@ -495,9 +511,16 @@ private:
 
     void _render_run(window::UIRenderer* ui) {
         draw_title(ui, _files[_cur].c_str(), "Enter 返回");
+        /* 输出区单独一张卡片：错误行用危险色，结束行弱化 */
+        const window::Rect box{4, 33, static_cast<int16_t>(SCREEN_W - 8), 248};
+        ui->card(box, 8, COLOR_BG, COLOR_STROKE);
         int y = RUN_Y;
-        for (size_t i = 0; i < _run_lines.size() && y < SCREEN_H - 40; i++, y += 12) {
-            ui->draw_text_utf8(2, y, _run_lines[i], COLOR_WHITE);
+        for (size_t i = 0; i < _run_lines.size() && y + 12 <= box.y + box.h - 4; i++, y += 12) {
+            const std::string& s = _run_lines[i];
+            uint16_t c = COLOR_TEXT;
+            if (s.find("错误") != std::string::npos) c = COLOR_DANGER;
+            else if (s.compare(0, 2, "--") == 0) c = COLOR_TEXT_DIM;
+            ui->draw_text_fit(10, static_cast<int16_t>(y), s, c, box.w - 12);
         }
     }
 
@@ -514,11 +537,11 @@ private:
             else if (x < 1200)      v += 10;
             else if (x > 2800)      v -= 10;
 
-            /* 渲染输入框 */
-            _ui()->fill_rect({4, 96, SCREEN_W - 8, 40}, COLOR_DARK_GRAY);
-            _ui()->draw_rect({4, 96, SCREEN_W - 8, 40}, COLOR_YELLOW, 1);
-            _ui()->draw_text(10, 104, prompt + std::to_string((int)v), COLOR_WHITE);
-            _ui()->draw_text_utf8(10, 118, "上/下 ±1  左/右 ±10  按下确定", COLOR_LIGHT_GRAY);
+            /* 渲染输入框：卡片 + 强调描边 */
+            window::Rect box{4, 96, static_cast<int16_t>(SCREEN_W - 8), 52};
+            _ui()->card(box, 8, COLOR_CARD, _accent);
+            _ui()->draw_text_fit(14, 104, prompt + std::to_string((int)v), COLOR_TEXT, box.w - 20);
+            _ui()->draw_text_fit(14, 124, "上下 +/-1  左右 +/-10  按下确定", COLOR_TEXT_DIM, box.w - 20);
             _ui()->flush();
             vTaskDelay(pdMS_TO_TICKS(80));
         }
@@ -532,19 +555,20 @@ private:
         _str_active = true;
         _str_buf.clear();
         while (!_str_enter) {
-            _ui()->fill_rect({4, 96, SCREEN_W - 8, 40}, COLOR_DARK_GRAY);
-            _ui()->draw_rect({4, 96, SCREEN_W - 8, 40}, COLOR_YELLOW, 1);
-            _ui()->draw_text_utf8(10, 100, prompt + _str_buf + "_", COLOR_WHITE);
+            window::Rect box{4, 96, static_cast<int16_t>(SCREEN_W - 8), 44};
+            _ui()->card(box, 8, COLOR_CARD, _accent);
+            _ui()->draw_text_fit(14, 104, prompt + _str_buf + "_", COLOR_TEXT, box.w - 20);
             if (ime::ime_mode() == ime::Mode::CN) {
                 /* 中文模式：拼音面板（候选上屏走 _ime_commit → _str_buf） */
-                ime::ime_draw_bar(_ui(), 2, 140);
-                _ui()->draw_text_utf8(2, 160,
+                ime::ime_draw_bar(_ui(), 2, 148);
+                _ui()->draw_text_fit(8, 166,
                     ime::ime_active()
                         ? "F1-F4 选字  F5/F6 翻批  退格删拼音  回车上屏  Ctrl+Shift 切英"
-                        : "输入拼音，如 ni → 候选  F1-F4 选字  Ctrl+Shift 切英文",
-                    COLOR_DARK_GRAY);
+                        : "输入拼音，如 ni | 候选  F1-F4 选字  Ctrl+Shift 切英文",
+                    COLOR_TEXT_DIM, SCREEN_W - 16);
             } else {
-                _ui()->draw_text_utf8(10, 118, "键盘输入 · Enter 确认 · 退格删除 · Ctrl+Shift 中文", COLOR_LIGHT_GRAY);
+                _ui()->draw_text_fit(14, 124, "键盘输入 | Enter 确认 | 退格删除 | Ctrl+Shift 中文",
+                                     COLOR_TEXT_DIM, box.w - 20);
             }
             _ui()->flush();
             vTaskDelay(pdMS_TO_TICKS(60));
@@ -733,52 +757,79 @@ private:
     }
 
     void _render_editor(window::UIRenderer* ui) {
-        char right[24];
-        snprintf(right, sizeof(right), "%s · 第 %d 行", _edit_name.c_str(), _edit_cur + 1);
+        char right[32];
+        snprintf(right, sizeof(right), "%s | 第 %d 行", _edit_name.c_str(), _edit_cur + 1);
         draw_title(ui, "编辑 BASIC", right);
 
-        /* 行列表 */
+        /* 编辑区：页面底色的圆角卡片包住代码，当前行提亮为卡片色 */
+        const window::Rect box{4, 33, static_cast<int16_t>(SCREEN_W - 8),
+                               static_cast<int16_t>(CHAR_BAR_Y - 33 - 4)};
+        ui->card(box, 8, COLOR_BG, COLOR_STROKE);
+
+        const int num_x = box.x + 8;                                 /* 行号列固定起点 */
+        const int num_w = 3 * window::UIRenderer::FONT_W;            /* 3 位行号固定宽度 */
+        const int code_x = num_x + num_w + 10;
+        const int code_w = box.x + box.w - 8 - code_x;
+
         int y = EDIT_LINE_Y;
         int start = std::max(0, _edit_cur - EDIT_ROWS + 1);
-        for (int i = start; i < (int)_edit_lines.size() && y < CHAR_BAR_Y - 8; i++, y += 12) {
+        for (int i = start; i < (int)_edit_lines.size() && y + 12 <= box.y + box.h - 2; i++, y += 12) {
+            const bool cur = (i == _edit_cur);
+            if (cur)
+                ui->fill_round_rect({static_cast<int16_t>(box.x + 8), static_cast<int16_t>(y - 1),
+                                     static_cast<int16_t>(box.w - 16), 14}, 4, COLOR_CARD);
             char ln[12];
-            snprintf(ln, sizeof(ln), "%3d ", _edit_lines[i].first);
-            std::string line = (i == _edit_cur ? "> " : "  ") + std::string(ln) + _edit_lines[i].second;
-            ui->draw_text_utf8(2, y, line, i == _edit_cur ? COLOR_YELLOW : COLOR_WHITE);
+            snprintf(ln, sizeof(ln), "%d", _edit_lines[i].first);
+            const std::string nums(ln);
+            const int nw = window::UIRenderer::text_width_utf8(nums);
+            ui->draw_text(static_cast<int16_t>(num_x + num_w - nw), static_cast<int16_t>(y),
+                          nums, COLOR_TEXT_DIM);
+            ui->draw_text_fit(static_cast<int16_t>(code_x), static_cast<int16_t>(y),
+                              _edit_lines[i].second, COLOR_TEXT, code_w);
+            if (cur) {   /* 光标：行尾 2px 强调竖条 */
+                int cw = window::UIRenderer::text_width_utf8(_edit_lines[i].second);
+                if (cw > code_w) cw = code_w;
+                ui->fill_rect({static_cast<int16_t>(code_x + cw), static_cast<int16_t>(y), 2, 12}, _accent);
+            }
         }
 
         /* 中文输入法激活：画候选条，替代字符条（IME-SPEC v1.0 键位） */
         if (ime::ime_active() || ime::ime_mode() == ime::Mode::CN) {
             ime::ime_draw_bar(ui, 2, CHAR_BAR_Y);
             if (ime::ime_active()) {
-                ui->draw_text_utf8(2, CHAR_BAR_Y + 18,
-                    "F1-F4 选字  F5/F6 翻批  退格删拼音  回车上屏", COLOR_DARK_GRAY);
-                ui->draw_text_utf8(2, CHAR_BAR_Y + 30,
-                    "Ctrl+Shift 中英切换", COLOR_DARK_GRAY);
+                ui->draw_text_fit(4, CHAR_BAR_Y + 18,
+                    "F1-F4 选字  F5/F6 翻批  退格删拼音  回车上屏", COLOR_TEXT_DIM, SCREEN_W - 8);
+                ui->draw_text_fit(4, CHAR_BAR_Y + 32, "Ctrl+Shift 中英切换", COLOR_TEXT_DIM, SCREEN_W - 8);
             } else {
-                ui->draw_text_utf8(2, CHAR_BAR_Y + 18,
-                    "输入拼音，如 ni → F1-F4 选字  Ctrl+Shift 切英文", COLOR_DARK_GRAY);
+                ui->draw_text_fit(4, CHAR_BAR_Y + 18,
+                    "输入拼音，如 ni | F1-F4 选字  Ctrl+Shift 切英文", COLOR_TEXT_DIM, SCREEN_W - 8);
             }
             return;
         }
 
-        /* 字符条（40 格，可左右滚动） */
+        /* 字符条（40 格，可左右滚动）：卡片底托 + 选中格强调描边 */
         static const char kChars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 . ,\"()=+-*/<>?!_:;%";
         const int bar_len = (int)strlen(kChars);
         const int bar_off = std::max(0, std::min(_char_off, bar_len - 40));
+        ui->card({4, static_cast<int16_t>(CHAR_BAR_Y - 4), static_cast<int16_t>(SCREEN_W - 8), 20},
+                 8, COLOR_CARD, COLOR_STROKE);
         for (int i = 0; i < 40; i++) {
             int idx = bar_off + i;
             if (idx >= bar_len) break;
-            int x = 2 + i * 8;
+            int x = 10 + i * 8;
             if (idx == _char_sel) {
-                ui->fill_rect({(int16_t)x, CHAR_BAR_Y, 8, 12}, COLOR_DARK_GRAY);
-                ui->draw_rect({(int16_t)x, CHAR_BAR_Y, 8, 12}, COLOR_YELLOW, 1);
-                ui->draw_text(x, CHAR_BAR_Y, std::string(1, kChars[idx]), COLOR_YELLOW);
+                ui->fill_round_rect({static_cast<int16_t>(x - 1), static_cast<int16_t>(CHAR_BAR_Y - 2),
+                                     10, 16}, 4, COLOR_CARD_HI);
+                ui->draw_round_rect({static_cast<int16_t>(x - 1), static_cast<int16_t>(CHAR_BAR_Y - 2),
+                                     10, 16}, 4, _accent, 1);
+                ui->draw_text(x, CHAR_BAR_Y, std::string(1, kChars[idx]), COLOR_TEXT);
             } else {
-                ui->draw_text(x, CHAR_BAR_Y, std::string(1, kChars[idx]), COLOR_LIGHT_GRAY);
+                ui->draw_text(x, CHAR_BAR_Y, std::string(1, kChars[idx]), COLOR_TEXT_DIM);
             }
         }
-        ui->draw_text_utf8(2, CHAR_BAR_Y + 16, "键盘直接输入 · 摇杆左右选字 Enter 插入 · 上下切行 · Ctrl+Shift 中文", COLOR_DARK_GRAY);
+        ui->draw_text_fit(6, CHAR_BAR_Y + 18,
+            "键盘直接输入 | 摇杆左右选字 Enter 插入 | 上下切行 | Ctrl+Shift 中文",
+            COLOR_TEXT_DIM, SCREEN_W - 12);
     }
 
     bool _nav_edit(const window::NavInput& ni) {
@@ -848,10 +899,15 @@ private:
     }
     void _render_src(window::UIRenderer* ui) {
         draw_title(ui, _files[_cur].c_str(), "Enter 返回");
-        int y = 34, line = 0, i = 0;
-        while (i < (int)_src.size() && y < SCREEN_H - 16 - 12) {
-            int take = std::min((int)(SCREEN_W - 4) / window::UIRenderer::FONT_W, (int)_src.size() - i);
-            ui->draw_text_utf8(2, y, _src.substr(i, take), line == _scroll ? COLOR_YELLOW : COLOR_WHITE);
+        /* 源码区：同样用圆角卡片包住，当前滚动行用主文字色，其余弱化 */
+        const window::Rect box{4, 33, static_cast<int16_t>(SCREEN_W - 8), 248};
+        ui->card(box, 8, COLOR_BG, COLOR_STROKE);
+        const int max_px = box.w - 12;
+        const int take = std::max(1, max_px / window::UIRenderer::FONT_W);
+        int y = 36, line = 0, i = 0;
+        while (i < (int)_src.size() && y + 12 <= box.y + box.h - 4) {
+            ui->draw_text_utf8(10, static_cast<int16_t>(y), _src.substr(i, take),
+                               line == _scroll ? COLOR_TEXT : COLOR_TEXT_DIM);
             i += take; y += 12; line++;
         }
     }
@@ -867,7 +923,7 @@ private:
     basic::BasicInterpreter _interp;
     std::string _run_out_buf;
     std::vector<std::string> _run_lines;
-    uint16_t _fg = COLOR_WHITE;
+    uint16_t _fg = COLOR_TEXT;
 
     /* HTTP / 字符串 INPUT */
     std::string _http_resp;

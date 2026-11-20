@@ -37,8 +37,9 @@ extern "C" void app_main() {
         for (;;) { vTaskDelay(pdMS_TO_TICKS(1000)); }
     }
 
-    /* 串口 shell 后台任务（核 0，避免抢占主循环所在核） */
-    xTaskCreatePinnedToCore(shell_task, "shell", 4096, nullptr, 1, nullptr, 0);
+    /* 串口 shell 后台任务（核 0，避免抢占主循环所在核）
+     * 12 KB：fw_check / fw_update 在本任务里跑 mbedtls 握手 + JSON 解析，4 KB 会栈溢出。 */
+    xTaskCreatePinnedToCore(shell_task, "shell", 12288, nullptr, 1, nullptr, 0);
 
     /* 进入主循环（永不返回） */
     k->main_loop();

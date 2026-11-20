@@ -35,12 +35,30 @@ static constexpr uint16_t SCREEN_H      = 320;
 static constexpr uint16_t COLOR_BLACK    = 0x0000;
 static constexpr uint16_t COLOR_WHITE    = 0xFFFF;
 static constexpr uint16_t COLOR_SOFT_ROSE= 0xF3B6;   /* RGB565 243/182/199 */
-static constexpr uint16_t COLOR_DEEP_BLUE = 0x1C4F;
+static constexpr uint16_t COLOR_DEEP_BLUE = 0x19D1;  /* 深蓝 rgb(30,58,138) */
 static constexpr uint16_t COLOR_LIGHT_GRAY= 0xBDF7;
 static constexpr uint16_t COLOR_DARK_GRAY = 0x4208;
 static constexpr uint16_t COLOR_RED       = 0xF800;
 static constexpr uint16_t COLOR_GREEN      = 0x07E0;
 static constexpr uint16_t COLOR_YELLOW    = 0xFFE0;
+
+/* ------------------------------------------------------------
+ *  主题配色（现代深色卡片风格）
+ *  背景近黑蓝 / 卡片深灰 / 描边 / 三级文字 / 强调色
+ * ------------------------------------------------------------ */
+static constexpr uint16_t COLOR_BG        = 0x0862;  /* rgb(11,14,20)    页面底色 */
+static constexpr uint16_t COLOR_BG_SOFT   = 0x10A3;  /* rgb(18,22,30)    次级底色 */
+static constexpr uint16_t COLOR_CARD      = 0x18E5;  /* rgb(26,31,40)    卡片面 */
+static constexpr uint16_t COLOR_CARD_HI   = 0x2167;  /* rgb(38,45,58)    卡片高亮/悬浮 */
+static constexpr uint16_t COLOR_STROKE    = 0x3A0A;  /* rgb(56,64,80)    1px 描边 */
+static constexpr uint16_t COLOR_STROKE_HI = 0x52CD;  /* rgb(80,90,110)   强调描边 */
+static constexpr uint16_t COLOR_TEXT      = 0xEF9E;  /* rgb(233,238,247) 主文字 */
+static constexpr uint16_t COLOR_TEXT_DIM  = 0x8CB5;  /* rgb(139,150,170) 次文字 */
+static constexpr uint16_t COLOR_ACCENT    = 0x651F;  /* rgb(96,165,250)  强调蓝 */
+static constexpr uint16_t COLOR_ACCENT_DK = 0x231D;  /* rgb(37,99,235)   强调蓝暗 */
+static constexpr uint16_t COLOR_OK        = 0x3693;  /* rgb(52,211,153)  正常/连接 */
+static constexpr uint16_t COLOR_WARN      = 0xFDE4;  /* rgb(251,191,36)  警示 */
+static constexpr uint16_t COLOR_DANGER    = 0xFB8E;  /* rgb(248,113,113) 危险/错误 */
 
 /* ============================================================
  *  SPI 共用总线 (SPI2_HOST)
@@ -48,7 +66,7 @@ static constexpr uint16_t COLOR_YELLOW    = 0xFFE0;
 static constexpr int SPI_BUS_HOST = 2;    /* SPI2_HOST */
 static constexpr int SPI_SCLK_GPIO = 12;
 static constexpr int SPI_MOSI_GPIO = 11;
-static constexpr int SPI_MISO_GPIO = 13; /* 屏幕/SD 都是半双工，不需要 MISO 时悬空也安全 */
+static constexpr int SPI_MISO_GPIO = 13; /* TF 卡 MISO（DAT0），必须接；外部 10k 上拉到 3V3 */
 static constexpr int SPI_BUS_FREQ_HZ = 26000000;  /* 26MHz，SD 卡 SPI 上限 25MHz，总线保持保守 */
 static constexpr int LCD_SPI_FREQ_HZ = 80000000;  /* LCD 独立 80MHz：SPI 每设备时钟独立生效，SD 仍 20MHz 不受影响。
                                                      全屏 307200B 传输 94→31ms（≈32fps）。真机花屏则降至 40/60MHz */
@@ -134,13 +152,16 @@ static constexpr int  KBD_I2C_FREQ_HZ  = 400000;   /* MCP23017 支持 400kHz fas
 static constexpr uint8_t KBD_MCP_ROWS  = 0x20;     /* 行 R0-R5 + 列 C0-C3 */
 static constexpr uint8_t KBD_MCP_COLS  = 0x21;     /* 列 C4-C9 */
 
-/* 键盘背光灯带（WS2812，单线 RMT）：GPIO46，上下两条 */
-static constexpr int KEY_LED_GPIO     = 46;
+/* 键盘背光灯带已删除（原计划 GPIO46 接 WS2812，但 GPIO46 在 ESP32-S3 上
+ * 为输入专用脚，RMT 无法驱动，硬件永远点不亮）。 */
 
-/* 侧面 ON/OFF 按键双接：
- * 一路接 MCP#1 GPA0（矩阵行 R0，正常运行时键盘扫描）
- * 一路接 GPIO2（深睡眠唤醒源，按键拉低触发 wakeup）
- * 深睡眠时 MCP23017 断电，矩阵键无法唤醒 ESP32，必须直连 ESP32 GPIO
+/* 侧面 ON/OFF 键：单刀独立键，一端接 GPIO2、另一端接 GND，10k 上拉到 3V3。
+ * 运行时长按 2s 触发关机；深睡时 EXT0 拉低唤醒（深睡后 MCP23017 断电，
+ * 矩阵键唤不醒 ESP32，必须直连 ESP32 GPIO）。
+ * 不进键盘矩阵：矩阵 R0C0（GPA0 行 / GPB0 列）留空，不焊、不接二极管。
+ * keymap 里第 0 行第 0 列写着 K_ONOFF，那只是影子位，物理键不在矩阵上，
+ * 扫描永远读不到它；而且代码把第一行命名为 KEYMAP_R1，
+ * 名字里的 R1 对应的是物理 R0，别按名字去接 GPA1。
  */
 static constexpr int WAKEUP_GPIO      = 2;   /* 侧面 ON/OFF 键唤醒脚 */
 

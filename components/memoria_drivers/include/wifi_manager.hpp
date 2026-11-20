@@ -33,9 +33,10 @@ public:
     static WifiManager* instance();
     esp_err_t init();          /* 轻注册：netif/事件回调（不含射频） */
 
-    /* 按需射频（幂等）：esp_wifi_init + start + NVS 凭据自动重连 */
+    /* 按需射频（幂等）：esp_wifi_init + start + NVS 凭据自动重连
+     * auto_connect=false：只上电不连 STA（开热点时不要同时拉 TX 峰值） */
     bool      rf_started() const { return _rf_started; }
-    esp_err_t start_rf();
+    esp_err_t start_rf(bool auto_connect = true);
 
     /* 手动连接（会保存到 NVS） */
     esp_err_t connect(const std::string& ssid, const std::string& password);

@@ -97,6 +97,11 @@ CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL=y
 CONFIG_ESP_HTTP_CLIENT_ENABLE_HTTPS=y
 CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
 
+# ---- 看门狗 ----
+# 串口 shell 在 core0 同步跑 mbedtls 握手（fw_check / fw_update），CPU 被长时间占住，
+# IDLE0 拿不到时间片会刷 task_wdt。保留 CPU1 检查，CPU0 由此去掉。
+CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU0=n
+
 # ---- esp_http_client / esp_https_ota auto-enabled via dependencies ----
 
 # ---- TinyUSB (如果有 USB OTG 需求；当前项目未使用) ----

@@ -42,24 +42,48 @@ public:
 
     void mode_render(window::UIRenderer* ui, bool focused) override {
         if (_net_active) { _render_net(ui); return; }
+        if (_pw_active) { _render_pw(ui, focused); return; }
 
-        draw_title(ui, "SETUP 设置", std::to_string(_cur + 1).append("/").append(std::to_string(_items.size())).c_str());
+        char right[40];
+        snprintf(right, sizeof(right), "%d/%d", _cur + 1, (int)_items.size());
+        draw_title(ui, "SETUP 设置", right);
 
-        const Item& it = _items[_cur];
-        ui->draw_text(6, 44, it.name.c_str(), COLOR_LIGHT_GRAY);
-        char val[24];
-        snprintf(val, sizeof(val), "%s", it.value().c_str());
-        ui->draw_text((SCREEN_W - 8 - strlen(val) * 8) / 2, 60, val, COLOR_YELLOW);
+        /* 四个分组各一张圆角卡片：当前项所在组展开显示设置行，其余组收起只留组标题。
+         * 全部展开会超出 256px 内容区，故用"选中组展开"保证 26px 行高与可读性。 */
+        int y = 34;
+        for (int g = 0; g < 4; g++) {
+            const int b = _group_begin(g), e = _group_end(g);
+            const int rows = e - b;
+            const bool open = (g == _group_of(_cur));
+            const int h = open ? (28 + rows * SET_ROW_H) : 26;
+            window::Rect card{6, static_cast<int16_t>(y), static_cast<int16_t>(SCREEN_W - 12),
+                              static_cast<int16_t>(h)};
+            ui->fill_round_rect(card, 8, COLOR_CARD);
+            ui->draw_round_rect(card, 8, open ? _accent : COLOR_STROKE, 1);
 
-        /* 分组指示条 */
-        ui->fill_rect({6, 82, 18, 3}, _group_color(_cur));
-        ui->draw_text(6, 96, _group_name(_cur), COLOR_WHITE);
+            ui->draw_text_fit(static_cast<int16_t>(card.x + 12), static_cast<int16_t>(y + 7),
+                              _group_name(g), open ? COLOR_TEXT : COLOR_TEXT_DIM, card.w - 90);
+            char cnt[16];
+            snprintf(cnt, sizeof(cnt), "%d 项", rows);
+            const int cw2 = window::UIRenderer::text_width_utf8(cnt);
+            ui->draw_text(static_cast<int16_t>(card.x + card.w - 12 - cw2),
+                          static_cast<int16_t>(y + 7), cnt, COLOR_TEXT_DIM);
 
-        draw_hint(ui, focused ? "左右 切换值 · Enter 保存 · 长按返回" : "");
+            if (open) {
+                ui->divider_h(static_cast<int16_t>(card.x + 10), static_cast<int16_t>(y + 22),
+                              static_cast<int16_t>(card.w - 20), COLOR_STROKE);
+                for (int i = b; i < e; i++)
+                    _draw_row(ui, card, y + 24 + (i - b) * SET_ROW_H, i, i == _cur);
+            }
+            y += h + 4;
+        }
+
+        draw_hint(ui, focused ? "左右 切换值 | Enter 保存 | 长按返回" : "");
     }
 
     bool mode_nav(const window::NavInput& ni) override {
         if (_net_active) return _net_nav(ni);
+        if (_pw_active) return _pw_nav(ni);
         switch (ni.dir) {
             case window::NavEvent::NavUp:    _cur = (_cur - 1 + (int)_items.size()) % _items.size(); break;
             case window::NavEvent::NavDown:  _cur = (_cur + 1) % _items.size(); break;
@@ -76,6 +100,12 @@ public:
 
     /* 长按返回：网络子界面先退回设置列表，再退主菜单 */
     bool on_nav(const window::NavInput& ni) override {
+        if (ni.dir == window::NavEvent::NavBack && _pw_active) {
+            _pw_active = false;
+            _pw_buf.clear();
+            _pw_msg.clear();
+            return true;
+        }
         if (ni.dir == window::NavEvent::NavBack && _net_active) {
             if (_net_edit != 0) { _net_cancel_edit(); }   /* 编辑中先取消编辑 */
             else _net_active = false;
@@ -86,6 +116,7 @@ public:
 
     /* 键盘字符输入：网络子界面编辑模式消费（WiFi 密码 / 热点配置 / 蓝牙名称） */
     bool on_key(uint16_t key, bool pressed) override {
+        if (_pw_active) return _pw_key(key, pressed);
         if (!_net_active || _net_edit == 0) return false;
         if (!pressed) return true;   /* 编辑期间吞掉释放沿 */
         if (key >= 0x20 && key <= 0x7E) {
@@ -114,6 +145,10 @@ public:
     }
 
     const char* const* fn_labels() override {
+        if (_pw_active) {
+            static const char* pf[6] = {"-", "保存", "-", "-", "-", "返回"};
+            return pf;
+        }
         if (_net_active) {
             static const char* nf[6] = {"WiFi", "热点", "蓝牙", "扫描", "-", "返回"};
             return nf;
@@ -123,6 +158,18 @@ public:
     }
 
     void on_fn(int idx) override {
+        if (_pw_active) {
+            switch (idx) {
+                case 1: _pw_save(); break;
+                case 5:
+                    _pw_active = false;
+                    _pw_buf.clear();
+                    _pw_msg.clear();
+                    break;
+                default: break;
+            }
+            return;
+        }
         if (_net_active) {
             switch (idx) {
                 case 0: _net_sub = 0; _net_sel = 0; break;
@@ -155,13 +202,70 @@ private:
         std::function<void()> enter{};   /* 可选：NavEnter 时执行（优先于保存） */
     };
 
-    static const char* _group_name(int i) {
-        static const char* g[4] = {"显示", "声音 · 网络", "系统", "商店 · 源"};
-        return g[i < 1 ? 0 : (i < 4 ? 1 : (i < 9 ? 2 : 3))];
+    /* 内容区设置行高（26px，符合深色卡片列表节奏） */
+    static const int SET_ROW_H = 26;
+
+    static int _group_of(int i) { return i < 1 ? 0 : (i < 4 ? 1 : (i < 9 ? 2 : 3)); }
+    static int _group_begin(int g) { static const int b[4] = {0, 1, 4, 9}; return b[g]; }
+    static int _group_end(int g) { static const int e[4] = {1, 4, 9, 11}; return e[g]; }
+
+    static const char* _group_name(int g) {
+        static const char* names[4] = {"显示", "声音 | 网络", "系统", "商店 | 源"};
+        return names[g < 0 ? 0 : (g > 3 ? 3 : g)];
     }
-    static uint16_t _group_color(int i) {
-        static const uint16_t c[4] = {rgb565(96, 165, 250), rgb565(52, 211, 153), rgb565(167, 139, 250), rgb565(34, 211, 238)};
-        return c[i < 1 ? 0 : (i < 4 ? 1 : (i < 9 ? 2 : 3))];
+
+    /* 设置行：左标题 + 右侧值/开关/进度；选中 = 提亮面 + 左侧 3px 强调竖条 */
+    void _draw_row(window::UIRenderer* ui, const window::Rect& card, int y, int idx, bool sel) {
+        const int ry = y + 2;
+        if (sel) {
+            ui->fill_round_rect({static_cast<int16_t>(card.x + 5), static_cast<int16_t>(ry),
+                                 static_cast<int16_t>(card.w - 10), 22}, 6, COLOR_CARD_HI);
+            ui->fill_round_rect({static_cast<int16_t>(card.x + 9), static_cast<int16_t>(ry + 5),
+                                 3, 12}, 1, _accent);
+        }
+        ui->draw_text_fit(static_cast<int16_t>(card.x + 18), static_cast<int16_t>(ry + 5),
+                          _items[idx].name, COLOR_TEXT, 150);
+
+        const std::string v = _items[idx].value();
+        const int right_edge = card.x + card.w - 12;
+        if (idx == 0 || idx == 1 || idx == 5) {
+            /* 连续量：数值 + 进度条（进度 = 当前值占上限比例） */
+            const int vmax = 130;
+            const int vw = window::UIRenderer::text_width_utf8(v);
+            ui->draw_text_fit(static_cast<int16_t>(right_edge - std::min(vw, vmax)),
+                              static_cast<int16_t>(ry + 2), v,
+                              sel ? _accent : COLOR_TEXT_DIM, vmax);
+            ui->progress({static_cast<int16_t>(right_edge - vmax), static_cast<int16_t>(ry + 15),
+                          static_cast<int16_t>(vmax), 4}, _slider_permille(idx), _accent,
+                         COLOR_BG_SOFT, 2);
+        } else if (idx == 2) {
+            /* 布尔量：圆角轨道 + 圆点开关 */
+            _draw_switch(ui, right_edge - 34, ry + 4, _auto_update);
+        } else {
+            const int vmax = 200;
+            const int vw = window::UIRenderer::text_width_utf8(v);
+            ui->draw_text_fit(static_cast<int16_t>(right_edge - std::min(vw, vmax)),
+                              static_cast<int16_t>(ry + 5), v,
+                              sel ? _accent : COLOR_TEXT_DIM, vmax);
+        }
+    }
+
+    /* 开关：轨道 COLOR_BG_SOFT，圆点 开=_accent / 关=COLOR_STROKE_HI */
+    void _draw_switch(window::UIRenderer* ui, int x, int y, bool on) {
+        window::Rect tr{static_cast<int16_t>(x), static_cast<int16_t>(y), 34, 14};
+        ui->fill_round_rect(tr, 7, COLOR_BG_SOFT);
+        ui->draw_round_rect(tr, 7, on ? _accent : COLOR_STROKE_HI, 1);
+        const int cx = on ? (x + 34 - 9) : (x + 9);
+        drivers::Ili9341::instance()->fill_circle(static_cast<int16_t>(cx), static_cast<int16_t>(y + 7),
+                                                 5, on ? _accent : COLOR_STROKE_HI);
+    }
+
+    /* 连续量 → 0~1000 千分比 */
+    int _slider_permille(int idx) {
+        if (idx == 0) return (int)drivers::Ili9341::instance()->get_backlight() * 1000 / 255;
+        if (idx == 1) return (int)drivers::I2sAudio::instance()->get_volume() * 10;
+        if (idx == 5) return (int)_sleep_min * 1000 / 30;
+        return 0;
     }
 
     void _save_u8(const char* key, uint8_t v) {
@@ -202,6 +306,9 @@ private:
                           [this](int) { _hour12 = !_hour12; }});
         _items.push_back({"自动休眠", [this]() { return std::to_string(_sleep_min) + " 分钟"; },
                           [this](int d) { _sleep_min = (uint8_t)std::clamp<int>(_sleep_min + d, 1, 30); }});
+        _items.push_back({"开机密码", [this]() { return ModeManager::instance()->login_password(); },
+                          [](int) {},
+                          [this]() { _pw_active = true; _pw_buf.clear(); _pw_msg.clear(); }});
         _items.push_back({"软件源", [this]() { return _source_domain(); },
                           [](int) { /* 换源方式见提示 */ }});
         _items.push_back({"系统版本", [this]() { return package::firmware_current_version(); },
@@ -265,12 +372,13 @@ private:
             case 3: break; /* 网络管理：操作即时持久化 */
             case 4: _save_u8("hour12", _hour12 ? 1 : 0); break;
             case 5: _save_u8("sleep_min", _sleep_min); break;
-            case 6: break; /* 软件源：由商店页/TF卡管理 */
+            case 6: break; /* 开机密码：密码子界面里直接写 NVS */
+            case 7: break; /* 软件源：由商店页/TF卡管理 */
         }
     }
 
     void _save_all() {
-        _save(0); _save(1); _save(2); _save(3); _save(4); _save(5); _save(6);
+        _save(0); _save(1); _save(2); _save(3); _save(4); _save(5); _save(6); _save(7);
     }
 
     void _reset() {
@@ -278,6 +386,100 @@ private:
         drivers::I2sAudio::instance()->set_volume(50);
         _auto_update = true; _hour12 = false; _sleep_min = 3;
         _save_all();
+    }
+
+    /* ============================================================
+     *  开机密码子界面：键盘直接输 8 位数字，Enter 写 NVS
+     *  写进去之后下次 boot 才生效，本次会话不改当前锁屏
+     * ============================================================ */
+    void _render_pw(window::UIRenderer* ui, bool focused) {
+        draw_title(ui, "开机密码", "SETUP");
+
+        /* 当前密码卡：标签弱化 + 数值主文字 */
+        window::Rect box{6, 34, static_cast<int16_t>(SCREEN_W - 12), 92};
+        ui->card(box, 8, COLOR_CARD, COLOR_STROKE);
+        ui->draw_text_fit(static_cast<int16_t>(box.x + 12), static_cast<int16_t>(box.y + 10),
+                          "当前密码", COLOR_TEXT_DIM, box.w - 24);
+        const std::string cur = ModeManager::instance()->login_password();
+        ui->draw_text_fit(static_cast<int16_t>(box.x + 12), static_cast<int16_t>(box.y + 28),
+                          cur, COLOR_TEXT, box.w - 24);
+
+        /* 8 个密码格：已填 = 提亮面 + 强调描边 */
+        const int bw = 30, gap = 8;
+        const int total = 8 * bw + 7 * gap;
+        const int x0 = (SCREEN_W - total) / 2;
+        const int y0 = 64;
+        for (int i = 0; i < 8; i++) {
+            const int x = x0 + i * (bw + gap);
+            const bool filled = i < static_cast<int>(_pw_buf.size());
+            window::Rect cell{static_cast<int16_t>(x), static_cast<int16_t>(y0),
+                              static_cast<int16_t>(bw), 26};
+            ui->fill_round_rect(cell, 6, filled ? COLOR_CARD_HI : COLOR_BG_SOFT);
+            ui->draw_round_rect(cell, 6, filled ? _accent : COLOR_STROKE, 1);
+            if (filled) {
+                char s[2] = {_pw_buf[i], 0};
+                ui->draw_text(static_cast<int16_t>(x + bw / 2 - 4), static_cast<int16_t>(y0 + 7),
+                              s, COLOR_TEXT);
+            }
+        }
+
+        const std::string tip = _pw_msg.empty() ? "直接打 8 位数字 | Enter 保存 | ESC 返回" : _pw_msg;
+        ui->draw_text_fit(8, 132, tip, _pw_msg.empty() ? COLOR_TEXT_DIM : COLOR_WARN, SCREEN_W - 16);
+
+        draw_hint(ui, focused ? "改完下次开机用新密码，本次会话不锁回去" : "");
+    }
+
+    bool _pw_nav(const window::NavInput& ni) {
+        switch (ni.dir) {
+            case window::NavEvent::NavEnter: _pw_save(); break;
+            case window::NavEvent::NavBack:
+                _pw_active = false;
+                _pw_buf.clear();
+                _pw_msg.clear();
+                break;
+            default: break;
+        }
+        return true;
+    }
+
+    bool _pw_key(uint16_t key, bool pressed) {
+        if (!pressed) return true;
+        if (key >= '0' && key <= '9') {
+            if (_pw_buf.size() < 8) {
+                _pw_buf += static_cast<char>(key);
+                _pw_msg.clear();
+            }
+            return true;
+        }
+        switch (key) {
+            case input::K_BACKSPACE:
+                if (!_pw_buf.empty()) _pw_buf.pop_back();
+                _pw_msg.clear();
+                return true;
+            case input::K_ENTER:
+                _pw_save();
+                return true;
+            case input::K_ESC:
+                _pw_active = false;
+                _pw_buf.clear();
+                _pw_msg.clear();
+                return true;
+            default:
+                return true;
+        }
+    }
+
+    void _pw_save() {
+        if (_pw_buf.size() != 8) {
+            _pw_msg = "要 8 位数字，还差 " + std::to_string(8 - static_cast<int>(_pw_buf.size())) + " 位";
+            return;
+        }
+        if (ModeManager::instance()->set_login_password(_pw_buf)) {
+            _pw_msg = "已保存，下次开机生效";
+            _pw_buf.clear();
+        } else {
+            _pw_msg = "保存失败：NVS 写入错误";
+        }
     }
 
     /* ============================================================
@@ -290,82 +492,132 @@ private:
         s_net_scan_done = false;   /* 不主动扫描，用户按 Enter/F4 才扫 */
     }
 
+    /* 网络页行：标题 + 右侧值/开关；选中 = 提亮面 + 左侧强调竖条 */
+    void _net_row(window::UIRenderer* ui, int x, int y, int w, const char* label,
+                  const std::string& value, bool sel, bool sw, bool sw_on, int label_max) {
+        const int ry = y + 2;
+        if (sel) {
+            ui->fill_round_rect({static_cast<int16_t>(x + 5), static_cast<int16_t>(ry),
+                                 static_cast<int16_t>(w - 10), 22}, 6, COLOR_CARD_HI);
+            ui->fill_round_rect({static_cast<int16_t>(x + 9), static_cast<int16_t>(ry + 5),
+                                 3, 12}, 1, _accent);
+        }
+        ui->draw_text_fit(static_cast<int16_t>(x + 18), static_cast<int16_t>(ry + 5), label,
+                          COLOR_TEXT, label_max);
+        if (sw) {
+            _draw_switch(ui, x + w - 12 - 34, ry + 4, sw_on);
+        } else {
+            const int vmax = w - 150;
+            const int vw = window::UIRenderer::text_width_utf8(value);
+            ui->draw_text_fit(static_cast<int16_t>(x + w - 12 - std::min(vw, vmax)),
+                              static_cast<int16_t>(ry + 5), value,
+                              sel ? _accent : COLOR_TEXT_DIM, vmax);
+        }
+    }
+
     void _render_net(window::UIRenderer* ui) {
         const char* sub_name[3] = {"WiFi", "热点", "蓝牙"};
-        draw_title(ui, "SETUP · 网络", sub_name[_net_sub]);
-        char line[56];
+        draw_title(ui, "SETUP 网络", sub_name[_net_sub]);
+        char line[80];
+
+        /* 子页标签胶囊：选中 = 提亮面 + 强调描边 */
+        int tx = 8;
+        for (int i = 0; i < 3; i++) {
+            const int tw = window::UIRenderer::text_width_utf8(sub_name[i]);
+            window::Rect tab{static_cast<int16_t>(tx), 34, static_cast<int16_t>(tw + 16), 18};
+            const bool on = (i == _net_sub);
+            ui->fill_round_rect(tab, 9, on ? COLOR_CARD_HI : COLOR_CARD);
+            ui->draw_round_rect(tab, 9, on ? _accent : COLOR_STROKE, 1);
+            ui->draw_text(static_cast<int16_t>(tx + 8), 37, sub_name[i],
+                          on ? COLOR_TEXT : COLOR_TEXT_DIM);
+            tx += tw + 16 + 6;
+        }
 
         auto* wm = WifiManager::instance();
         if (_net_sub == 0) {
-            /* ---- WiFi：扫描列表 / 连接 ---- */
-            if (wm->connected()) {
-                snprintf(line, sizeof(line), "已连 %s  %s  %ddBm",
-                         wm->current_ssid().c_str(), wm->ip().c_str(), wm->rssi());
-                ui->draw_text(6, 40, line, COLOR_GREEN);
-            } else if (wm->ap_active()) {
-                ui->draw_text(6, 40, "热点模式（STA 未连接）", COLOR_YELLOW);
-            } else {
-                ui->draw_text(6, 40, "未连接", COLOR_LIGHT_GRAY);
-            }
+            /* ---- WiFi：状态卡 + 扫描列表（卡片行） ---- */
+            window::Rect st{6, 58, static_cast<int16_t>(SCREEN_W - 12), 46};
+            ui->card(st, 8, COLOR_CARD, COLOR_STROKE);
             std::string sv = wm->saved_ssid();
-            snprintf(line, sizeof(line), "已存 %s", sv.empty() ? "无" : sv.c_str());
-            ui->draw_text(6, 56, line, COLOR_LIGHT_GRAY);
+            if (wm->connected()) {
+                snprintf(line, sizeof(line), "已连 %s", wm->current_ssid().c_str());
+                ui->draw_text_fit(16, 66, line, COLOR_OK, st.w - 20);
+                snprintf(line, sizeof(line), "%s  %ddBm", wm->ip().c_str(), wm->rssi());
+                ui->draw_text_fit(16, 84, line, COLOR_TEXT_DIM, st.w - 20);
+            } else {
+                if (wm->ap_active())
+                    ui->draw_text_fit(16, 66, "热点模式（STA 未连接）", COLOR_WARN, st.w - 20);
+                else
+                    ui->draw_text_fit(16, 66, "未连接", COLOR_TEXT_DIM, st.w - 20);
+                snprintf(line, sizeof(line), "已存 %s", sv.empty() ? "无" : sv.c_str());
+                ui->draw_text_fit(16, 84, line, COLOR_TEXT_DIM, st.w - 20);
+            }
 
             if (s_net_scanning) {
-                ui->draw_text(6, 80, "扫描中...", COLOR_YELLOW);
+                ui->draw_text_fit(10, 112, "扫描中...", COLOR_WARN, SCREEN_W - 20);
             } else if (!s_net_scan_done) {
-                ui->draw_text(6, 80, "按 Enter 扫描附近 WiFi", COLOR_WHITE);
+                ui->draw_text_fit(10, 112, "按 Enter 扫描附近 WiFi", COLOR_TEXT, SCREEN_W - 20);
             } else {
                 size_t cnt = wm->scan_count();
                 if (cnt == 0) {
-                    ui->draw_text(6, 80, "未找到 WiFi（Enter 重扫）", COLOR_WHITE);
+                    ui->draw_text_fit(10, 112, "未找到 WiFi（Enter 重扫）", COLOR_TEXT, SCREEN_W - 20);
                 } else {
-                    size_t shown = cnt < 12 ? cnt : 12;
-                    for (size_t i = 0; i < shown; i++) {
+                    const int shown = cnt < 12 ? (int)cnt : 12;
+                    const int row_h = 22, gap = 3;
+                    int start = _net_sel > 5 ? _net_sel - 5 : 0;
+                    if (start > shown - 1) start = shown > 0 ? shown - 1 : 0;
+                    int y = 112;
+                    for (int i = start; i < shown && y + row_h <= SCREEN_H - 38; i++, y += row_h + gap) {
                         const ScanAp* ap = wm->scan_at(i);
-                        snprintf(line, sizeof(line), "%s %s  %ddBm%s",
-                                 i == (size_t)_net_sel ? "▶" : " ", ap->ssid, ap->rssi,
-                                 ap->authmode ? " 锁" : "");
-                        ui->draw_text(6, 80 + (int)i * 14, line,
-                                      (int)i == _net_sel ? COLOR_WHITE : COLOR_LIGHT_GRAY);
+                        snprintf(line, sizeof(line), "%ddBm%s", ap->rssi, ap->authmode ? " 锁" : "");
+                        _net_row(ui, 6, y, SCREEN_W - 12, ap->ssid, line, i == _net_sel,
+                                 false, false, 250);
                     }
                 }
             }
-            draw_hint(ui, "←→ 切页 · ↑↓ 选网 · Enter 扫描/连接");
+            draw_hint(ui, "左右 切页 | 上下 选网 | Enter 扫描/连接");
         } else if (_net_sub == 1) {
-            /* ---- 热点：开关 + SSID/密码编辑 ---- */
-            ui->draw_text(6, 40, wm->ap_active() ? "热点: 开" : "热点: 关",
-                          wm->ap_active() ? COLOR_GREEN : COLOR_LIGHT_GRAY);
-            snprintf(line, sizeof(line), "SSID: %s", wm->ap_ssid().c_str());
-            ui->draw_text(6, 60, line, _net_sel == 1 ? COLOR_WHITE : COLOR_LIGHT_GRAY);
+            /* ---- 热点：开关 + SSID/密码 ---- */
+            const int w = SCREEN_W - 12;
+            ui->card({6, 58, static_cast<int16_t>(w), static_cast<int16_t>(28 + 3 * SET_ROW_H)},
+                     8, COLOR_CARD, COLOR_STROKE);
             std::string apw = wm->ap_pass();
-            snprintf(line, sizeof(line), "密码: %s", apw.empty() ? "(无)" : apw.c_str());
-            ui->draw_text(6, 76, line, _net_sel == 2 ? COLOR_WHITE : COLOR_LIGHT_GRAY);
-            ui->draw_text(6, 100, "Enter 开/关热点 · ↑↓ 选行再 Enter 编辑", COLOR_LIGHT_GRAY);
+            _net_row(ui, 6, 58 + 24, w, "热点开关", "", _net_sel == 0, true, wm->ap_active(), 120);
+            _net_row(ui, 6, 58 + 24 + SET_ROW_H, w, "热点名称", wm->ap_ssid(),
+                     _net_sel == 1, false, false, 120);
+            _net_row(ui, 6, 58 + 24 + 2 * SET_ROW_H, w, "热点密码",
+                     apw.empty() ? "(无)" : apw, _net_sel == 2, false, false, 120);
+            ui->draw_text_fit(8, 168, "Enter 开/关热点 | 上下 选行再 Enter 编辑",
+                              COLOR_TEXT_DIM, SCREEN_W - 16);
             if (wm->ap_active())
-                ui->draw_text(6, 116, "设备连此热点后地址 192.168.4.1", COLOR_DARK_GRAY);
-            draw_hint(ui, "←→ 切页 · Enter 开关/编辑");
+                ui->draw_text_fit(8, 184, "设备连此热点后地址 192.168.4.1",
+                                  COLOR_TEXT_DIM, SCREEN_W - 16);
+            draw_hint(ui, "左右 切页 | Enter 开关/编辑");
         } else {
             /* ---- 蓝牙：开关 + 名称 ---- */
             auto* bm = BleManager::instance();
-            ui->draw_text(6, 40, bm->enabled() ? "蓝牙: 开（重启生效）" : "蓝牙: 关",
-                          bm->enabled() ? COLOR_GREEN : COLOR_LIGHT_GRAY);
-            snprintf(line, sizeof(line), "名称: %s", bm->device_name().c_str());
-            ui->draw_text(6, 60, line, _net_sel == 1 ? COLOR_WHITE : COLOR_LIGHT_GRAY);
-            draw_hint(ui, "←→ 切页 · Enter 开关/编辑名称");
+            const int w = SCREEN_W - 12;
+            ui->card({6, 58, static_cast<int16_t>(w), static_cast<int16_t>(28 + 2 * SET_ROW_H)},
+                     8, COLOR_CARD, COLOR_STROKE);
+            _net_row(ui, 6, 58 + 24, w, "蓝牙开关", "", _net_sel == 0, true, bm->enabled(), 120);
+            _net_row(ui, 6, 58 + 24 + SET_ROW_H, w, "设备名称", bm->device_name(),
+                     _net_sel == 1, false, false, 120);
+            ui->draw_text_fit(8, 140, "重启后生效", COLOR_TEXT_DIM, SCREEN_W - 16);
+            draw_hint(ui, "左右 切页 | Enter 开关/编辑名称");
         }
 
         /* 编辑输入框 */
         if (_net_edit != 0) {
-            ui->fill_rect({6, 240, 468, 30}, COLOR_DARK_GRAY);
+            window::Rect box{6, 238, static_cast<int16_t>(SCREEN_W - 12), 32};
+            ui->card(box, 8, COLOR_CARD, _accent);
             char in[80];
             if (_net_edit == 1 || _net_edit == 3) {
                 snprintf(in, sizeof(in), "输入: %s", _net_masked());
             } else {
                 snprintf(in, sizeof(in), "输入: %s", _net_edit_buf);
             }
-            ui->draw_text(10, 246, in, COLOR_WHITE);
-            ui->draw_text(6, 274, "Enter 确认 · Esc 取消", COLOR_LIGHT_GRAY);
+            ui->draw_text_fit(14, 246, in, COLOR_TEXT, box.w - 20);
+            ui->draw_text_fit(8, 274, "Enter 确认 | Esc 取消", COLOR_TEXT_DIM, SCREEN_W - 16);
             return;
         }
 
@@ -373,7 +625,7 @@ private:
         if (_net_msg_on) {
             uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
             if (now - _net_msg_tick < 2500) {
-                ui->draw_text(6, 292, _net_msg, COLOR_YELLOW);
+                ui->draw_text_fit(8, 292, _net_msg, COLOR_WARN, SCREEN_W - 16);
             } else {
                 _net_msg_on = false;
             }
@@ -546,6 +798,11 @@ private:
     std::string _upd_url;
     std::string _upd_sha;      /* 清单里的固件 sha256，空 = 清单没给 */
     bool _upd_ready = false;
+
+    /* 开机密码子界面状态 */
+    bool _pw_active = false;
+    std::string _pw_buf;           /* 正在输入的 8 位密码 */
+    std::string _pw_msg;           /* 提示/错误 */
 
     /* 网络管理子界面状态 */
     bool _net_active = false;

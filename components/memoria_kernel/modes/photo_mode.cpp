@@ -94,31 +94,47 @@ private:
     }
 
     void _render_grid(window::UIRenderer* ui, bool focused) {
-        draw_title(ui, "PHOTO 相册", _names.empty() ? "0 张" : std::to_string(_names.size()).c_str());
-        if (_names.empty()) { draw_hint(ui, "空相册 · 把照片放进 /mem_fat/photos"); return; }
+        char cnt[16];
+        snprintf(cnt, sizeof(cnt), "%d 张", (int)_names.size());
+        draw_title(ui, "PHOTO 相册", cnt);
+        if (_names.empty()) { draw_hint(ui, "空相册 | 把照片放进 /mem_fat/photos"); return; }
         const int cols = 3, pad = 6, gap = 4;
         const int cw = (SCREEN_W - pad * 2 - gap * 2) / cols;
-        const int ch = 44;
+        const int ch = 56;
         for (int i = 0; i < (int)_names.size() && i < 3 * 4; i++) {
             int x = pad + (i % cols) * (cw + gap);
             int y = 32 + (i / cols) * (ch + gap);
-            window::Rect cell{static_cast<int16_t>(x), static_cast<int16_t>(y), static_cast<int16_t>(cw), static_cast<int16_t>(ch)};
-            ui->fill_rect(cell, _color_of(_names[i]));
-            if (i == _cur && focused) ui->draw_cursor(cell, COLOR_WHITE, 2);
-            ui->draw_text(x + 2, y + ch - window::UIRenderer::FONT_H - 1,
-                          _names[i].substr(0, (cw - 4) / window::UIRenderer::FONT_W), COLOR_WHITE);
+            window::Rect cell{static_cast<int16_t>(x), static_cast<int16_t>(y),
+                              static_cast<int16_t>(cw), static_cast<int16_t>(ch)};
+            const bool sel = (i == _cur && focused);
+            ui->fill_round_rect(cell, 8, sel ? COLOR_CARD_HI : COLOR_CARD);
+            if (sel) ui->draw_round_rect(cell, 8, _accent, 2);
+            /* 缩略图（色块模拟）+ 文件名 */
+            window::Rect thumb{static_cast<int16_t>(x + 4), static_cast<int16_t>(y + 4),
+                               static_cast<int16_t>(cw - 8), static_cast<int16_t>(ch - 20)};
+            ui->fill_round_rect(thumb, 5, _color_of(_names[i]));
+            ui->draw_text_fit(static_cast<int16_t>(x + 6), static_cast<int16_t>(y + ch - 15),
+                              _names[i], COLOR_TEXT_DIM, cw - 12);
         }
         if (!_hint.empty()) draw_hint(ui, _hint.c_str());
-        else draw_hint(ui, "Enter 查看 · 左右翻页 · F5 幻灯片");
+        else draw_hint(ui, "Enter 查看 | 左右翻页 | F5 幻灯片");
     }
 
     void _render_view(window::UIRenderer* ui) {
         if (_names.empty()) return;
         const std::string& n = _names[_view];
-        ui->fill_rect({0, 16, (int16_t)SCREEN_W, (int16_t)(SCREEN_H - 16 - 16)}, _color_of(n));
-        char tag[48];
-        snprintf(tag, sizeof(tag), "%s  %d/%zu%s", n.c_str(), _view + 1, _names.size(), _slide ? " · SLIDE" : "");
-        draw_hint(ui, tag);
+        ui->fill_rect({0, 16, static_cast<int16_t>(SCREEN_W),
+                       static_cast<int16_t>(SCREEN_H - 16 - 16)}, _color_of(n));
+        char tag[64];
+        snprintf(tag, sizeof(tag), "%s   %d/%d%s", n.c_str(), _view + 1,
+                 (int)_names.size(), _slide ? "   SLIDE" : "");
+        /* 底部悬浮信息条 */
+        window::Rect bar{8, static_cast<int16_t>(SCREEN_H - 16 - 26),
+                         static_cast<int16_t>(SCREEN_W - 16), 20};
+        ui->fill_round_rect(bar, 10, COLOR_CARD);
+        ui->draw_round_rect(bar, 10, COLOR_STROKE_HI, 1);
+        ui->draw_text_fit(static_cast<int16_t>(bar.x + 10), static_cast<int16_t>(bar.y + 4),
+                          tag, COLOR_TEXT, bar.w - 20);
     }
 
     void _info() {

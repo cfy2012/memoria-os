@@ -36,30 +36,52 @@ public:
     FmemMode() { _cd("/mem_fat"); }
 
     void mode_render(window::UIRenderer* ui, bool focused) override {
-        char head[40];
-        snprintf(head, sizeof(head), "FMEM %s", _path.c_str());
-        draw_title(ui, head, std::to_string(_entries.size()).append(" 项").c_str());
+        /* 路径面包屑放标题右侧胶囊（过长截断，避免压住标题） */
+        const std::string crumb = window::UIRenderer::clip_text(_path, 168);
+        draw_title(ui, "FMEM 文件", crumb.c_str());
 
-        if (_entries.empty()) { draw_hint(ui, "空目录 · F4 返回上级"); }
+        if (_entries.empty()) draw_hint(ui, "空目录 | F4 返回上级");
         else if (!_hint.empty()) draw_hint(ui, _hint.c_str());
-        int y = 34;
-        int start = std::max(0, _cur - 8);
-        for (int i = start; i < (int)_entries.size() && y < SCREEN_H - 16 - 12; i++, y += 12) {
-            std::string line = (i == _cur ? "> " : "  ") + _entries[i].name + (_entries[i].is_dir ? "/" : "");
-            ui->draw_text(2, y, line, i == _cur ? COLOR_YELLOW : COLOR_WHITE);
+
+        /* 文件列表：卡片行，文件夹黄色图标块 / 文件强调色图标块 */
+        const int visible = 8;
+        const int n = static_cast<int>(_entries.size());
+        int start = _cur - 4;
+        if (start > n - visible) start = n - visible;
+        if (start < 0) start = 0;
+
+        int16_t y = 34;
+        for (int i = start; i < n && i < start + visible; i++, y += 26) {
+            const bool sel = (i == _cur);
+            const window::Rect row{6, y, 468, 24};
+            ui->card(row, 8, sel ? COLOR_CARD_HI : COLOR_CARD,
+                     sel ? COLOR_CARD_HI : COLOR_STROKE);
+            if (sel) ui->draw_round_rect(row, 8, _accent, 2);
+
+            ui->fill_round_rect({12, static_cast<int16_t>(y + 3), 18, 18}, 6,
+                                _entries[i].is_dir ? COLOR_WARN : _accent);
+
+            const std::string name = _entries[i].name + (_entries[i].is_dir ? "/" : "");
+            const std::string right = _entries[i].is_dir ? std::string("目录")
+                                                         : _size_text(_entries[i].size);
+            const int rw = window::UIRenderer::text_width_utf8(right);
+            ui->draw_text_fit(38, static_cast<int16_t>(y + 6), name, COLOR_TEXT, 422 - rw);
+            ui->draw_text(static_cast<int16_t>(466 - rw), static_cast<int16_t>(y + 6),
+                          right, COLOR_TEXT_DIM);
         }
 
-        /* 存储用量条（PrivateFS 私有区） */
+        /* 私有区用量卡片 */
         uint32_t used = 0, total = 0, ue = 0, te = 0;
         if (fs::PrivateFs::instance()->is_inited())
             fs::PrivateFs::instance()->stats(used, total, ue, te);
-        int pct = total > 0 ? (int)(used * 100 / total) : 0;
-        ui->fill_rect({6, SCREEN_H - 16 - 14, 200, 5}, COLOR_DARK_GRAY);
-        ui->fill_rect({6, SCREEN_H - 16 - 14, (int16_t)(200 * pct / 100), 5}, COLOR_GREEN);
-        char bar[40];
+        const int pct = total > 0 ? static_cast<int>(used * 100 / total) : 0;
+
+        ui->card({6, 248, 468, 34}, 8, COLOR_CARD, COLOR_STROKE);
+        char bar[48];
         /* ue 为私区条目数，原标签误写为"TF N 项"，此处改为私区条目数 */
         snprintf(bar, sizeof(bar), "私区 %d%%  %u 条", pct, (unsigned)ue);
-        ui->draw_text(6, SCREEN_H - 16 - 24, bar, COLOR_LIGHT_GRAY);
+        ui->draw_text(14, 252, bar, COLOR_TEXT_DIM);
+        ui->progress({14, 268, 452, 6}, pct * 10, _accent, COLOR_BG_SOFT, 3);
     }
 
     bool mode_nav(const window::NavInput& ni) override {
@@ -97,6 +119,22 @@ public:
     }
 
 private:
+    /* 文件大小文本：<1KB 用 B，否则 KB/MB（保留一位小数） */
+    static std::string _size_text(uint32_t n) {
+        char b[24];
+        if (n < 1024) {
+            snprintf(b, sizeof(b), "%u B", (unsigned)n);
+        } else if (n < 1024u * 1024u) {
+            snprintf(b, sizeof(b), "%u.%u KB",
+                     (unsigned)(n / 1024), (unsigned)((n % 1024) * 10 / 1024));
+        } else {
+            snprintf(b, sizeof(b), "%u.%u MB",
+                     (unsigned)(n / (1024u * 1024u)),
+                     (unsigned)((n % (1024u * 1024u)) * 10 / (1024u * 1024u)));
+        }
+        return std::string(b);
+    }
+
     void _cd(const std::string& p) {
         _path = p;
         _reload();
@@ -149,7 +187,7 @@ private:
         const FsEntry& en = _entries[_cur];
         char buf[40];
         if (en.is_dir) snprintf(buf, sizeof(buf), "[目录] %s", en.name.c_str());
-        else snprintf(buf, sizeof(buf), "[文件] %s · %u B", en.name.c_str(), (unsigned)en.size);
+        else snprintf(buf, sizeof(buf), "[文件] %s | %u B", en.name.c_str(), (unsigned)en.size);
         _hint = buf;
     }
 

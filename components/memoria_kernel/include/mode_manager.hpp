@@ -53,8 +53,15 @@ public:
     int  index_of(const char* id) const;
     bool enter_by_id(const char* id);
 
-    /* 启动：创建 Launcher 并压入窗口栈（在 kernel init 尾部调用） */
+    /* 启动：创建 Launcher（暂不显示），先压入锁屏计算器（在 kernel init 尾部调用） */
     void boot();
+    /* 解锁：锁屏计算器密码通过后切到桌面 */
+    void unlock();
+    bool lock_active() const { return _lock_active; }
+    /* 开机密码：存 NVS namespace "settings" / key "lock_pw"；没存过则返回默认 20120201 */
+    std::string login_password() const;
+    /* 改开机密码：只接受 8 位数字，写 NVS 成功返回 true；下次开机生效 */
+    bool set_login_password(const std::string& p);
     /* 进入第 index 个模式 */
     void enter(int index);
     /* APP 直启：进 BASIC APP 全屏运行窗（桌面图标点击直达，跳过 PRGM） */
@@ -70,6 +77,8 @@ private:
     std::vector<ModeDesc> _modes;
     std::shared_ptr<window::Window> _launcher;
     std::shared_ptr<window::Window> _current;
+    std::shared_ptr<window::Window> _lock;
+    bool _lock_active = false;
 };
 
 /* ============================================================
@@ -111,8 +120,12 @@ public:
     bool confirm_active() const { return _confirm >= 0; }
     virtual void on_confirm_ok() {}              /* 用户确认后的动作 */
 
+    /* 模式强调色（由 ModeManager 按 ModeDesc.color 注入，用于标题条/键位） */
+    void set_accent(uint16_t c) { _accent = c; }
+
 protected:
     int _cur = 0;   /* 通用光标 */
+    uint16_t _accent = drivers::COLOR_ACCENT;
 
     void draw_fn_bar(window::UIRenderer* ui);
     void draw_title(window::UIRenderer* ui, const char* title, const char* right);
@@ -126,6 +139,9 @@ private:
 
 /* 所有模式的注册入口（modes_bootstrap.cpp 实现） */
 void memoria_modes_register_all();
+
+/* 锁屏计算器工厂（calc_mode.cpp 实现）：开机第一屏 */
+std::shared_ptr<window::Window> create_lock_calc();
 
 } // namespace modes
 } // namespace memoria

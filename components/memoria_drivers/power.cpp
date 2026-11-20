@@ -119,13 +119,11 @@ static void gpio_cfg_out(int pin, int level) {
 }
 
 void Power::boot_defaults() {
-    /* boot 最早：功放 EN 关（防滋啦）、次级 MOS 开（外围 5V 上电）、
-     * WS2812 DIN 拉低（防 boot 闪灯，RMT 初始化前 GPIO46 悬空可能随机亮） */
+    /* boot 最早：功放 EN 关（防滋啦）、次级 MOS 开（外围 5V 上电） */
     gpio_cfg_out(AMP_EN_GPIO, 0);
     gpio_cfg_out(SUBMOS_EN_GPIO, 0);   /* P-MOS：G 低 = 导通 = 外围 5V 供电 */
-    gpio_cfg_out(KEY_LED_GPIO, 0);
     vTaskDelay(pdMS_TO_TICKS(50));   /* 次级 MOS 打开后等 5V 轨稳定 */
-    ESP_LOGI(TAG, "power boot defaults: AMP_EN=%d off, SUBMOS=%d on, LED_DIN low",
+    ESP_LOGI(TAG, "power boot defaults: AMP_EN=%d off, SUBMOS=%d on",
              AMP_EN_GPIO, SUBMOS_EN_GPIO);
 }
 
@@ -171,6 +169,14 @@ bool Power::shutdown_flag() const {
 }
 
 void Power::deep_sleep_now() {
+    /* 睡前先把外围断干净：背光灭、功放关、外围 5V 轨断电。
+     * 只关背光不关 5V，功放静态电流 + 屏待机电流会持续吃电池。
+     * 深睡后 GPIO48 变高阻，栅极靠 100k 上拉到 5V 维持关断。 */
+    set_backlight(0);
+    amp_set_en(false);
+    subm_rail(false);
+    vTaskDelay(pdMS_TO_TICKS(20));
+
     /* 侧面 ON/OFF 键（GPIO2 一端接地）拉低触发唤醒 */
     esp_sleep_enable_ext0_wakeup(static_cast<gpio_num_t>(WAKEUP_GPIO), 0);
     ESP_LOGW(TAG, "enter deep sleep (EXT0 wakeup on GPIO%d low)", WAKEUP_GPIO);

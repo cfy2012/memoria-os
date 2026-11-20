@@ -3,7 +3,7 @@
  * @brief BASIC APP 宿主层实现：GUI 控件状态机 + 事件环 + 任务运行器
  *
  * 命令注册一览见 basic_host.hpp 文件头。渲染重放模型：
- * BASIC 任务写状态 → 主循环 render() 每帧重放 → framebuffer 全量 flush。
+ * BASIC 任务写状态 -> 主循环 render() 每帧重放 -> framebuffer 全量 flush。
  */
 
 #include "basic_host.hpp"
@@ -743,7 +743,7 @@ const BasicHost::EggInfo BasicHost::EGGS[24] = {
     {"E18","状态码是一套暗号","4 怪自己 5 怪对方","0x61 网络"},
     {"E19","重启是过劳疗法","关机睡一觉","0x71 硬件"},
     {"E20","为什么是十万步","放过正常人拦下疯子","0x72 保命"},
-    {"E21","三个项目是一条路","逻辑 · 画面 · 网络","0x83 综合项目"},
+    {"E21","三个项目是一条路","逻辑 / 画面 / 网络","0x83 综合项目"},
     {"C1","秒表挑战","会走字的 lbl","0x41 章末"},
     {"C2","服务器的暗号","联网猜数字","0x61 章末"},
     {"C3","快枪手认证","3 次以内有台词","0x81 章末"},
@@ -792,24 +792,25 @@ void BasicHost::render(window::UIRenderer* ui) {
     for (auto& p : _panels) {
         if (p.r.w < 2 || p.r.h < 2) continue;
         window::Rect r{p.r.x, (int16_t)(p.r.y + OY), p.r.w, p.r.h};
-        ui->fill_rect(r, rgb565(18, 22, 30));
-        ui->draw_rect(r, COLOR_LIGHT_GRAY, 1);
+        /* 面板：圆角卡片 + 1px 描边；标题用小面积强调竖条，不再整块亮色 */
+        ui->card(r, 8, COLOR_BG_SOFT, COLOR_STROKE);
         if (p.r.h >= 16 && !p.title.empty()) {
-            ui->fill_rect({r.x, r.y, p.r.w, 14}, COLOR_DEEP_BLUE);
-            ui->draw_text_utf8((int16_t)(r.x + 3), (int16_t)(r.y + 1),
-                               clip_utf8(p.title, p.r.w - 8), COLOR_WHITE);
+            ui->fill_round_rect({(int16_t)(r.x + 1), (int16_t)(r.y + 7), 3, 12}, 1, COLOR_ACCENT);
+            ui->draw_text_fit((int16_t)(r.x + 10), (int16_t)(r.y + 4),
+                              clip_utf8(p.title, p.r.w - 16), COLOR_TEXT, p.r.w - 16);
+            ui->divider_h((int16_t)(r.x + 8), (int16_t)(r.y + 20),
+                          (int16_t)(p.r.w - 16), COLOR_STROKE);
         }
     }
 
     for (auto& lp : _lists) {
         window::Rect r{lp.r.x, (int16_t)(lp.r.y + OY), lp.r.w, lp.r.h};
-        ui->fill_rect(r, COLOR_BLACK);
-        ui->draw_rect(r, COLOR_LIGHT_GRAY, 1);
+        ui->card(r, 8, COLOR_BG_SOFT, COLOR_STROKE);
         int visible = std::max(0, (r.h - 4) / 16);
-        int y = r.y + 2;
+        int y = r.y + 3;
         for (int i = 0; i < visible && (lp.scroll + i) < (int)lp.lines.size(); i++, y += 16) {
-            ui->draw_text_utf8((int16_t)(r.x + 3), (int16_t)y,
-                               lp.lines[lp.scroll + i], COLOR_WHITE);
+            ui->draw_text_utf8((int16_t)(r.x + 4), (int16_t)y,
+                               lp.lines[lp.scroll + i], COLOR_TEXT);
         }
     }
 
@@ -817,8 +818,12 @@ void BasicHost::render(window::UIRenderer* ui) {
         auto& b = _btns[i];
         window::Rect r{b.r.x, (int16_t)(b.r.y + OY), b.r.w, b.r.h};
         bool foc = (i == _btn_focus);
-        ui->fill_rect(r, foc ? rgb565(70, 90, 160) : rgb565(36, 44, 74));
-        ui->draw_rect(r, foc ? COLOR_YELLOW : COLOR_LIGHT_GRAY, foc ? 2 : 1);
+        /* 键帽：选中 = COLOR_CARD_HI + 2px 强调描边 + 左侧竖条 */
+        ui->fill_round_rect(r, 8, foc ? COLOR_CARD_HI : COLOR_CARD);
+        ui->draw_round_rect(r, 8, foc ? COLOR_ACCENT : COLOR_STROKE, foc ? 2 : 1);
+        if (foc && r.h > 14)
+            ui->fill_round_rect({(int16_t)(r.x + 3), (int16_t)(r.y + 6), 3,
+                                 (int16_t)(r.h - 12)}, 1, COLOR_ACCENT);
         int f = std::max(1, std::min(3, (int)b.font));
         int icon_w = 0;
         if (b.icon >= 0) {   /* 图案：0~7 内置，100+ 自定义；画在按钮左缘 16×16 */
@@ -842,7 +847,8 @@ void BasicHost::render(window::UIRenderer* ui) {
         if (!b.label.empty()) {
             int tw = window::UIRenderer::text_width_utf8(b.label, f);
             ui->draw_text_utf8((int16_t)(r.x + icon_w + std::max(2, (r.w - icon_w - tw) / 2)),
-                               (int16_t)(r.y + std::max(1, (r.h - 12 * f) / 2)), b.label, COLOR_WHITE, f);
+                               (int16_t)(r.y + std::max(1, (r.h - 12 * f) / 2)), b.label,
+                               COLOR_TEXT, f);
         }
     }
 
@@ -854,7 +860,8 @@ void BasicHost::render(window::UIRenderer* ui) {
         int th = 16 * f;
         int x = l.x, y = (int16_t)(l.y + OY);
         if (l.style == 1) {   /* 反白：当前色底 + 黑字 */
-            ui->fill_rect({(int16_t)x, (int16_t)y, (int16_t)tw, (int16_t)th}, (uint16_t)l.color);
+            ui->fill_round_rect({(int16_t)x, (int16_t)y, (int16_t)tw, (int16_t)th}, 4,
+                                (uint16_t)l.color);
             ui->draw_text_utf8(x, y, l.text, COLOR_BLACK, f);
         } else {
             ui->draw_text_utf8(x, y, l.text, (uint16_t)l.color, f);
@@ -946,10 +953,11 @@ void BasicHost::render(window::UIRenderer* ui) {
         window::Rect r = _has_input_r
             ? window::Rect{_input_r.x, (int16_t)(_input_r.y + OY), _input_r.w, _input_r.h}
             : window::Rect{4, (int16_t)(96 + OY), (int16_t)(SCREEN_W - 8), 40};
-        ui->fill_rect(r, COLOR_DARK_GRAY);
-        ui->draw_rect(r, COLOR_YELLOW, 1);
-        ui->draw_text_utf8((int16_t)(r.x + 6), (int16_t)(r.y + 4),
-                           clip_utf8(_input_prompt + _input_buf + "_", r.w - 12), COLOR_WHITE);
+        /* 输入框：深色圆角卡片 + 2px 强调描边 */
+        ui->fill_round_rect(r, 8, COLOR_BG_SOFT);
+        ui->draw_round_rect(r, 8, COLOR_ACCENT, 2);
+        ui->draw_text_utf8((int16_t)(r.x + 10), (int16_t)(r.y + 6),
+                           clip_utf8(_input_prompt + _input_buf + "_", r.w - 20), COLOR_TEXT);
         if (ime::ime_mode() == ime::Mode::CN)
             ime::ime_draw_bar(ui, 2, (int)(r.y + r.h + 4));
     }
@@ -960,32 +968,39 @@ void BasicHost::render(window::UIRenderer* ui) {
         int16_t cx = _egg_card.x;
         int16_t cy = (int16_t)(_egg_card.y + OY);
         window::Rect card{cx, cy, 340, 150};
-        ui->fill_rect(card, rgb565(28, 32, 50));
-        ui->draw_rect(card, COLOR_YELLOW, 2);
-        ui->fill_rect({cx, cy, card.w, 16}, COLOR_DEEP_BLUE);
+        ui->card(card, 10, COLOR_CARD, COLOR_STROKE);
+        ui->fill_round_rect({(int16_t)(cx + 1), (int16_t)(cy + 10), 3, 16}, 1, COLOR_ACCENT);
         std::string head = std::string(e.no) + "  " + e.title;
-        ui->draw_text_utf8((int16_t)(cx + 4), (int16_t)(cy + 2), clip_utf8(head, card.w - 12), COLOR_WHITE);
-        ui->draw_text_utf8((int16_t)(cx + 8), (int16_t)(cy + 30), "线索：" , COLOR_LIGHT_GRAY);
-        ui->draw_text_utf8((int16_t)(cx + 8), (int16_t)(cy + 54), e.hint, COLOR_WHITE);
-        ui->draw_text_utf8((int16_t)(cx + 8), (int16_t)(cy + 84), "章节：" , COLOR_LIGHT_GRAY);
-        ui->draw_text_utf8((int16_t)(cx + 8), (int16_t)(cy + 108), e.where, COLOR_WHITE);
+        ui->draw_text_fit((int16_t)(cx + 12), (int16_t)(cy + 8),
+                          clip_utf8(head, card.w - 24), COLOR_TEXT, card.w - 24);
+        ui->divider_h((int16_t)(cx + 10), (int16_t)(cy + 28),
+                      (int16_t)(card.w - 20), COLOR_STROKE);
+        ui->draw_text_utf8((int16_t)(cx + 10), (int16_t)(cy + 34), "线索：", COLOR_TEXT_DIM);
+        ui->draw_text_fit((int16_t)(cx + 10), (int16_t)(cy + 56),
+                          clip_utf8(e.hint, card.w - 20), COLOR_TEXT, card.w - 20);
+        ui->draw_text_utf8((int16_t)(cx + 10), (int16_t)(cy + 84), "章节：", COLOR_TEXT_DIM);
+        ui->draw_text_fit((int16_t)(cx + 10), (int16_t)(cy + 108),
+                          clip_utf8(e.where, card.w - 20), COLOR_TEXT, card.w - 20);
     }
 
     /* 彩蛋图鉴 */
     if (_egg_gallery.active) {
         window::Rect r{_egg_gallery.r.x, (int16_t)(_egg_gallery.r.y + OY), _egg_gallery.r.w, _egg_gallery.r.h};
-        ui->fill_rect(r, rgb565(20, 24, 36));
-        ui->draw_rect(r, COLOR_LIGHT_GRAY, 1);
-        ui->draw_text_utf8((int16_t)(r.x + 3), (int16_t)(r.y + 2), "彩蛋图鉴（21+3）", COLOR_YELLOW);
-        int visible = std::max(1, (r.h - 30) / 20);
-        int y = r.y + 22;
+        ui->card(r, 8, COLOR_BG_SOFT, COLOR_STROKE);
+        ui->fill_round_rect({(int16_t)(r.x + 1), (int16_t)(r.y + 7), 3, 12}, 1, COLOR_ACCENT);
+        ui->draw_text_fit((int16_t)(r.x + 10), (int16_t)(r.y + 4), "彩蛋图鉴（21+3）",
+                          COLOR_TEXT, r.w - 20);
+        ui->divider_h((int16_t)(r.x + 8), (int16_t)(r.y + 22),
+                      (int16_t)(r.w - 16), COLOR_STROKE);
+        int visible = std::max(1, (r.h - 42) / 20);
+        int y = r.y + 28;
         int n = 0;
         for (int i = _egg_gallery.scroll; i < 24 && n < visible; i++, n++, y += 20) {
             std::string line = std::string(EGGS[i].no) + " " + EGGS[i].title;
-            if (_egg_collected[i]) line += " ✓";
-            ui->draw_text_utf8((int16_t)(r.x + 4), (int16_t)y,
-                               clip_utf8(line, r.w - 10),
-                               _egg_collected[i] ? rgb565(30, 220, 90) : COLOR_WHITE);
+            if (_egg_collected[i]) line += " *";   /* ASCII 标记，避免符号缺字 */
+            ui->draw_text_utf8((int16_t)(r.x + 6), (int16_t)y,
+                               clip_utf8(line, r.w - 14),
+                               _egg_collected[i] ? COLOR_OK : COLOR_TEXT);
         }
         int got = 0;
         for (int i = 0; i < 24; i++) if (_egg_collected[i]) got++;
@@ -993,7 +1008,8 @@ void BasicHost::render(window::UIRenderer* ui) {
         if (got >= 24) grade += "  图书管理员！";
         else if (got >= 18) grade += "  工匠";
         else if (got >= 10) grade += "  学徒";
-        ui->draw_text_utf8((int16_t)(r.x + 4), (int16_t)(r.y + r.h - 18), grade, COLOR_LIGHT_GRAY);
+        ui->draw_text_utf8((int16_t)(r.x + 6), (int16_t)(r.y + r.h - 18), grade,
+                           COLOR_TEXT_DIM);
     }
 }
 

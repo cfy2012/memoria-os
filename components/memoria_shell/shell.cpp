@@ -24,6 +24,7 @@
 #include "firmware_update.hpp"
 #include "ota_updater.hpp"
 #include "math_solver.hpp"
+#include "netfile.hpp"
 
 extern "C" {
 #include <esp_log.h>
@@ -69,6 +70,10 @@ static void _print_help(bool safe) {
             "sd mount             retry TF card mount\n"
             "sd format            ERASE ALL DATA on TF card and re-mount\n"
             "vault                user-data storage backend (card / flash)\n"
+            "net start ap         wifi AP \"MemoriaOS\" + web file server (http://192.168.4.1/)\n"
+            "net start sta        saved wifi + web file server\n"
+            "net stop             stop web file server\n"
+            "net ip               web file server address\n"
             "fw_check             pull version.json: latest version / sha256 / url\n"
             "fw_update            check manifest then OTA with sha256 (reboot on success)\n"
             "reboot               restart ESP32\n"
@@ -96,6 +101,10 @@ static void _print_help(bool safe) {
         "memoria> pkg_cfg              show current package config\n"
         "memoria> ota_url <url>        set firmware OTA URL (persistent)\n"
         "memoria> ota_firmware         start firmware OTA now (reboot on success)\n"
+        "memoria> net start ap         wifi AP \"MemoriaOS\" + web file server (http://192.168.4.1/)\n"
+        "memoria> net start sta        saved wifi + web file server\n"
+        "memoria> net stop             stop web file server\n"
+        "memoria> net ip               web file server address\n"
         "memoria> fw_check             pull version.json: latest version / sha256 / url\n"
         "memoria> fw_update            check manifest then OTA with sha256 (reboot on success)\n"
         "memoria> rec start            start INMP441 recording -> /mem_fat/rec.wav\n"
@@ -476,6 +485,62 @@ int Shell::execute(const std::string& line, bool safe) {
             return 0;
         }
         std::fprintf(stdout, "rec: usage: rec start | rec stop\n");
+        return 0;
+    }
+
+    if (cmd == "net") {
+        auto* w = drivers::WifiManager::instance();
+        const std::string sub  = args.size() >= 2 ? args[1] : "";
+        const std::string mode = args.size() >= 3 ? args[2] : "";
+
+        if (sub == "start" && mode == "ap") {
+            std::fprintf(stdout, "net: starting AP \"MemoriaOS\" ...\n");
+            std::fflush(stdout);
+            esp_err_t e = netfile::start_ap();
+            if (e != ESP_OK) {
+                std::fprintf(stdout, "net: ap failed (%s)\n", esp_err_to_name(e));
+                return 0;
+            }
+            std::fprintf(stdout, "net: ap up, join wifi \"MemoriaOS\" pass memoria123\n");
+            std::fprintf(stdout, "net: open http://192.168.4.1/\n");
+            return 0;
+        }
+
+        if (sub == "start" && mode == "sta") {
+            std::fprintf(stdout, "net: connecting saved wifi ...\n");
+            std::fflush(stdout);
+            esp_err_t e = netfile::start_sta();
+            if (e != ESP_OK && e != ESP_ERR_NOT_FOUND) {
+                std::fprintf(stdout, "net: sta failed (%s)\n", esp_err_to_name(e));
+                return 0;
+            }
+            for (int i = 0; i < 150 && !w->connected(); i++)
+                vTaskDelay(pdMS_TO_TICKS(100));
+            if (w->connected())
+                std::fprintf(stdout, "net: sta \"%s\" ip=%s -> http://%s/\n",
+                             w->current_ssid().c_str(), w->ip().c_str(), w->ip().c_str());
+            else
+                std::fprintf(stdout, "net: no saved wifi or connect timeout (use 'wifi connect <ssid> <pass>')\n");
+            return 0;
+        }
+
+        if (sub == "stop") {
+            netfile::stop();
+            std::fprintf(stdout, "net: file server stopped\n");
+            return 0;
+        }
+
+        if (sub == "ip") {
+            if (!netfile::running()) std::fprintf(stdout, "net: server not running\n");
+            if (w->ap_active())
+                std::fprintf(stdout, "net: ap \"%s\" http://192.168.4.1/\n", w->ap_ssid().c_str());
+            if (w->connected())
+                std::fprintf(stdout, "net: sta ip=%s http://%s/\n", w->ip().c_str(), w->ip().c_str());
+            if (!w->ap_active() && !w->connected()) std::fprintf(stdout, "net: wifi down\n");
+            return 0;
+        }
+
+        std::fprintf(stdout, "net: usage: net start ap | net start sta | net stop | net ip\n");
         return 0;
     }
 

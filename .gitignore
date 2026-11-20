@@ -38,3 +38,20 @@ docs/backup/
 
 # 编译产物 exe 一律走 GitHub Release，不入库
 *.exe
+
+# 本地截图 / AI 分享产物 / 素材与固件二进制（不入库）
+.screenshots/
+.trae-html-share-packages/
+Game/
+ota/
+firmware/*.bin
+*.docx
+chat.zip
+autodesk_backup_code.txt
+Memoria-OS-UI-Preview.html
+PROJECT-BOARD.html
+# 本地草稿：测试网页、AI 提示词、工具生成的示意图
+测试website/
+tools/sd_upload_prompt*.md
+键盘接线示意图.png
+键盘矩阵-实物排布图.png

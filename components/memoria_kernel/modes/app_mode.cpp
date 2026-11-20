@@ -102,21 +102,65 @@ bool AppRunWindow::mode_nav(const window::NavInput& ni) {
 /* ================= 渲染（全屏接管，无 F 键行） ================= */
 void AppRunWindow::on_render() {
     auto* ui = window::UIRenderer::instance();
-    ui->fill_rect(_rect, COLOR_BLACK);
+    ui->fill_rect(_rect, COLOR_BG);
 
     if (_file_missing) {
-        ui->draw_text_utf8(4, SCREEN_H / 2 - 8, "程序跑不起来：" + _path, COLOR_RED);
+        const window::Rect card{40, 92, 400, 132};
+        ui->card(card, 12, COLOR_CARD, COLOR_STROKE);
+        ui->fill_round_rect({(int16_t)(card.x + 1), (int16_t)(card.y + 16), 3, 20},
+                            1, _accent);
+        ui->draw_text_utf8((int16_t)(card.x + 14), (int16_t)(card.y + 16),
+                           "无法启动", COLOR_DANGER);
+        ui->draw_text_fit((int16_t)(card.x + 14), (int16_t)(card.y + 42),
+                          "程序文件不存在", COLOR_TEXT, card.w - 28);
+        ui->draw_text_fit((int16_t)(card.x + 14), (int16_t)(card.y + 64),
+                          _path, COLOR_TEXT_DIM, card.w - 28);
+        ui->divider_h((int16_t)(card.x + 12), (int16_t)(card.y + 92),
+                      (int16_t)(card.w - 24), COLOR_STROKE);
+        ui->draw_text_utf8((int16_t)(card.x + 14), (int16_t)(card.y + 102),
+                           "Enter 返回桌面", COLOR_TEXT_DIM);
         return;
     }
 
+    /* 画布外框：圆角卡片 + 1px 描边；BASIC 坐标原点仍在屏幕 y=16，逻辑不变 */
+    const window::Rect frame{4, 18, (int16_t)(SCREEN_W - 8), (int16_t)(SCREEN_H - 24)};
+    ui->fill_round_rect(frame, 8, COLOR_BG);
+    ui->draw_round_rect(frame, 8, COLOR_STROKE, 1);
+
     _host->render(ui);
-    if (!_host->running() && _host->finished()) {
+
+    /* 顶部一行小状态（右上角浮层，不改 BASIC 坐标语义） */
+    const bool running = _host->running();
+    const bool finished = _host->finished();
+    const char* state = running ? "RUNNING" : (finished ? "EXIT" : "READY");
+    const uint16_t sc = running ? COLOR_OK
+                      : (finished ? (_host->result() == 0 ? COLOR_OK : COLOR_WARN)
+                                  : COLOR_TEXT_DIM);
+    std::string nm = _name.empty() ? std::string("BASIC") : _name;
+    if (window::UIRenderer::text_width_utf8(nm) > 96)
+        nm = window::UIRenderer::clip_text(nm, 96);
+
+    const int tw = window::UIRenderer::text_width_utf8(state);
+    const int nw = window::UIRenderer::text_width_utf8(nm);
+    const int pw = tw + nw + 28;
+    const int16_t px = (int16_t)(SCREEN_W - 8 - pw);
+    ui->fill_round_rect({px, 20, (int16_t)pw, 16}, 8, COLOR_CARD);
+    ui->draw_round_rect({px, 20, (int16_t)pw, 16}, 8, COLOR_STROKE, 1);
+    ui->fill_round_rect({(int16_t)(px + 7), 25, 6, 6}, 3, sc);
+    ui->draw_text_fit((int16_t)(px + 18), 22, nm, COLOR_TEXT_DIM, nw + 2);
+    ui->draw_text((int16_t)(px + 18 + nw + 6), 22, state, sc);
+
+    if (!running && finished) {
         /* 结束页脚：0 正常 / 2 读不到文件 / 3 返回键终止 */
         const char* why = _host->result() == 0 ? "结束"
                         : (_host->result() == 3 ? "已退出" : "出错");
-        std::string s = _name + " · " + why + " · Enter 返回桌面";
-        ui->fill_rect({0, (int16_t)(SCREEN_H - 16), (int16_t)SCREEN_W, 14}, COLOR_DARK_GRAY);
-        ui->draw_text_utf8(4, SCREEN_H - 15, s, COLOR_LIGHT_GRAY);
+        const std::string s = _name + " | " + why;
+        ui->divider_h(12, (int16_t)(SCREEN_H - 24), (int16_t)(SCREEN_W - 24), COLOR_STROKE);
+        ui->draw_text_fit(8, (int16_t)(SCREEN_H - 20), s, COLOR_TEXT_DIM, SCREEN_W - 160);
+        const std::string act = "Enter 返回桌面";
+        const int aw = window::UIRenderer::text_width_utf8(act);
+        ui->draw_text_utf8((int16_t)(SCREEN_W - 8 - aw), (int16_t)(SCREEN_H - 20),
+                           act, _accent);
     }
 }
 

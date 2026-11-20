@@ -8,6 +8,7 @@
 
 #include "mode_manager.hpp"
 #include "i2s_audio.hpp"
+#include "ili9341.hpp"
 
 extern "C" {
 #include <dirent.h>
@@ -29,25 +30,64 @@ public:
     MusicMode() { _scan(); }
 
     void mode_render(window::UIRenderer* ui, bool focused) override {
-        draw_title(ui, "MUSIC 音乐", _tracks.empty() ? "0 首" : std::to_string(_tracks.size()).c_str());
-        if (_tracks.empty()) { draw_hint(ui, "没有歌曲 · 把 .wav/.mp3/.m4a 放进 /mem_fat/audio"); return; }
+        draw_title(ui, "MUSIC 音乐",
+                   _tracks.empty() ? "0 首" : (std::to_string(_tracks.size()) + " 首").c_str());
+        if (_tracks.empty()) { draw_hint(ui, "没有歌曲 | 把 .wav/.mp3/.m4a 放进 /mem_fat/audio"); return; }
 
         auto* aud = drivers::I2sAudio::instance();
+        auto* lcd = Ili9341::instance();
         const std::string& cur = _tracks[_cur];
+        const bool playing = aud->is_playing();
 
-        /* 播放条 */
-        char now[56];
-        snprintf(now, sizeof(now), "%s%s  音量 %d%%",
-                 aud->is_playing() ? "▶" : "■", cur.c_str(), aud->get_volume());
-        ui->fill_rect({0, 32, (int16_t)SCREEN_W, 18}, COLOR_DEEP_BLUE);
-        ui->draw_text(2, 34, now, COLOR_WHITE);
+        /* ---- 正在播放卡片 ---- */
+        ui->card({6, 34, 468, 88}, 8, COLOR_CARD, COLOR_STROKE);
 
-        /* 曲目列表（可见 8 行） */
-        int y = 54;
-        int start = std::max(0, _cur - 4);
-        for (int i = start; i < (int)_tracks.size() && y < SCREEN_H - 16 - 12; i++, y += 12) {
-            std::string line = (i == _cur ? "> " : "  ") + _tracks[i];
-            ui->draw_text(2, y, line, i == _cur ? COLOR_YELLOW : COLOR_WHITE);
+        /* 封面占位：圆角底色 + 唱片圆心（选中时用强调色描边） */
+        ui->fill_round_rect({14, 42, 68, 68}, 8, COLOR_BG_SOFT);
+        ui->draw_round_rect({14, 42, 68, 68}, 8, focused ? _accent : COLOR_STROKE_HI, 2);
+        lcd->fill_circle(48, 76, 22, COLOR_CARD_HI);
+        lcd->draw_circle(48, 76, 16, COLOR_STROKE);
+        lcd->fill_circle(48, 76, 7, _accent);
+        lcd->fill_circle(48, 76, 2, COLOR_CARD);
+
+        /* 播放状态圆点：播放中=绿，暂停=灰 */
+        lcd->fill_circle(457, 46, 4, playing ? COLOR_OK : COLOR_TEXT_DIM);
+
+        /* 歌名 + 次要信息（右侧音量） */
+        ui->draw_text_fit(94, 42, cur, COLOR_TEXT, 336);
+        ui->draw_text(94, 60, "本地音频", COLOR_TEXT_DIM);
+        const std::string vol = "音量 " + std::to_string(static_cast<int>(aud->get_volume())) + "%";
+        ui->draw_text(static_cast<int16_t>(466 - window::UIRenderer::text_width_utf8(vol)),
+                      60, vol, COLOR_TEXT_DIM);
+
+        /* 进度条 + 时间（播放位置无对外接口，总长按未知显示） */
+        ui->progress({94, 84, 364, 6}, 0, _accent, COLOR_BG_SOFT, 3);
+        ui->draw_text(94, 92, "0:00", COLOR_TEXT_DIM);
+        ui->draw_text(426, 92, "--:--", COLOR_TEXT_DIM);
+
+        /* ---- 曲目列表：卡片行 ---- */
+        const int visible = 6;
+        int start = _cur - 2;
+        if (start > static_cast<int>(_tracks.size()) - visible)
+            start = static_cast<int>(_tracks.size()) - visible;
+        if (start < 0) start = 0;
+
+        int16_t y = 128;
+        for (int i = start; i < static_cast<int>(_tracks.size()) && i < start + visible; i++, y += 26) {
+            const bool sel = (i == _cur);
+            const window::Rect row{6, y, 468, 24};
+            ui->card(row, 8, sel ? COLOR_CARD_HI : COLOR_CARD,
+                     sel ? COLOR_CARD_HI : COLOR_STROKE);
+            if (sel) ui->draw_round_rect(row, 8, _accent, 2);
+
+            /* 左侧图标块：正在播放的曲目用绿色，其余用强调色 */
+            ui->fill_round_rect({12, static_cast<int16_t>(y + 3), 18, 18}, 6,
+                                (i == _cur && playing) ? COLOR_OK : _accent);
+
+            ui->draw_text_fit(38, static_cast<int16_t>(y + 6), _tracks[i], COLOR_TEXT, 400);
+            const std::string idx = (i + 1 < 10 ? "0" : "") + std::to_string(i + 1);
+            ui->draw_text(static_cast<int16_t>(466 - window::UIRenderer::text_width_utf8(idx)),
+                          static_cast<int16_t>(y + 6), idx, COLOR_TEXT_DIM);
         }
         if (!_hint.empty()) draw_hint(ui, _hint.c_str());
     }
@@ -78,7 +118,7 @@ public:
             case 2: _next(); break;
             case 3: _vol(-1); break;
             case 4: _vol(+1); break;
-            case 5: _hint = "列表循环 · 队列自动续播"; break;
+            case 5: _hint = "列表循环 | 队列自动续播"; break;
         }
     }
 

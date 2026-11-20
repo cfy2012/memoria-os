@@ -45,6 +45,13 @@ public:
     /* ---- 当前层访问 ---- */
     const std::vector<Cell>& cells() const;
     bool in_folder() const { return !_stack.empty(); }
+
+    /* ---- 根桌面分页（每页 12 格，往下到底自动翻） ---- */
+    int  page() const { return _page; }
+    int  page_count() const { return 1 + static_cast<int>(_more.size()); }
+    void set_page(int p);
+    bool next_page();
+    bool prev_page();
     int  current_folder() const { return _stack.empty() ? -1 : _stack.back(); }
     const std::string& folder_name(int fid) const;
 
@@ -72,11 +79,15 @@ private:
     DesktopManager() = default;
 
     std::vector<Cell>* _layer();
+    std::vector<Cell>* _page_layer(int p);
+    const std::vector<Cell>* _page_layer(int p) const;
     std::string _encode(const std::vector<Cell>& c) const;
     bool _decode(const std::string& s, std::vector<Cell>& out);
     int  _next_folder_id();
 
-    std::vector<Cell> _root;                    /* 根桌面 12 格 */
+    std::vector<Cell> _root;                    /* 根桌面第 1 页 12 格 */
+    std::vector<std::vector<Cell>> _more;       /* 第 2 页起，每页 12 格 */
+    int  _page = 0;                             /* 当前页（0 起） */
     std::map<int, std::vector<Cell>> _folders;  /* 文件夹 id → 12 格 */
     std::map<int, std::string> _folder_names;
     std::vector<int> _stack;                    /* 路径栈（空 = 根） */
